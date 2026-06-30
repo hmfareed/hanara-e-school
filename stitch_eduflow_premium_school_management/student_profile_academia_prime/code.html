@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Student Profile | Academia Prime</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-primary-fixed": "#00174b",
+                        "on-background": "#0b1c30",
+                        "secondary-container": "#6cf8bb",
+                        "secondary-fixed": "#6ffbbe",
+                        "primary": "#004ac6",
+                        "inverse-on-surface": "#eaf1ff",
+                        "on-tertiary": "#ffffff",
+                        "secondary": "#006c49",
+                        "secondary-fixed-dim": "#4edea3",
+                        "on-secondary-container": "#00714d",
+                        "surface-container": "#e5eeff",
+                        "on-secondary-fixed-variant": "#005236",
+                        "error": "#ba1a1a",
+                        "outline": "#737686",
+                        "on-secondary": "#ffffff",
+                        "primary-fixed": "#dbe1ff",
+                        "on-error-container": "#93000a",
+                        "surface-container-highest": "#d3e4fe",
+                        "on-primary-container": "#eeefff",
+                        "surface-dim": "#cbdbf5",
+                        "tertiary-container": "#996100",
+                        "surface-container-lowest": "#ffffff",
+                        "primary-container": "#2563eb",
+                        "on-secondary-fixed": "#002113",
+                        "on-error": "#ffffff",
+                        "surface-container-high": "#dce9ff",
+                        "tertiary-fixed-dim": "#ffb95f",
+                        "surface-bright": "#f8f9ff",
+                        "outline-variant": "#c3c6d7",
+                        "inverse-surface": "#213145",
+                        "on-tertiary-fixed": "#2a1700",
+                        "surface-variant": "#d3e4fe",
+                        "on-tertiary-container": "#ffeedd",
+                        "inverse-primary": "#b4c5ff",
+                        "error-container": "#ffdad6",
+                        "surface": "#f8f9ff",
+                        "tertiary-fixed": "#ffddb8",
+                        "on-surface": "#0b1c30",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "tertiary": "#784b00",
+                        "on-primary": "#ffffff",
+                        "on-surface-variant": "#434655",
+                        "background": "#f8f9ff",
+                        "surface-container-low": "#eff4ff",
+                        "on-tertiary-fixed-variant": "#653e00",
+                        "surface-tint": "#0053db"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "margin-mobile": "16px",
+                        "3xl": "64px",
+                        "gutter": "24px",
+                        "base": "8px",
+                        "xl": "32px",
+                        "sm": "8px",
+                        "xs": "4px",
+                        "lg": "24px",
+                        "margin-desktop": "40px",
+                        "2xl": "48px",
+                        "md": "16px"
+                    },
+                    "fontFamily": {
+                        "title-lg": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "label-md": ["Inter"],
+                        "display": ["Inter"],
+                        "body-lg": ["Inter"],
+                        "headline-lg": ["Inter"],
+                        "body-md": ["Inter"],
+                        "title-md": ["Inter"]
+                    },
+                    "fontSize": {
+                        "title-lg": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "display": ["48px", {"lineHeight": "56px", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "body-lg": ["16px", {"lineHeight": "26px", "fontWeight": "400"}],
+                        "headline-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "-0.02em", "fontWeight": "600"}],
+                        "body-md": ["14px", {"lineHeight": "20px", "fontWeight": "400"}],
+                        "title-md": ["16px", {"lineHeight": "24px", "fontWeight": "600"}]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body {
+            background-color: #f8f9ff;
+            font-family: 'Inter', sans-serif;
+        }
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #d3e4fe;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body class="text-on-background">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-[280px] bg-surface flex flex-col py-md px-lg shadow-sm z-50 border-r border-outline-variant">
+<div class="mb-xl">
+<h1 class="font-display text-headline-md font-bold text-primary">Academia Prime</h1>
+<p class="font-label-md text-label-md text-on-surface-variant opacity-70">Ghana Enterprise Edition</p>
+</div>
+<nav class="flex-1 flex flex-col gap-xs">
+<!-- Students is active for this view -->
+<a class="flex items-center gap-md py-md px-md rounded-lg transition-all duration-200 ease-in-out hover:bg-surface-container-high text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-title-md text-title-md">Dashboard</span>
+</a>
+<a class="flex items-center gap-md py-md px-md rounded-lg transition-all duration-200 ease-in-out text-primary font-bold border-r-4 border-primary bg-surface-container-high" href="#">
+<span class="material-symbols-outlined" data-icon="school">school</span>
+<span class="font-title-md text-title-md">Students</span>
+</a>
+<a class="flex items-center gap-md py-md px-md rounded-lg transition-all duration-200 ease-in-out hover:bg-surface-container-high text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="badge">badge</span>
+<span class="font-title-md text-title-md">Staff</span>
+</a>
+<a class="flex items-center gap-md py-md px-md rounded-lg transition-all duration-200 ease-in-out hover:bg-surface-container-high text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span class="font-title-md text-title-md">Finance</span>
+</a>
+<a class="flex items-center gap-md py-md px-md rounded-lg transition-all duration-200 ease-in-out hover:bg-surface-container-high text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="directions_bus">directions_bus</span>
+<span class="font-title-md text-title-md">Transport</span>
+</a>
+<a class="flex items-center gap-md py-md px-md rounded-lg transition-all duration-200 ease-in-out hover:bg-surface-container-high text-on-surface-variant" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-title-md text-title-md">Settings</span>
+</a>
+</nav>
+<div class="mt-auto pt-lg border-t border-outline-variant">
+<button class="w-full flex items-center justify-center gap-sm bg-primary text-on-primary py-md rounded-xl font-title-md transition-transform active:scale-95 mb-md">
+<span class="material-symbols-outlined text-[20px]" data-icon="support_agent">support_agent</span>
+                Support Desk
+            </button>
+<a class="flex items-center gap-md py-md px-md rounded-lg text-on-surface-variant hover:text-error transition-colors" href="#">
+<span class="material-symbols-outlined" data-icon="logout">logout</span>
+<span class="font-title-md text-title-md">Logout</span>
+</a>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-[280px] min-h-screen">
+<!-- TopNavBar -->
+<header class="sticky top-0 right-0 z-40 bg-surface/80 backdrop-blur-md flex justify-between items-center w-full h-16 px-margin-desktop border-b border-outline-variant">
+<div class="flex items-center flex-1 max-w-xl">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline" data-icon="search">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-lowest border border-outline-variant rounded-full text-body-md focus:ring-2 focus:ring-primary focus:outline-none transition-all" placeholder="Search student records..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-lg">
+<nav class="hidden md:flex gap-xl">
+<a class="font-body-md text-body-md text-on-surface-variant hover:text-primary transition-colors" href="#">Dashboard</a>
+<a class="font-body-md text-body-md text-primary font-bold border-b-2 border-primary pb-1" href="#">Analytics</a>
+</nav>
+<div class="flex items-center gap-md border-l border-outline-variant pl-lg">
+<button class="p-2 rounded-full hover:bg-surface-container-high transition-colors relative">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="notifications">notifications</span>
+<span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full border border-surface"></span>
+</button>
+<button class="p-2 rounded-full hover:bg-surface-container-high transition-colors">
+<span class="material-symbols-outlined text-on-surface-variant" data-icon="help_outline">help_outline</span>
+</button>
+<div class="w-10 h-10 rounded-full overflow-hidden border-2 border-primary-container cursor-pointer active:scale-90 transition-transform">
+<img class="w-full h-full object-cover" data-alt="A professional portrait of a school administrator in a bright, modern office setting. The individual is wearing a smart blazer, smiling warmly, reflecting a leadership role in an elite educational institution. The background is softly blurred with hints of institutional branding and minimalist furniture." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD4bEKYXof_3AyIQRJAfdR6StvSigWstUAJyO-olR0FQriUSsW4GGXj4UfhLzQKfb1vQsuyokKqCgPrxCECtnfEFKkOBQAjQGPcXpy0P2frSYgcbC1iY4pe3oPsRylCb2hZwiszLJ6OthrHfiFhuzbAsnMPIFaBolt1_WBa2JYU3TXHTS0maR9m3es4HUQrGdp0BP_wk2uW-7q3AsHwkfdoK87xQ2muvG0Zd3iAB_XoQXZlnLOX0FPGbQ"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Profile Canvas -->
+<div class="p-margin-desktop">
+<!-- Student Header Profile -->
+<div class="bg-surface-container-lowest rounded-2xl p-xl shadow-sm border border-outline-variant flex flex-col md:flex-row items-center gap-xl mb-xl">
+<div class="relative group">
+<div class="w-32 h-32 md:w-40 md:h-40 rounded-2xl overflow-hidden shadow-lg border-4 border-surface-container">
+<img class="w-full h-full object-cover" data-alt="A high-quality portrait of a teenage student with a friendly expression, captured in a brightly lit school hallway. The student is wearing a neat white and blue school uniform, representing the Academia Prime brand. The lighting is soft and natural, emphasizing a professional yet approachable educational atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCEquUtjUaY0-G-QQdjV3u1JJViBRDljF-lmoJYXe1YTmB6eHfobWA9IK7Y6YX1LAABq9-Ox8LvJBKcQpYjAkZf6cRi4S9es_Mkj5BErfDZJJwTJg_1J4ndYFRlPQ3CY5vnBpg_Yz6Qibs0SbsD-mHxXmnGMI5N9fG8pmMB4k_8vQc5keoEh8xG-VpRiJvtL51j_axZrCtrhxens9QhhrKME8IuBQdeZehtYTWSex7gy2VQMARQM2G1BQ"/>
+</div>
+<button class="absolute -bottom-2 -right-2 bg-primary text-on-primary p-2 rounded-lg shadow-lg hover:scale-110 transition-transform">
+<span class="material-symbols-outlined" data-icon="edit">edit</span>
+</button>
+</div>
+<div class="flex-1 text-center md:text-left">
+<div class="flex flex-col md:flex-row md:items-center gap-md mb-xs">
+<h2 class="font-headline-lg text-headline-lg text-on-background">Kofi Mensah Boateng</h2>
+<span class="px-3 py-1 bg-secondary-container text-on-secondary-container rounded-full text-label-md font-bold self-center md:self-auto">ACTIVE</span>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-lg mt-md">
+<div>
+<p class="text-label-md text-outline uppercase tracking-wider">Admission No</p>
+<p class="font-title-md text-title-md text-on-surface">AP/2024/0482</p>
+</div>
+<div>
+<p class="text-label-md text-outline uppercase tracking-wider">Current Class</p>
+<p class="font-title-md text-title-md text-on-surface">Senior High 2 - Business B</p>
+</div>
+<div>
+<p class="text-label-md text-outline uppercase tracking-wider">Enrolled Since</p>
+<p class="font-title-md text-title-md text-on-surface">Sept 15, 2022</p>
+</div>
+</div>
+</div>
+<div class="flex gap-md">
+<button class="flex items-center gap-sm px-lg py-md border border-outline-variant rounded-xl hover:bg-surface-container-high transition-colors font-title-md">
+<span class="material-symbols-outlined" data-icon="print">print</span>
+                        ID Card
+                    </button>
+<button class="flex items-center gap-sm px-lg py-md bg-primary text-on-primary rounded-xl font-title-md shadow-md active:scale-95 transition-transform">
+<span class="material-symbols-outlined" data-icon="mail">mail</span>
+                        Contact Parent
+                    </button>
+</div>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-xl">
+<!-- Main Content Tabs Area -->
+<div class="lg:col-span-8 flex flex-col gap-xl">
+<!-- Tabs Navigation -->
+<div class="flex gap-lg border-b border-outline-variant overflow-x-auto custom-scrollbar">
+<button class="pb-md px-md text-primary font-bold border-b-2 border-primary whitespace-nowrap">Overview</button>
+<button class="pb-md px-md text-on-surface-variant hover:text-primary transition-colors whitespace-nowrap">Academic Performance</button>
+<button class="pb-md px-md text-on-surface-variant hover:text-primary transition-colors whitespace-nowrap">Attendance History</button>
+<button class="pb-md px-md text-on-surface-variant hover:text-primary transition-colors whitespace-nowrap">Fee History</button>
+<button class="pb-md px-md text-on-surface-variant hover:text-primary transition-colors whitespace-nowrap">Documents</button>
+</div>
+<!-- Performance Chart Bento -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-lg">
+<div class="bg-surface-container-lowest p-lg rounded-2xl border border-outline-variant shadow-sm col-span-2">
+<div class="flex justify-between items-center mb-xl">
+<h3 class="font-title-lg text-title-lg text-on-background">Grade Point Average Trend</h3>
+<div class="flex gap-sm">
+<button class="px-3 py-1 bg-surface-container-high text-on-surface text-label-md rounded-lg">Term 1</button>
+<button class="px-3 py-1 bg-primary text-on-primary text-label-md rounded-lg">Term 2</button>
+</div>
+</div>
+<!-- Mockup Chart -->
+<div class="h-64 w-full flex items-end gap-md pb-md overflow-hidden">
+<div class="flex-1 flex flex-col items-center group">
+<div class="w-full bg-primary-container/20 rounded-t-lg relative flex flex-col justify-end" style="height: 60%;">
+<div class="w-full bg-primary rounded-t-lg h-[80%] transition-all group-hover:brightness-110"></div>
+</div>
+<span class="text-label-md mt-md text-outline">Maths</span>
+</div>
+<div class="flex-1 flex flex-col items-center group">
+<div class="w-full bg-primary-container/20 rounded-t-lg relative flex flex-col justify-end" style="height: 75%;">
+<div class="w-full bg-primary rounded-t-lg h-[95%] transition-all group-hover:brightness-110"></div>
+</div>
+<span class="text-label-md mt-md text-outline">English</span>
+</div>
+<div class="flex-1 flex flex-col items-center group">
+<div class="w-full bg-primary-container/20 rounded-t-lg relative flex flex-col justify-end" style="height: 90%;">
+<div class="w-full bg-primary rounded-t-lg h-[88%] transition-all group-hover:brightness-110"></div>
+</div>
+<span class="text-label-md mt-md text-outline">Econ</span>
+</div>
+<div class="flex-1 flex flex-col items-center group">
+<div class="w-full bg-primary-container/20 rounded-t-lg relative flex flex-col justify-end" style="height: 55%;">
+<div class="w-full bg-primary rounded-t-lg h-[70%] transition-all group-hover:brightness-110"></div>
+</div>
+<span class="text-label-md mt-md text-outline">Acct</span>
+</div>
+<div class="flex-1 flex flex-col items-center group">
+<div class="w-full bg-primary-container/20 rounded-t-lg relative flex flex-col justify-end" style="height: 85%;">
+<div class="w-full bg-primary rounded-t-lg h-[92%] transition-all group-hover:brightness-110"></div>
+</div>
+<span class="text-label-md mt-md text-outline">ICT</span>
+</div>
+</div>
+</div>
+<!-- Secondary Performance Stats -->
+<div class="bg-surface-container-high p-lg rounded-2xl border border-outline-variant flex flex-col justify-between">
+<div>
+<h4 class="font-title-md text-title-md mb-xs">Attendance Rate</h4>
+<p class="text-label-md text-on-surface-variant">Last 30 Academic Days</p>
+</div>
+<div class="flex items-center gap-xl mt-lg">
+<div class="relative w-24 h-24 flex items-center justify-center">
+<svg class="w-full h-full transform -rotate-90">
+<circle class="text-surface-container-lowest" cx="48" cy="48" fill="transparent" r="40" stroke="currentColor" stroke-width="8"></circle>
+<circle class="text-secondary" cx="48" cy="48" fill="transparent" r="40" stroke="currentColor" stroke-dasharray="251.2" stroke-dashoffset="12.5" stroke-width="8"></circle>
+</svg>
+<span class="absolute font-display text-title-lg text-on-background">95%</span>
+</div>
+<div>
+<p class="text-body-md font-bold text-secondary">Outstanding</p>
+<p class="text-body-md text-on-surface-variant">2 Days Missed</p>
+</div>
+</div>
+</div>
+<div class="bg-tertiary-container/10 p-lg rounded-2xl border border-tertiary/20 flex flex-col justify-between">
+<div>
+<h4 class="font-title-md text-title-md text-tertiary mb-xs">House Points</h4>
+<p class="text-label-md text-on-tertiary-fixed-variant">House: Kwame Nkrumah</p>
+</div>
+<div class="flex items-center justify-between mt-lg">
+<div class="flex items-baseline gap-xs">
+<span class="font-display text-headline-lg text-tertiary">420</span>
+<span class="text-label-md text-tertiary opacity-80">pts</span>
+</div>
+<div class="w-12 h-12 bg-tertiary rounded-full flex items-center justify-center text-on-tertiary">
+<span class="material-symbols-outlined" data-icon="trophy">trophy</span>
+</div>
+</div>
+<div class="mt-md w-full bg-tertiary/10 h-2 rounded-full overflow-hidden">
+<div class="bg-tertiary h-full w-3/4"></div>
+</div>
+</div>
+</div>
+<!-- Recent Activity Section -->
+<div class="bg-surface-container-lowest p-lg rounded-2xl border border-outline-variant shadow-sm">
+<h3 class="font-title-lg text-title-lg mb-lg">Recent Academic History</h3>
+<div class="space-y-md">
+<div class="flex items-start gap-md p-md rounded-xl hover:bg-surface-container-low transition-colors group">
+<div class="p-2 bg-primary-container rounded-lg text-on-primary-container">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<h5 class="font-title-md text-title-md">Mathematics Quiz #4</h5>
+<span class="text-label-md text-outline">2 Days Ago</span>
+</div>
+<p class="text-body-md text-on-surface-variant">Scored 18/20 (A+). Outstanding performance in Calculus section.</p>
+</div>
+</div>
+<div class="flex items-start gap-md p-md rounded-xl hover:bg-surface-container-low transition-colors group">
+<div class="p-2 bg-secondary-container rounded-lg text-on-secondary-container">
+<span class="material-symbols-outlined" data-icon="sports_soccer">sports_soccer</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<h5 class="font-title-md text-title-md">Inter-House Football</h5>
+<span class="text-label-md text-outline">Last Friday</span>
+</div>
+<p class="text-body-md text-on-surface-variant">Represented Nkrumah House. Team secured victory 2-1.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Profile Sidebar Content -->
+<div class="lg:col-span-4 flex flex-col gap-xl">
+<!-- Guardian Card -->
+<div class="bg-surface-container-lowest rounded-2xl border border-outline-variant overflow-hidden shadow-sm">
+<div class="p-lg bg-surface-container-high border-b border-outline-variant flex items-center justify-between">
+<h4 class="font-title-md text-title-md">Primary Guardian</h4>
+<button class="text-primary hover:bg-primary/10 p-1 rounded transition-colors">
+<span class="material-symbols-outlined" data-icon="more_vert">more_vert</span>
+</button>
+</div>
+<div class="p-lg flex flex-col gap-lg">
+<div class="flex items-center gap-md">
+<div class="w-12 h-12 rounded-full overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A portrait of a distinguished Ghanaian man in professional attire, looking proud and confident. He represents the guardian of a student at Academia Prime. The setting is clean and high-end, with warm, natural lighting that emphasizes a trustworthy and supportive paternal figure." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBx9WeNYGKpw3QwvGqI0a2spHB9TKq5bc9KjXQI-GxAHk91i38_KM4G-2CCc9Vgff7hAga6S4jnjCMaEWzaQAiNQxNVTxc09aoRSZAWZYvhs1miwz_dHPo1iGDAMG7K_MuszhjNj6_bLJC4ad_kvsVaBxLcTV5z1Wmu6C_6sNXi1xp8_bYI1iI4ckOqA8f60VQ9-f4GJJUwcSF7qDyY-yTmZeMYP90x7bB7T-rcb-Rb2Oqb1UlbKPrmfw"/>
+</div>
+<div>
+<p class="font-title-md text-title-md">Dr. Samuel Boateng</p>
+<p class="text-label-md text-on-surface-variant">Father • Medical Surgeon</p>
+</div>
+</div>
+<div class="space-y-md border-t border-outline-variant pt-lg">
+<div class="flex items-center gap-md text-body-md">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="call">call</span>
+<span>+233 24 555 1290</span>
+</div>
+<div class="flex items-center gap-md text-body-md">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="mail">mail</span>
+<span class="truncate">s.boateng@hospital.gh</span>
+</div>
+<div class="flex items-center gap-md text-body-md">
+<span class="material-symbols-outlined text-primary text-[20px]" data-icon="location_on">location_on</span>
+<span>East Legon, Accra</span>
+</div>
+</div>
+</div>
+</div>
+<!-- Medical Alerts Card -->
+<div class="bg-error-container text-on-error-container p-lg rounded-2xl border border-error/20">
+<div class="flex items-center gap-md mb-md">
+<span class="material-symbols-outlined" data-icon="medical_services">medical_services</span>
+<h4 class="font-title-md text-title-md">Medical Alerts</h4>
+</div>
+<div class="bg-surface-container-lowest/50 p-md rounded-xl space-y-sm">
+<div class="flex items-center gap-sm">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<p class="text-body-md font-bold">Severe Nut Allergy</p>
+</div>
+<p class="text-body-md pl-4 opacity-80">Carries EpiPen. Do not serve any dishes containing peanuts or tree nuts.</p>
+</div>
+<div class="mt-md flex items-center gap-sm pl-md">
+<span class="material-symbols-outlined text-[18px]" data-icon="bloodtype">bloodtype</span>
+<span class="text-body-md font-bold">Blood Type: O+</span>
+</div>
+</div>
+<!-- Transport Info -->
+<div class="bg-secondary-container/10 p-lg rounded-2xl border border-secondary/20">
+<div class="flex items-center gap-md mb-md">
+<span class="material-symbols-outlined text-secondary" data-icon="directions_bus">directions_bus</span>
+<h4 class="font-title-md text-title-md text-on-secondary-container">Transport Route</h4>
+</div>
+<div class="space-y-md">
+<div>
+<p class="text-label-md text-on-secondary-fixed-variant uppercase tracking-wider">Route Name</p>
+<p class="font-title-md text-title-md">Route 14 - Blue Line</p>
+</div>
+<div>
+<p class="text-label-md text-on-secondary-fixed-variant uppercase tracking-wider">Bus Stop</p>
+<p class="font-title-md text-title-md">Accra Mall Main Entrance</p>
+</div>
+<div class="grid grid-cols-2 gap-md">
+<div>
+<p class="text-label-md text-on-secondary-fixed-variant uppercase tracking-wider">Pickup</p>
+<p class="font-title-md text-title-md">06:15 AM</p>
+</div>
+<div>
+<p class="text-label-md text-on-secondary-fixed-variant uppercase tracking-wider">Dropoff</p>
+<p class="font-title-md text-title-md">04:45 PM</p>
+</div>
+</div>
+</div>
+<button class="w-full mt-lg py-md px-md bg-secondary text-on-secondary rounded-xl font-title-md hover:brightness-110 transition-all flex items-center justify-center gap-sm">
+<span class="material-symbols-outlined" data-icon="map">map</span>
+                            View Live Bus
+                        </button>
+</div>
+<!-- Documents Preview -->
+<div class="bg-surface-container-lowest p-lg rounded-2xl border border-outline-variant shadow-sm">
+<div class="flex justify-between items-center mb-lg">
+<h4 class="font-title-md text-title-md">Recent Documents</h4>
+<a class="text-primary text-label-md font-bold hover:underline" href="#">View All</a>
+</div>
+<div class="space-y-md">
+<div class="flex items-center gap-md p-md border border-outline-variant rounded-xl cursor-pointer hover:bg-surface-container-low transition-all">
+<span class="material-symbols-outlined text-error" data-icon="picture_as_pdf">picture_as_pdf</span>
+<div class="flex-1">
+<p class="text-body-md font-bold">Term 1 Report Card</p>
+<p class="text-label-md text-outline">PDF • 1.2 MB</p>
+</div>
+<span class="material-symbols-outlined text-outline hover:text-primary" data-icon="download">download</span>
+</div>
+<div class="flex items-center gap-md p-md border border-outline-variant rounded-xl cursor-pointer hover:bg-surface-container-low transition-all">
+<span class="material-symbols-outlined text-primary" data-icon="description">description</span>
+<div class="flex-1">
+<p class="text-body-md font-bold">Medical Clearance</p>
+<p class="text-label-md text-outline">DOCX • 450 KB</p>
+</div>
+<span class="material-symbols-outlined text-outline hover:text-primary" data-icon="download">download</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer -->
+<footer class="w-full border-t border-outline-variant bg-surface-container-lowest flex flex-col md:flex-row justify-between items-center py-md px-margin-desktop">
+<p class="font-label-md text-label-md text-on-surface-variant mb-md md:mb-0">© 2024 Academia Prime Ghana. All Rights Reserved.</p>
+<div class="flex gap-xl">
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Privacy Policy</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors" href="#">Terms of Service</a>
+<a class="font-label-md text-label-md text-on-surface-variant hover:text-primary transition-colors flex items-center gap-xs" href="#">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+                    System Status
+                </a>
+</div>
+</footer>
+</main>
+<!-- Micro-interactions Script -->
+<script>
+        document.querySelectorAll('nav a, .flex button').forEach(button => {
+            button.addEventListener('mouseenter', () => {
+                // Subtle scale effect already handled by tailwind classes usually, but we can add more logic
+            });
+        });
+
+        // Search Bar focus effect
+        const searchInput = document.querySelector('input[type="text"]');
+        searchInput.addEventListener('focus', () => {
+            searchInput.parentElement.classList.add('ring-2', 'ring-primary/20');
+        });
+        searchInput.addEventListener('blur', () => {
+            searchInput.parentElement.classList.remove('ring-2', 'ring-primary/20');
+        });
+    </script>
+</body></html>

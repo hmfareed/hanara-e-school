@@ -1,0 +1,23 @@
+const express = require('express');
+const router = express.Router();
+const {
+  getStudents,
+  createStudent,
+  getStudentById,
+  updateStudent,
+  withdrawStudent,
+  promoteStudent,
+} = require('../controllers/student.controller');
+const { protect } = require('../middleware/auth');
+const { authorize } = require('../middleware/rbac');
+const { validate } = require('../middleware/validate');
+const { createStudentSchema, updateStudentSchema } = require('../validators/student.validators');
+
+router.get('/', protect, authorize('superadmin', 'admin', 'teacher', 'accountant'), getStudents);
+router.post('/', protect, authorize('superadmin', 'admin'), validate(createStudentSchema), createStudent);
+router.get('/:id', protect, authorize('superadmin', 'admin', 'teacher', 'accountant'), getStudentById);
+router.patch('/:id', protect, authorize('superadmin', 'admin'), validate(updateStudentSchema), updateStudent);
+router.post('/:id/withdraw', protect, authorize('superadmin', 'admin'), withdrawStudent);
+router.post('/:id/promote', protect, authorize('superadmin', 'admin'), promoteStudent);
+
+module.exports = router;
