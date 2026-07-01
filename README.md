@@ -62,17 +62,6 @@ npm run dev       # Starts on http://localhost:5173
 
 ---
 
-## Default Login Accounts (after seeding)
-
-| Role         | Email                              | Password        |
-|--------------|------------------------------------|-----------------|
-| Superadmin   | admin@hanaraschools.edu.gh         | Admin@2026      |
-| Admin        | abubakar@hanaraschools.edu.gh      | Admin@2026      |
-| Teacher      | mariam@hanaraschools.edu.gh        | Teacher@2026    |
-| Accountant   | joseph@hanaraschools.edu.gh        | Accountant@2026 |
-| Parent       | parent@hanaraschools.edu.gh        | Parent@2026     |
-
----
 
 ## API Overview
 
