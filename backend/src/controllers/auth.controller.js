@@ -3,6 +3,25 @@ const User = require('../models/User');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../services/token.service');
 const logger = require('../utils/logger');
 
+const ensureSuperAdminStaffProfile = async (user) => {
+  if (user.role === 'superadmin' && !user.refStaff) {
+    const Staff = require('../models/Staff');
+    const headteacherStaff = await Staff.create({
+      title: 'Mr',
+      firstName: 'Headteacher',
+      lastName: 'Admin',
+      gender: 'male',
+      phone: user.phone || '0244111222',
+      email: user.email,
+      role: 'admin',
+      employmentStatus: 'active',
+    });
+    user.refStaff = headteacherStaff._id;
+    await user.save({ validateBeforeSave: false });
+    logger.info(`Automatically created and linked Staff profile for superadmin: ${user.email}`);
+  }
+};
+
 const REFRESH_COOKIE_OPTIONS = {
   httpOnly: true,
   secure: process.env.NODE_ENV === 'production',
@@ -24,7 +43,7 @@ const login = async (req, res, next) => {
     if (user.approvalStatus === 'pending') {
       return res.status(403).json({
         success: false,
-        message: 'Your account is pending superadmin approval. You will be able to log in once approved.',
+        message: 'Your account is pending headteacher approval. You will be able to log in once approved.',
         approvalStatus: 'pending',
       });
     }
@@ -61,10 +80,12 @@ const login = async (req, res, next) => {
 
     logger.info(`User logged in: ${user.email} (${user.role})`);
 
+    await ensureSuperAdminStaffProfile(user);
+
     const populatedUser = await User.findById(user._id)
       .populate({
         path: 'refStaff',
-        select: 'firstName lastName role classesAssigned',
+        select: 'title photoUrl firstName lastName role classesAssigned',
         populate: { path: 'classesAssigned', select: 'name' }
       })
       .populate('refGuardian');
@@ -118,10 +139,13 @@ const refresh = async (req, res, next) => {
 
     res.cookie('refreshToken', newRefreshToken, REFRESH_COOKIE_OPTIONS);
 
+    const dbUser = await User.findById(user._id);
+    await ensureSuperAdminStaffProfile(dbUser);
+
     const populatedUser = await User.findById(user._id)
       .populate({
         path: 'refStaff',
-        select: 'firstName lastName role classesAssigned',
+        select: 'title photoUrl firstName lastName role classesAssigned',
         populate: { path: 'classesAssigned', select: 'name' }
       })
       .populate('refGuardian');
@@ -164,15 +188,19 @@ const logout = async (req, res, next) => {
 // GET /api/auth/me
 const getMe = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user.id)
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    
+    await ensureSuperAdminStaffProfile(user);
+
+    const populatedUser = await User.findById(req.user.id)
       .populate({
         path: 'refStaff',
-        select: 'firstName lastName role classesAssigned',
+        select: 'title photoUrl firstName lastName role classesAssigned',
         populate: { path: 'classesAssigned', select: 'name' }
       })
       .populate('refGuardian');
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    res.json({ success: true, data: user });
+    res.json({ success: true, data: populatedUser });
   } catch (error) {
     next(error);
   }
@@ -184,6 +212,7 @@ const registerTeacher = async (req, res, next) => {
     const Staff = require('../models/Staff');
     const RegistrationCode = require('../models/RegistrationCode');
     const {
+      title,
       firstName,
       lastName,
       otherNames,
@@ -224,6 +253,7 @@ const registerTeacher = async (req, res, next) => {
 
     // Create Staff record
     const staff = await Staff.create({
+      title: title || '',
       firstName,
       lastName,
       otherNames: otherNames || '',
@@ -253,7 +283,7 @@ const registerTeacher = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: 'Registration successful! Your account is now pending superadmin approval. You will be able to log in once your account has been approved.',
+      message: 'Registration successful! Your account is now pending headteacher approval. You will be able to log in once your account has been approved.',
       data: {
         staffId: staff._id,
         name: `${staff.firstName} ${staff.lastName}`,
@@ -266,4 +296,75 @@ const registerTeacher = async (req, res, next) => {
   }
 };
 
-module.exports = { login, refresh, logout, getMe, registerTeacher };
+// PATCH /api/auth/me (update current staff profile)
+const updateMe = async (req, res, next) => {
+  try {
+    const Staff = require('../models/Staff');
+    const { firstName, lastName, otherNames, gender, dob, phone, address, qualification, title, photoUrl } = req.body;
+
+    let refStaff = req.user.refStaff;
+    if (!refStaff) {
+      const user = await User.findById(req.user.id);
+      if (user) {
+        await ensureSuperAdminStaffProfile(user);
+        refStaff = user.refStaff;
+      }
+    }
+
+    if (!refStaff) {
+      return res.status(400).json({ success: false, message: 'No linked staff profile found for this user.' });
+    }
+
+    const updatedStaff = await Staff.findByIdAndUpdate(
+      refStaff,
+      {
+        $set: {
+          title,
+          photoUrl,
+          firstName,
+          lastName,
+          otherNames,
+          gender,
+          dob: dob || null,
+          phone,
+          address,
+          qualification,
+        },
+      },
+      { new: true, runValidators: true }
+    );
+
+    res.json({ success: true, data: updatedStaff });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/auth/change-password
+const changePassword = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ success: false, message: 'Current password and new password are required.' });
+    }
+
+    const user = await User.findById(req.user.id).select('+passwordHash');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ success: false, message: 'Incorrect current password.' });
+    }
+
+    user.passwordHash = newPassword;
+    await user.save();
+
+    res.json({ success: true, message: 'Password changed successfully.' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { login, refresh, logout, getMe, registerTeacher, updateMe, changePassword };

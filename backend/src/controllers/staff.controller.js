@@ -170,7 +170,7 @@ const getWaitlist = async (req, res, next) => {
     const waitlist = await User.find({ approvalStatus: 'pending' })
       .populate({
         path: 'refStaff',
-        select: 'firstName lastName email phone role qualification classesAssigned',
+        select: 'title photoUrl firstName lastName email phone role qualification classesAssigned',
         populate: { path: 'classesAssigned', select: 'name' }
       })
       .sort({ createdAt: -1 });
@@ -217,4 +217,82 @@ const rejectStaff = async (req, res, next) => {
   }
 };
 
-module.exports = { getStaff, createStaff, getStaffById, updateStaff, assignClasses, generateRegistrationCode, getRegistrationCode, getWaitlist, approveStaff, rejectStaff };
+// DELETE /api/staff/:id (superadmin only)
+const deleteStaff = async (req, res, next) => {
+  try {
+    const staffId = req.params.id;
+
+    // Find the staff profile
+    const staff = await Staff.findById(staffId);
+    if (!staff) {
+      return res.status(404).json({ success: false, message: 'Staff member not found' });
+    }
+
+    // Find associated user
+    const associatedUser = await User.findOne({ refStaff: staffId });
+
+    // Prevent self-deletion
+    if (req.user.refStaff && req.user.refStaff.toString() === staffId.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot fire yourself'
+      });
+    }
+
+    // Prevent deleting a superadmin user
+    if (associatedUser && associatedUser.role === 'superadmin') {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot fire the headteacher (superadmin)'
+      });
+    }
+
+    // Clean up in other models
+    const Class = require('../models/Class');
+    const Bus = require('../models/Bus');
+    const ClassSubjectAssignment = require('../models/ClassSubjectAssignment');
+
+    // 1. Clear classTeacher in Class
+    await Class.updateMany(
+      { classTeacher: staffId },
+      { $set: { classTeacher: null } }
+    );
+
+    // 2. Clear formTeacher in Class
+    if (associatedUser) {
+      await Class.updateMany(
+        { formTeacher: associatedUser._id },
+        { $set: { formTeacher: null } }
+      );
+    }
+
+    // 3. Clear driver in Bus
+    await Bus.updateMany(
+      { driver: staffId },
+      { $set: { driver: null } }
+    );
+
+    // 4. Delete ClassSubjectAssignments
+    await ClassSubjectAssignment.deleteMany({ teacher: staffId });
+
+    // 5. Delete User record
+    if (associatedUser) {
+      await User.deleteOne({ _id: associatedUser._id });
+    }
+
+    // 6. Delete Staff profile
+    await Staff.deleteOne({ _id: staffId });
+
+    logger.info(`Staff member ${staff.firstName} ${staff.lastName} was fired by superadmin (${req.user.email})`);
+
+    res.json({
+      success: true,
+      message: `Staff member ${staff.firstName} ${staff.lastName} has been fired successfully.`
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { getStaff, createStaff, getStaffById, updateStaff, assignClasses, generateRegistrationCode, getRegistrationCode, getWaitlist, approveStaff, rejectStaff, deleteStaff };
+

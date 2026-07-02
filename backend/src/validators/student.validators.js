@@ -28,8 +28,9 @@ const createStudentSchema = z.object({
   medicalNotes: z.string().optional().default(''),
   transport: z.object({
     usesBus: z.boolean().default(false),
+    bus: z.string().optional().nullable().default(null),
     stop: z.string().optional().default(''),
-  }).optional().default({ usesBus: false, stop: '' }),
+  }).optional().default({ usesBus: false, bus: null, stop: '' }),
   guardian: guardianSchema.optional(),
 });
 

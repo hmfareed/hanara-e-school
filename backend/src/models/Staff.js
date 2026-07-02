@@ -2,6 +2,15 @@ const mongoose = require('mongoose');
 
 const staffSchema = new mongoose.Schema(
   {
+    title: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    photoUrl: {
+      type: String,
+      default: null,
+    },
     firstName: {
       type: String,
       required: [true, 'First name is required'],
@@ -55,7 +64,7 @@ const staffSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['teacher', 'accountant', 'admin', 'driver', 'support'],
+      enum: ['teacher', 'accountant', 'admin', 'driver', 'support', 'cleaner'],
       required: [true, 'Staff role is required'],
     },
     // Classes this staff member is assigned to (as class teacher or subject teacher)

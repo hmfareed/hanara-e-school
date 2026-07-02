@@ -157,22 +157,42 @@ const generateInvoices = async (req, res, next) => {
           continue;
         }
 
+        const fullStudent = await Student.findById(student._id).populate('guardians');
+        if (!fullStudent) {
+          results.errors.push({ studentId: student._id, error: 'Student not found' });
+          continue;
+        }
+
+        let amountDue = structure.totalAmount;
+        let invoiceNotes = notes || '';
+
+        if (fullStudent.transport && !fullStudent.transport.usesBus) {
+          const transportItem = structure.items.find(
+            (item) =>
+              item.name.toLowerCase() === 'transport' ||
+              item.name.toLowerCase() === 'transportation'
+          );
+          if (transportItem) {
+            amountDue = Math.max(0, amountDue - transportItem.amount);
+            invoiceNotes = `${invoiceNotes ? invoiceNotes + ' | ' : ''}Excluded Transport fee (Not using bus)`.trim();
+          }
+        }
+
         const invoiceObj = await Invoice.create({
           student: student._id,
           feeStructure: feeStructureId,
           academicYear: structure.academicYear,
           termName: structure.termName,
-          amountDue: structure.totalAmount,
+          amountDue,
           dueDate: dueDate ? new Date(dueDate) : undefined,
-          notes,
+          notes: invoiceNotes,
           createdBy: req.user.id,
         });
         results.created++;
 
         // Send invoice alert to guardians
         try {
-          const fullStudent = await Student.findById(student._id).populate('guardians');
-          if (fullStudent && fullStudent.guardians && fullStudent.guardians.length > 0) {
+          if (fullStudent.guardians && fullStudent.guardians.length > 0) {
             for (const guardian of fullStudent.guardians) {
               if (guardian.phone) {
                 await sendInvoiceAlert(fullStudent, guardian, invoiceObj);

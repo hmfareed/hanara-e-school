@@ -23,6 +23,9 @@ const momoRoutes = require('./routes/momo.routes');
 const assignmentRoutes = require('./routes/assignment.routes');
 const teacherRoutes = require('./routes/teacher.routes');
 const gradeRoutes = require('./routes/grade.routes');
+const settingsRoutes = require('./routes/settings.routes');
+const transportRoutes = require('./routes/transport.routes');
+const dailyFeeRoutes = require('./routes/dailyFee.routes');
 
 const app = express();
 
@@ -65,13 +68,16 @@ app.use('/api/staff', staffRoutes);
 app.use('/api/classes', classRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/academic-years', academicYearRoutes);
+app.use('/api/fees/payments/momo', momoRoutes);
 app.use('/api/fees', feeRoutes);
 app.use('/api/sms', smsRoutes);
 app.use('/api/parent', parentRoutes);
-app.use('/api/fees/payments/momo', momoRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/teachers', teacherRoutes);
 app.use('/api/grades', gradeRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/transport', transportRoutes);
+app.use('/api/fees/daily-register', dailyFeeRoutes);
 
 
 

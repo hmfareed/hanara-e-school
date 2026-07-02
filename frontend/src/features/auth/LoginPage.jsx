@@ -54,7 +54,7 @@ const LoginPage = () => {
 
   /* ──── Register state ──── */
   const emptyReg = {
-    firstName: '', lastName: '', otherNames: '',
+    title: '', firstName: '', lastName: '', otherNames: '',
     gender: '', dob: '', phone: '',
     email: '', password: '', confirmPassword: '',
     role: 'teacher', qualification: '',
@@ -91,7 +91,27 @@ const LoginPage = () => {
     setR('role', roleVal);
   };
 
+  const getAvailableTitles = (gender) => {
+    if (gender === 'male') {
+      return ['Mr', 'Sir', 'Rev', 'Doc', 'Prof'];
+    }
+    if (gender === 'female') {
+      return ['Miss', 'Mrs', 'Ms', 'Rev', 'Doc', 'Prof'];
+    }
+    return ['Mr', 'Mrs', 'Miss', 'Ms', 'Sir', 'Rev', 'Doc', 'Prof'];
+  };
+
+  const handleGenderChange = (genderVal) => {
+    const validTitles = getAvailableTitles(genderVal);
+    setReg((prev) => ({
+      ...prev,
+      gender: genderVal,
+      title: prev.title && validTitles.includes(prev.title) ? prev.title : '',
+    }));
+  };
+
   const validateStep1 = () => {
+    if (!reg.title)            return 'Please select a title.';
     if (!reg.firstName.trim()) return 'First name is required.';
     if (!reg.lastName.trim())  return 'Last name is required.';
     if (!reg.gender)           return 'Please select a gender.';
@@ -141,6 +161,7 @@ const LoginPage = () => {
     setRegistering(true);
     try {
       const payload = {
+        title:            reg.title,
         firstName:        reg.firstName.trim(),
         lastName:         reg.lastName.trim(),
         otherNames:       reg.otherNames.trim(),
@@ -155,7 +176,7 @@ const LoginPage = () => {
       };
       const res = await api.post('/auth/register-teacher', payload);
       if (res.data?.success) {
-        setRegSuccess(res.data.message || 'Registration successful! Your account is pending superadmin approval.');
+        setRegSuccess(res.data.message || 'Registration successful! Your account is pending headteacher approval.');
         setReg(emptyReg);
         setStep(1);
       } else {
@@ -333,7 +354,7 @@ const LoginPage = () => {
                     <p className="font-bold">Registration Submitted!</p>
                     <p className="text-xs mt-0.5 leading-relaxed">{regSuccess}</p>
                     <p className="text-xs mt-1.5 text-emerald-700 font-semibold">
-                      ⏳ Your account is awaiting superadmin approval. You will be able to sign in once approved.
+                      ⏳ Your account is awaiting headteacher approval. You will be able to sign in once approved.
                     </p>
                     <button onClick={switchToLogin} className="mt-2 font-bold underline text-emerald-700 cursor-pointer text-xs">
                       Back to Sign In →
@@ -348,6 +369,31 @@ const LoginPage = () => {
                   {/* ─── STEP 1: Personal Info ─── */}
                   {step === 1 && (
                     <div className="space-y-4">
+                      {/* Gender first so title options update */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <Field label="Gender *">
+                          <select value={reg.gender} onChange={(e) => handleGenderChange(e.target.value)} className={selectCls} required>
+                            <option value="">Select gender</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                          </select>
+                        </Field>
+                        <Field label="Title *">
+                          <select
+                            value={reg.title}
+                            onChange={(e) => setR('title', e.target.value)}
+                            className={selectCls}
+                            required
+                          >
+                            <option value="">Select title</option>
+                            {getAvailableTitles(reg.gender).map((t) => (
+                              <option key={t} value={t}>{t}</option>
+                            ))}
+                          </select>
+                        </Field>
+                      </div>
+
                       <div className="grid grid-cols-2 gap-4">
                         <Field label="First Name *">
                           <input type="text" required value={reg.firstName}
@@ -360,7 +406,6 @@ const LoginPage = () => {
                             placeholder="e.g. Mensah" className={inputCls} />
                         </Field>
                       </div>
-
                       <Field label="Other Names">
                         <input type="text" value={reg.otherNames}
                           onChange={(e) => setR('otherNames', e.target.value)}
@@ -368,27 +413,19 @@ const LoginPage = () => {
                       </Field>
 
                       <div className="grid grid-cols-2 gap-4">
-                        <Field label="Gender *">
-                          <select value={reg.gender} onChange={(e) => setR('gender', e.target.value)} className={selectCls} required>
-                            <option value="">Select gender</option>
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
-                            <option value="other">Other</option>
-                          </select>
-                        </Field>
                         <Field label="Date of Birth">
                           <input type="date" value={reg.dob}
                             onChange={(e) => setR('dob', e.target.value)}
                             className={inputCls} />
                         </Field>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
                         <Field label="Phone Number *">
                           <input type="tel" value={reg.phone}
                             onChange={(e) => setR('phone', e.target.value)}
                             placeholder="e.g. 024 000 0000" className={inputCls} />
                         </Field>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
                         <Field label="Qualification">
                           <input type="text" value={reg.qualification}
                             onChange={(e) => setR('qualification', e.target.value)}
@@ -396,12 +433,14 @@ const LoginPage = () => {
                         </Field>
                       </div>
 
+
                       <Field label="Staff Role *">
                         <select value={reg.role} onChange={(e) => handleRoleChange(e.target.value)} className={selectCls} required>
                           <option value="teacher">Teacher</option>
                           <option value="accountant">Accountant</option>
                           <option value="support">Support Staff</option>
                           <option value="driver">Driver</option>
+                          <option value="cleaner">School Cleaner / Cook</option>
                         </select>
                       </Field>
                     </div>
@@ -481,7 +520,7 @@ const LoginPage = () => {
 
                       <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800">
                         <p className="font-bold">🔑 Registration Code Required</p>
-                        <p className="mt-0.5">You need a 6-digit code from your school administrator to register. Contact the superadmin to obtain this code before proceeding.</p>
+                        <p className="mt-0.5">You need a 6-digit code from your school administrator to register. Contact the headteacher to obtain this code before proceeding.</p>
                       </div>
                     </div>
                   )}

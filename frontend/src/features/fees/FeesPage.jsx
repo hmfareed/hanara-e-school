@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
-import { Receipt, FileText, CreditCard } from 'lucide-react';
+import { Receipt, FileText, CreditCard, ClipboardList } from 'lucide-react';
 import FeeStructuresTab from './FeeStructuresTab';
 import InvoicesTab from './InvoicesTab';
 import PaymentsTab from './PaymentsTab';
+import DailyCollectionsTab from './DailyCollectionsTab';
 
 const TABS = [
   { id: 'structures', label: 'Fee Structures', icon: Receipt },
   { id: 'invoices', label: 'Invoices', icon: FileText },
   { id: 'payments', label: 'Payment Records', icon: CreditCard },
+  { id: 'daily', label: 'Daily Collections', icon: ClipboardList },
 ];
 
 const FeesPage = () => {
@@ -54,6 +56,7 @@ const FeesPage = () => {
           {activeTab === 'structures' && <FeeStructuresTab />}
           {activeTab === 'invoices' && <InvoicesTab />}
           {activeTab === 'payments' && <PaymentsTab />}
+          {activeTab === 'daily' && <DailyCollectionsTab />}
         </div>
       </div>
     </div>

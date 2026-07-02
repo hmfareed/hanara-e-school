@@ -10,6 +10,7 @@ import {
   Loader2,
   X,
   Check,
+  Receipt,
 } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

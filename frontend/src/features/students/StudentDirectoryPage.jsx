@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Filter, UserPlus, Eye, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, Filter, UserPlus, Eye, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import BulkImportModal from './BulkImportModal';
 
 const StudentDirectoryPage = () => {
   const { user } = useAuth();
@@ -11,6 +12,7 @@ const StudentDirectoryPage = () => {
   const [classFilter, setClassFilter] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const limit = 10;
 
   const { data: classesData } = useQuery({
@@ -21,7 +23,7 @@ const StudentDirectoryPage = () => {
     },
   });
 
-  const { data: studentsData, isLoading, error } = useQuery({
+  const { data: studentsData, isLoading, error, refetch } = useQuery({
     queryKey: ['studentsList', search, classFilter, genderFilter, page],
     queryFn: async () => {
       const params = {
@@ -49,13 +51,22 @@ const StudentDirectoryPage = () => {
           <p className="text-sm text-slate-500 mt-1">Manage and view all registered students</p>
         </div>
         {['superadmin', 'admin'].includes(user?.role) && (
-          <Link
-            to="/students/admit"
-            className="flex items-center justify-center space-x-1.5 py-2.5 px-4 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-sm shadow-sm transition-colors"
-          >
-            <UserPlus size={16} />
-            <span>Admit Student</span>
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="flex items-center justify-center space-x-1.5 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm shadow-sm transition-colors border border-slate-200 cursor-pointer"
+            >
+              <FileSpreadsheet size={16} />
+              <span>Import CSV</span>
+            </button>
+            <Link
+              to="/students/admit"
+              className="flex items-center justify-center space-x-1.5 py-2.5 px-4 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-sm shadow-sm transition-colors"
+            >
+              <UserPlus size={16} />
+              <span>Admit Student</span>
+            </Link>
+          </div>
         )}
       </div>
 
@@ -155,8 +166,18 @@ const StudentDirectoryPage = () => {
                           {student.admissionNumber}
                         </td>
                         <td className="py-4 px-6 font-medium text-slate-900 font-sans">
-                          {student.firstName} {student.otherNames ? `${student.otherNames} ` : ''}
-                          {student.lastName}
+                          <div className="flex items-center space-x-3">
+                            <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex-shrink-0 flex items-center justify-center text-slate-400 overflow-hidden">
+                              {student.photoUrl ? (
+                                <img src={student.photoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                              ) : (
+                                <span className="text-xs font-bold font-sans text-slate-500">{(student.firstName?.[0] || '').toUpperCase()}</span>
+                              )}
+                            </div>
+                            <span>
+                              {student.firstName} {student.otherNames ? `${student.otherNames} ` : ''} {student.lastName}
+                            </span>
+                          </div>
                         </td>
                         <td className="py-4 px-6 capitalize">{student.gender}</td>
                         <td className="py-4 px-6">
@@ -217,6 +238,12 @@ const StudentDirectoryPage = () => {
           </>
         )}
       </div>
+      {isImportModalOpen && (
+        <BulkImportModal
+          onClose={() => setIsImportModalOpen(false)}
+          onImportSuccess={refetch}
+        />
+      )}
     </div>
   );
 };

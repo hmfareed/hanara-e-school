@@ -11,6 +11,7 @@ const {
   getWaitlist,
   approveStaff,
   rejectStaff,
+  deleteStaff,
 } = require('../controllers/staff.controller');
 const { protect } = require('../middleware/auth');
 const { authorize } = require('../middleware/rbac');
@@ -32,6 +33,8 @@ router.post('/', protect, authorize('superadmin', 'admin'), validate(createStaff
 router.get('/:id', protect, authorize('superadmin', 'admin'), getStaffById);
 router.patch('/:id', protect, authorize('superadmin', 'admin'), validate(updateStaffSchema), updateStaff);
 router.post('/:id/assign-classes', protect, authorize('superadmin', 'admin'), assignClasses);
+router.delete('/:id', protect, authorize('superadmin'), deleteStaff);
 
 module.exports = router;
+
 

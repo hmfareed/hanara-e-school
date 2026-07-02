@@ -3,6 +3,7 @@ const router = express.Router();
 const {
   getStudents,
   createStudent,
+  createStudentsBulk,
   getStudentById,
   updateStudent,
   withdrawStudent,
@@ -15,6 +16,7 @@ const { createStudentSchema, updateStudentSchema } = require('../validators/stud
 
 router.get('/', protect, authorize('superadmin', 'admin', 'teacher', 'accountant'), getStudents);
 router.post('/', protect, authorize('superadmin', 'admin'), validate(createStudentSchema), createStudent);
+router.post('/bulk', protect, authorize('superadmin', 'admin'), createStudentsBulk);
 router.get('/:id', protect, authorize('superadmin', 'admin', 'teacher', 'accountant'), getStudentById);
 router.patch('/:id', protect, authorize('superadmin', 'admin'), validate(updateStudentSchema), updateStudent);
 router.post('/:id/withdraw', protect, authorize('superadmin', 'admin'), withdrawStudent);

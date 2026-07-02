@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { ArrowLeft, Loader2, Save, User } from 'lucide-react';
 
 const AdmissionFormPage = () => {
   const queryClient = useQueryClient();
@@ -17,6 +17,7 @@ const AdmissionFormPage = () => {
     currentClass: '',
     medicalNotes: '',
     transport: { usesBus: false, stop: '' },
+    photoUrl: null,
   });
 
   const [guardian, setGuardian] = useState({
@@ -60,6 +61,17 @@ const AdmissionFormPage = () => {
       );
     },
   });
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setStudent((prev) => ({ ...prev, photoUrl: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -117,74 +129,109 @@ const AdmissionFormPage = () => {
           <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider pb-3 border-b border-slate-100">
             Student Personal Details
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">First Name <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                required
-                value={student.firstName}
-                onChange={(e) => setStudent({ ...student, firstName: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
+          <div className="flex flex-col md:flex-row gap-6">
+            {/* Profile Picture Upload Section */}
+            <div className="flex-shrink-0 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-4 w-full md:w-48 h-48 bg-slate-50 relative group overflow-hidden">
+              {student.photoUrl ? (
+                <>
+                  <img src={student.photoUrl} alt="Preview" className="h-full w-full object-cover rounded-xl" />
+                  <button
+                    type="button"
+                    onClick={() => setStudent(prev => ({ ...prev, photoUrl: null }))}
+                    className="absolute inset-0 bg-slate-900/60 text-white flex items-center justify-center font-bold text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    Remove Photo
+                  </button>
+                </>
+              ) : (
+                <div className="text-center">
+                  <User size={32} className="mx-auto text-slate-300 mb-2" />
+                  <label className="cursor-pointer text-xs font-bold text-emerald-800 hover:text-emerald-950 block">
+                    <span>Upload Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoChange}
+                      className="hidden"
+                    />
+                  </label>
+                  <span className="text-[10px] text-slate-400 block mt-1">(Optional)</span>
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Last Name <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                required
-                value={student.lastName}
-                onChange={(e) => setStudent({ ...student, lastName: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Other Names</label>
-              <input
-                type="text"
-                value={student.otherNames}
-                onChange={(e) => setStudent({ ...student, otherNames: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Gender <span className="text-red-500">*</span></label>
-              <select
-                value={student.gender}
-                onChange={(e) => setStudent({ ...student, gender: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              >
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Date of Birth <span className="text-red-500">*</span></label>
-              <input
-                type="date"
-                required
-                value={student.dob}
-                onChange={(e) => setStudent({ ...student, dob: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Assigned Class</label>
-              <select
-                value={student.currentClass}
-                onChange={(e) => setStudent({ ...student, currentClass: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              >
-                <option value="">Select a Class</option>
-                {classes?.map((cls) => (
-                  <option key={cls._id} value={cls._id}>
-                    {cls.name}
-                  </option>
-                ))}
-              </select>
+            {/* Input fields panel */}
+            <div className="flex-1 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">First Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={student.firstName}
+                    onChange={(e) => setStudent({ ...student, firstName: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Last Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={student.lastName}
+                    onChange={(e) => setStudent({ ...student, lastName: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Other Names</label>
+                  <input
+                    type="text"
+                    value={student.otherNames}
+                    onChange={(e) => setStudent({ ...student, otherNames: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Gender <span className="text-red-500">*</span></label>
+                  <select
+                    value={student.gender}
+                    onChange={(e) => setStudent({ ...student, gender: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  >
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Date of Birth <span className="text-red-500">*</span></label>
+                  <input
+                    type="date"
+                    required
+                    value={student.dob}
+                    onChange={(e) => setStudent({ ...student, dob: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Assigned Class</label>
+                  <select
+                    value={student.currentClass}
+                    onChange={(e) => setStudent({ ...student, currentClass: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  >
+                    <option value="">Select a Class</option>
+                    {classes?.map((cls) => (
+                      <option key={cls._id} value={cls._id}>
+                        {cls.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
 

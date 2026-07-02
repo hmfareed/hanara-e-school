@@ -18,6 +18,8 @@ import {
   User,
   MessageSquare,
   ClipboardCheck,
+  Settings,
+  ClipboardList,
 } from 'lucide-react';
 
 /* ── Dynamic header badge showing current academic year ── */
@@ -106,8 +108,19 @@ const Layout = () => {
       name: 'Transport',
       path: '/transport',
       icon: Bus,
-      roles: ['superadmin', 'admin', 'driver'],
-      badge: 'Phase 5',
+      roles: ['superadmin', 'admin'],
+    },
+    {
+      name: 'Daily Fee Register',
+      path: '/fees/daily-register',
+      icon: ClipboardList,
+      roles: ['superadmin', 'admin', 'teacher'],
+    },
+    {
+      name: 'Settings',
+      path: '/settings',
+      icon: Settings,
+      roles: ['superadmin', 'admin', 'teacher', 'accountant', 'parent', 'driver'],
     },
   ];
 
@@ -125,6 +138,8 @@ const Layout = () => {
         return 'bg-purple-500/10 text-purple-400 border-purple-500/20';
       case 'parent':
         return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20';
+      case 'cleaner':
+        return 'bg-teal-500/10 text-teal-400 border-teal-500/20';
       default:
         return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
     }
@@ -203,15 +218,21 @@ const Layout = () => {
         {/* Sidebar Footer / Current User Profile */}
         <div className="p-4 border-t border-slate-800 bg-slate-900/50">
           <div className="flex items-center space-x-3 mb-4">
-            <div className="h-10 w-10 bg-slate-800 rounded-full flex items-center justify-center text-slate-300 border border-slate-700">
-              <User size={20} />
+            <div className="h-10 w-10 bg-slate-800 rounded-full flex items-center justify-center text-slate-300 border border-slate-700 overflow-hidden">
+              {user?.refStaff?.photoUrl ? (
+                <img src={user.refStaff.photoUrl} alt="User Avatar" className="h-full w-full object-cover" />
+              ) : (
+                <User size={20} />
+              )}
             </div>
             <div className="overflow-hidden">
-              <p className="text-sm font-semibold truncate text-slate-200">
-                {user?.email?.split('@')[0]}
+              <p className="text-sm font-semibold truncate text-slate-200" title={user?.refStaff ? `${user.refStaff.title ? user.refStaff.title + " " : ""}${user.refStaff.firstName}` : user?.email?.split('@')[0]}>
+                {user?.refStaff 
+                  ? `${user.refStaff.title ? user.refStaff.title + " " : ""}${user.refStaff.firstName}` 
+                  : user?.email?.split('@')[0]}
               </p>
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border uppercase ${getRoleBadgeStyle(user?.role)}`}>
-                {user?.role}
+                {user?.role === 'superadmin' ? 'headteacher' : user?.role}
               </span>
             </div>
           </div>

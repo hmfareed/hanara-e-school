@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
+import { ArrowLeft, Save, Loader2, User } from 'lucide-react';
 
 const StaffFormPage = () => {
   const { id } = useParams();
@@ -11,6 +11,8 @@ const StaffFormPage = () => {
   const queryClient = useQueryClient();
 
   const [formData, setFormData] = useState({
+    title: '',
+    photoUrl: null,
     firstName: '',
     lastName: '',
     otherNames: '',
@@ -37,6 +39,8 @@ const StaffFormPage = () => {
       if (data) {
         setFormData({
           ...data,
+          title: data.title || '',
+          photoUrl: data.photoUrl || null,
           dob: data.dob ? data.dob.split('T')[0] : '',
           employmentDate: data.employmentDate ? data.employmentDate.split('T')[0] : '',
           createUserAccount: false,
@@ -68,6 +72,36 @@ const StaffFormPage = () => {
       setErrorMsg(err.response?.data?.message || 'Failed to save staff member.');
     },
   });
+
+  const getAvailableTitles = (gender) => {
+    if (gender === 'male') {
+      return ['Mr', 'Sir', 'Rev', 'Doc', 'Prof'];
+    }
+    if (gender === 'female') {
+      return ['Miss', 'Mrs', 'Ms', 'Rev', 'Doc', 'Prof'];
+    }
+    return ['Mr', 'Mrs', 'Miss', 'Ms', 'Sir', 'Rev', 'Doc', 'Prof'];
+  };
+
+  const handleGenderChange = (genderVal) => {
+    const validTitles = getAvailableTitles(genderVal);
+    setFormData((prev) => ({
+      ...prev,
+      gender: genderVal,
+      title: prev.title && validTitles.includes(prev.title) ? prev.title : '',
+    }));
+  };
+
+  const handlePhotoChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData((prev) => ({ ...prev, photoUrl: reader.result }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -117,100 +151,149 @@ const StaffFormPage = () => {
           <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider pb-3 border-b border-slate-100">
             Personal Information
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">First Name <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                required
-                value={formData.firstName}
-                onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
+          <div className="flex flex-col md:flex-row gap-6">
+            {/* Profile Picture Upload Section */}
+            <div className="flex-shrink-0 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-2xl p-4 w-full md:w-48 h-48 bg-slate-50 relative group overflow-hidden">
+              {formData.photoUrl ? (
+                <>
+                  <img src={formData.photoUrl} alt="Preview" className="h-full w-full object-cover rounded-xl" />
+                  <button
+                    type="button"
+                    onClick={() => setFormData(prev => ({ ...prev, photoUrl: null }))}
+                    className="absolute inset-0 bg-slate-900/60 text-white flex items-center justify-center font-bold text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    Remove Photo
+                  </button>
+                </>
+              ) : (
+                <div className="text-center">
+                  <User size={32} className="mx-auto text-slate-300 mb-2" />
+                  <label className="cursor-pointer text-xs font-bold text-emerald-800 hover:text-emerald-950 block">
+                    <span>Upload Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handlePhotoChange}
+                      className="hidden"
+                    />
+                  </label>
+                  <span className="text-[10px] text-slate-400 block mt-1">(Optional)</span>
+                </div>
+              )}
             </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Last Name <span className="text-red-500">*</span></label>
-              <input
-                type="text"
-                required
-                value={formData.lastName}
-                onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Other Names</label>
-              <input
-                type="text"
-                value={formData.otherNames}
-                onChange={(e) => setFormData({ ...formData, otherNames: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Gender <span className="text-red-500">*</span></label>
-              <select
-                value={formData.gender}
-                onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              >
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Date of Birth</label>
-              <input
-                type="date"
-                value={formData.dob}
-                onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Phone <span className="text-red-500">*</span></label>
-              <input
-                type="tel"
-                required
-                value={formData.phone}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
-            </div>
-          </div>
+            {/* Input fields panel */}
+            <div className="flex-1 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Title <span className="text-red-500">*</span></label>
+                  <select
+                    value={formData.title}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                    required
+                  >
+                    <option value="">Select</option>
+                    {getAvailableTitles(formData.gender).map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">First Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.firstName}
+                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Last Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={formData.lastName}
+                    onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Other Names</label>
+                  <input
+                    type="text"
+                    value={formData.otherNames}
+                    onChange={(e) => setFormData({ ...formData, otherNames: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+              </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-semibold text-slate-700">Email Address</label>
-              <input
-                type="email"
-                value={formData.email || ''}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Qualification</label>
-              <input
-                type="text"
-                value={formData.qualification}
-                onChange={(e) => setFormData({ ...formData, qualification: e.target.value })}
-                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-              />
-            </div>
-          </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Gender <span className="text-red-500">*</span></label>
+                  <select
+                    value={formData.gender}
+                    onChange={(e) => handleGenderChange(e.target.value)}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  >
+                    <option value="male">Male</option>
+                    <option value="female">Female</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Date of Birth</label>
+                  <input
+                    type="date"
+                    value={formData.dob}
+                    onChange={(e) => setFormData({ ...formData, dob: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Phone <span className="text-red-500">*</span></label>
+                  <input
+                    type="tel"
+                    required
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+              </div>
 
-          <div>
-            <label className="block text-sm font-semibold text-slate-700">Home Address</label>
-            <input
-              type="text"
-              value={formData.address}
-              onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-              className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
-            />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-slate-700">Email Address</label>
+                  <input
+                    type="email"
+                    value={formData.email || ''}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Qualification</label>
+                  <input
+                    type="text"
+                    value={formData.qualification}
+                    onChange={(e) => setFormData({ ...formData, qualification: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700">Home Address</label>
+                <input
+                  type="text"
+                  value={formData.address}
+                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                  className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -253,6 +336,7 @@ const StaffFormPage = () => {
                 <option value="accountant">Accountant / Bursar</option>
                 <option value="driver">Bus Driver</option>
                 <option value="support">Support Staff</option>
+                <option value="cleaner">School Cleaner / Cook</option>
               </select>
             </div>
           </div>

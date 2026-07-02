@@ -6,7 +6,7 @@ import { useAuth } from '../../context/AuthContext';
 import {
   Search, Plus, Edit, ChevronLeft, ChevronRight,
   KeyRound, RefreshCw, CheckCircle2, XCircle, Clock,
-  Copy, Check, Users, UserCheck, AlertTriangle,
+  Copy, Check, Users, UserCheck, AlertTriangle, Trash2,
 } from 'lucide-react';
 
 /* ─── small helper: copy to clipboard ─── */
@@ -173,8 +173,12 @@ const WaitlistPanel = () => {
             return (
               <div key={user._id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-slate-50/60 transition-colors">
                 <div className="flex items-center space-x-4">
-                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                    {(staff.firstName?.[0] || '?').toUpperCase()}
+                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 overflow-hidden border border-slate-200">
+                    {staff.photoUrl ? (
+                      <img src={staff.photoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                    ) : (
+                      (staff.firstName?.[0] || '?').toUpperCase()
+                    )}
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-slate-800">
@@ -183,7 +187,7 @@ const WaitlistPanel = () => {
                     <p className="text-xs text-slate-500 font-mono">{user.email}</p>
                     <div className="flex items-center space-x-2 mt-1">
                       <span className="inline-block px-2 py-0.5 rounded border text-[10px] font-semibold capitalize bg-amber-50 text-amber-700 border-amber-200">
-                        {staff.role || user.role}
+                        {(staff.role || user.role) === 'superadmin' ? 'headteacher' : (staff.role || user.role)}
                       </span>
                       {staff.qualification && (
                         <span className="text-[10px] text-slate-400">{staff.qualification}</span>
@@ -249,6 +253,17 @@ const StaffDirectoryPage = () => {
   const [activeTab, setActiveTab] = useState('directory');
   const limit = 10;
 
+  const queryClient = useQueryClient();
+  const [staffToFire, setStaffToFire] = useState(null);
+
+  const fireMutation = useMutation({
+    mutationFn: (id) => api.delete(`/staff/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['staffList'] });
+      setStaffToFire(null);
+    },
+  });
+
   const { data: staffData, isLoading, error } = useQuery({
     queryKey: ['staffList', search, page],
     queryFn: async () => {
@@ -276,10 +291,13 @@ const StaffDirectoryPage = () => {
 
   const getRoleBadge = (role) => {
     switch (role) {
+      case 'superadmin':
+      case 'headteacher': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
       case 'admin':      return 'bg-indigo-100 text-indigo-800 border-indigo-200';
       case 'teacher':    return 'bg-amber-100 text-amber-800 border-amber-200';
       case 'accountant': return 'bg-purple-100 text-purple-800 border-purple-200';
       case 'driver':     return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'cleaner':    return 'bg-teal-100 text-teal-800 border-teal-200';
       default:           return 'bg-slate-100 text-slate-800 border-slate-200';
     }
   };
@@ -377,11 +395,22 @@ const StaffDirectoryPage = () => {
                         staffList.map((member) => (
                           <tr key={member._id} className="hover:bg-slate-50/50">
                             <td className="py-4 px-6 font-medium text-slate-900 font-sans">
-                              {member.firstName} {member.otherNames ? `${member.otherNames} ` : ''} {member.lastName}
+                              <div className="flex items-center space-x-3">
+                                <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex-shrink-0 flex items-center justify-center text-slate-400 overflow-hidden">
+                                  {member.photoUrl ? (
+                                    <img src={member.photoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                                  ) : (
+                                    <span className="text-xs font-bold font-sans text-slate-500">{(member.firstName?.[0] || '').toUpperCase()}</span>
+                                  )}
+                                </div>
+                                <span>
+                                  {member.firstName} {member.otherNames ? `${member.otherNames} ` : ''} {member.lastName}
+                                </span>
+                              </div>
                             </td>
                             <td className="py-4 px-6 capitalize">
                               <span className={`inline-block px-2.5 py-0.5 rounded border text-xs font-medium ${getRoleBadge(member.role)}`}>
-                                {member.role}
+                                {member.role === 'superadmin' ? 'headteacher' : member.role}
                               </span>
                             </td>
                             <td className="py-4 px-6">
@@ -398,13 +427,36 @@ const StaffDirectoryPage = () => {
                               </span>
                             </td>
                             <td className="py-4 px-6 text-right">
-                              <Link
-                                to={`/staff/edit/${member._id}`}
-                                className="inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-semibold text-xs text-slate-600 transition-colors"
-                              >
-                                <Edit size={12} />
-                                <span>Edit</span>
-                              </Link>
+                              <div className="flex items-center justify-end space-x-2">
+                                <Link
+                                  to={`/staff/edit/${member._id}`}
+                                  className="inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-semibold text-xs text-slate-600 transition-colors"
+                                >
+                                  <Edit size={12} />
+                                  <span>Edit</span>
+                                </Link>
+                                {isSuperAdmin && (
+                                  <button
+                                    onClick={() => setStaffToFire(member)}
+                                    disabled={member._id === user?.refStaff || member._id === user?.refStaff?._id || member.role === 'superadmin'}
+                                    title={
+                                      (member._id === user?.refStaff || member._id === user?.refStaff?._id)
+                                        ? "You cannot fire yourself"
+                                        : member.role === 'superadmin'
+                                        ? "Cannot fire the headteacher"
+                                        : "Fire staff member"
+                                    }
+                                    className={`inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border font-semibold text-xs transition-colors cursor-pointer ${
+                                      (member._id === user?.refStaff || member._id === user?.refStaff?._id || member.role === 'superadmin')
+                                        ? 'border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed opacity-50'
+                                        : 'border-red-200 bg-white hover:bg-red-50 text-red-600 hover:border-red-300'
+                                    }`}
+                                  >
+                                    <Trash2 size={12} />
+                                    <span>Fire</span>
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))
@@ -446,6 +498,59 @@ const StaffDirectoryPage = () => {
             )}
           </div>
         </>
+      )}
+
+      {/* ── Confirmation Modal ── */}
+      {staffToFire && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-xl animate-in fade-in zoom-in duration-200">
+            <div className="flex items-start space-x-4">
+              <div className="h-12 w-12 rounded-full bg-red-50 border border-red-200 flex items-center justify-center flex-shrink-0">
+                <Trash2 size={24} className="text-red-600" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-slate-900">Fire Staff Member</h3>
+                <p className="text-sm text-slate-500 mt-2 break-words">
+                  Are you sure you want to fire <span className="font-semibold text-slate-800">{staffToFire.firstName} {staffToFire.lastName}</span>? This will permanently disable their login account and delete their staff record. This action cannot be undone.
+                </p>
+              </div>
+            </div>
+            
+            {fireMutation.isError && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start space-x-2 text-red-700 text-xs">
+                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                <span>{fireMutation.error?.response?.data?.message || 'Failed to fire staff member.'}</span>
+              </div>
+            )}
+
+            <div className="mt-6 flex items-center justify-end space-x-3">
+              <button
+                onClick={() => { setStaffToFire(null); fireMutation.reset(); }}
+                disabled={fireMutation.isPending}
+                className="px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => fireMutation.mutate(staffToFire._id)}
+                disabled={fireMutation.isPending}
+                className="flex items-center space-x-2 px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50"
+              >
+                {fireMutation.isPending ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <span>Sacking...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} />
+                    <span>Fire Staff</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

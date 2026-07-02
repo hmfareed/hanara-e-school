@@ -13,6 +13,9 @@ const Staff = require('../src/models/Staff');
 const Guardian = require('../src/models/Guardian');
 const Student = require('../src/models/Student');
 const AttendanceRecord = require('../src/models/AttendanceRecord');
+const Route = require('../src/models/Route');
+const Bus = require('../src/models/Bus');
+const DailyFeeRegister = require('../src/models/DailyFeeRegister');
 
 const seed = async () => {
   try {
@@ -38,6 +41,9 @@ const seed = async () => {
       Guardian.deleteMany({}),
       Student.deleteMany({}),
       AttendanceRecord.deleteMany({}),
+      Route.deleteMany({}),
+      Bus.deleteMany({}),
+      DailyFeeRegister.deleteMany({}),
     ]);
     console.log('Database cleared.');
 
@@ -185,6 +191,29 @@ const seed = async () => {
       isActive: true,
     });
 
+    // User's teacher account (Mohammed Fareed)
+    const fareedStaff = await Staff.create({
+      firstName: 'Mohammed',
+      lastName: 'Fareed',
+      gender: 'male',
+      dob: new Date('1995-05-10'),
+      phone: '0244111333',
+      email: 'hmohammedfareedmandeeya@gmail.com',
+      qualification: 'B.Ed. Computer Science',
+      employmentDate: new Date('2023-09-01'),
+      employmentStatus: 'active',
+      role: 'teacher',
+    });
+    await User.create({
+      email: 'hmohammedfareedmandeeya@gmail.com',
+      phone: '0244111333',
+      passwordHash: 'JoshuaKimmich6',
+      role: 'teacher',
+      refStaff: fareedStaff._id,
+      isActive: true,
+      approvalStatus: 'approved',
+    });
+
     // Sample accountant staff
     const accountantStaff = await Staff.create({
       firstName: 'Joseph',
@@ -207,8 +236,57 @@ const seed = async () => {
       isActive: true,
     });
 
+    // Driver 1 — Primary Bus: Mba Alhassan
+    const driverMba = await Staff.create({
+      firstName: 'Mba',
+      lastName: 'Alhassan',
+      gender: 'male',
+      dob: new Date('1980-06-10'),
+      phone: '0244556677',
+      email: 'mba.alhassan@hanaraschools.edu.gh',
+      qualification: 'DVLA License F',
+      employmentDate: new Date('2019-03-01'),
+      employmentStatus: 'active',
+      role: 'driver',
+    });
+    await User.create({
+      email: 'mba.alhassan@hanaraschools.edu.gh',
+      phone: '0244556677',
+      passwordHash: 'Driver@2026',
+      role: 'driver',
+      refStaff: driverMba._id,
+      isActive: true,
+    });
+
+    // Driver 2 — JHS Bus: Captain Baba
+    const driverCaptain = await Staff.create({
+      firstName: 'Captain',
+      lastName: 'Baba',
+      gender: 'male',
+      dob: new Date('1978-11-22'),
+      phone: '0244778899',
+      email: 'captain.baba@hanaraschools.edu.gh',
+      qualification: 'DVLA License E',
+      employmentDate: new Date('2018-08-01'),
+      employmentStatus: 'active',
+      role: 'driver',
+    });
+    await User.create({
+      email: 'captain.baba@hanaraschools.edu.gh',
+      phone: '0244778899',
+      passwordHash: 'Driver@2026',
+      role: 'driver',
+      refStaff: driverCaptain._id,
+      isActive: true,
+    });
+
+
     // 6. Create Class Documents
+    // NOTE: Zogbeli branch = Nursery 1 → Primary 4 (no bus service).
+    //       Vittin Barrier branch = Primary 5, 6 and JHS 1, 2, 3 (bus eligible).
     console.log('Seeding Classes...');
+
+    // Zogbeli branch — no bus, used for teacher login demo
     const classPrimary1 = await Class.create({
       level: levelMap['BS1'],
       name: 'Primary 1 Gold',
@@ -217,74 +295,249 @@ const seed = async () => {
       capacity: 35,
     });
 
+    // Vittin Barrier branch — bus-eligible classes
+    const classPrimary5 = await Class.create({
+      level: levelMap['BS5'],
+      name: 'Primary 5 Gold',
+      academicYear: academicYear._id,
+      classTeacher: fareedStaff._id,
+      capacity: 35,
+    });
+
+    const classPrimary6 = await Class.create({
+      level: levelMap['BS6'],
+      name: 'Primary 6 Gold',
+      academicYear: academicYear._id,
+      capacity: 35,
+    });
+
     const classJhs1 = await Class.create({
       level: levelMap['BS7'],
-      name: 'JHS 1 Red',
+      name: 'JHS 1 Blue',
       academicYear: academicYear._id,
       capacity: 40,
     });
 
-    // Assign classes to teacher staff
+    const classJhs2 = await Class.create({
+      level: levelMap['BS8'],
+      name: 'JHS 2 Blue',
+      academicYear: academicYear._id,
+      capacity: 40,
+    });
+
+    const classJhs3 = await Class.create({
+      level: levelMap['BS9'],
+      name: 'JHS 3 Blue',
+      academicYear: academicYear._id,
+      capacity: 40,
+    });
+
+    // Assign teacher to Primary 1 (Zogbeli demo)
     teacherStaff.classesAssigned = [classPrimary1._id];
     await teacherStaff.save();
 
-    // 7. Create Guardians
-    console.log('Seeding Guardians...');
-    const guardian = await Guardian.create({
+    // Assign teacher to Primary 5 (Vittin Barrier)
+    fareedStaff.classesAssigned = [classPrimary5._id];
+    await fareedStaff.save();
+
+
+    // 7.5 Seeding Routes & Buses
+    // ─────────────────────────────────────────────────────────────────────
+    // Both buses depart from Zogbeli at 07:00 AM and arrive at Vittin Barrier.
+    // On return, buses leave Vittin Barrier at 03:00 PM back to Zogbeli.
+    //
+    // PRIMARY ROUTE  (Primary 5 & 6 bus, driver: Mba Alhassan)
+    //   Zogbeli (07:00) → Legion (07:12) → NIB (07:22) → Vittin Barrier (school)
+    //
+    // JHS ROUTE  (JHS 1, 2 & 3 bus, driver: Captain Baba)
+    //   Zogbeli (07:00) → Legion (07:12) → NIB (07:22) → Teaching Hospital (07:32)
+    //   → Vittin Barrier (school)
+    // ─────────────────────────────────────────────────────────────────────
+    console.log('Seeding Routes & Buses...');
+
+    // Route for Primary 5 & 6 bus
+    const routePrimary = await Route.create({
+      name: 'Primary Route — Zogbeli to Vittin Barrier',
+      pickupTime: '07:00 AM',
+      dropoffTime: '03:00 PM',
+      stops: [
+        { name: 'Zogbeli (School Branch)', order: 1, approxPickupTime: '07:00 AM' },
+        { name: 'Legion', order: 2, approxPickupTime: '07:12 AM' },
+        { name: 'National Investment Bank (NIB)', order: 3, approxPickupTime: '07:22 AM' },
+        { name: 'Vittin Barrier', order: 4, approxPickupTime: '07:32 AM' },
+      ],
+    });
+
+    // Route for JHS bus (extra stop at Teaching Hospital)
+    const routeJHS = await Route.create({
+      name: 'JHS Route — Zogbeli to Vittin Barrier',
+      pickupTime: '07:00 AM',
+      dropoffTime: '03:00 PM',
+      stops: [
+        { name: 'Zogbeli (School Branch)', order: 1, approxPickupTime: '07:00 AM' },
+        { name: 'Legion', order: 2, approxPickupTime: '07:12 AM' },
+        { name: 'National Investment Bank (NIB)', order: 3, approxPickupTime: '07:22 AM' },
+        { name: 'Tamale Teaching Hospital', order: 4, approxPickupTime: '07:32 AM' },
+        { name: 'Vittin Barrier', order: 5, approxPickupTime: '07:42 AM' },
+      ],
+    });
+
+    // Primary bus — Mba Alhassan, serves Primary 5 & 6
+    const busPrimary = await Bus.create({
+      plateNumber: 'NR-PRI-26',
+      capacity: 35,
+      driver: driverMba._id,
+      route: routePrimary._id,
+    });
+
+    // JHS bus — Captain Baba, serves JHS 1, 2 & 3
+    const busJHS = await Bus.create({
+      plateNumber: 'NR-JHS-26',
+      capacity: 45,
+      driver: driverCaptain._id,
+      route: routeJHS._id,
+    });
+
+    // 8. Create Students
+    // Sample students spread across bus-eligible classes and realistic stops
+    console.log('Seeding Students...');
+
+    // Guardian for Primary students
+    const guardianA = await Guardian.create({
       firstName: 'Mahama',
       lastName: 'Bawumia',
       relationship: 'father',
       phone: '0244999888',
       email: 'mahama.bawumia@gmail.com',
       occupation: 'Trader',
-      address: 'Junction Rd, Tamale',
+      address: 'Zogbeli, Tamale',
       momoNumber: '0244999888',
       momoProvider: 'mtn',
       consentDataProcessing: { granted: true, grantedAt: new Date() },
     });
-
-    // Create User login for parent
     await User.create({
       email: 'parent@hanaraschools.edu.gh',
       phone: '0244999888',
       passwordHash: 'Parent@2026',
       role: 'parent',
-      refGuardian: guardian._id,
+      refGuardian: guardianA._id,
       isActive: true,
     });
 
-    // 8. Create Students
-    console.log('Seeding Students...');
-    const student1 = await Student.create({
+    // Guardian for JHS students
+    const guardianB = await Guardian.create({
+      firstName: 'Fuseini',
+      lastName: 'Abdulai',
+      relationship: 'father',
+      phone: '0244111333',
+      email: '',
+      occupation: 'Civil Servant',
+      address: 'Legion Area, Tamale',
+      consentDataProcessing: { granted: true, grantedAt: new Date() },
+    });
+
+    // ── Primary 5 students (Primary bus) ──
+    const studentPri5A = await Student.create({
       admissionNumber: 'HNRA/2026/0001',
       firstName: 'Alhassan',
-      lastName: 'Mahama',
+      lastName: 'Bawumia',
       gender: 'male',
-      dob: new Date('2020-03-12'),
-      currentClass: classPrimary1._id,
-      guardians: [guardian._id],
+      dob: new Date('2014-03-12'),
+      currentClass: classPrimary5._id,
+      guardians: [guardianA._id],
       enrollmentDate: new Date('2026-09-08'),
       status: 'active',
-      medicalNotes: 'No known allergies',
-      transport: { usesBus: true, stop: 'Tamale Main Market' },
+      transport: { usesBus: true, bus: busPrimary._id, stop: 'Zogbeli (School Branch)' },
     });
 
-    const student2 = await Student.create({
+    const studentPri5B = await Student.create({
       admissionNumber: 'HNRA/2026/0002',
       firstName: 'Amina',
-      lastName: 'Mahama',
+      lastName: 'Bawumia',
       gender: 'female',
-      dob: new Date('2014-08-25'),
-      currentClass: classJhs1._id,
-      guardians: [guardian._id],
+      dob: new Date('2015-06-25'),
+      currentClass: classPrimary5._id,
+      guardians: [guardianA._id],
       enrollmentDate: new Date('2026-09-08'),
       status: 'active',
-      transport: { usesBus: false },
+      transport: { usesBus: true, bus: busPrimary._id, stop: 'Legion' },
     });
 
-    // Link students back to guardian
-    guardian.students = [student1._id, student2._id];
-    await guardian.save();
+    // ── Primary 6 students (Primary bus) ──
+    const studentPri6A = await Student.create({
+      admissionNumber: 'HNRA/2026/0003',
+      firstName: 'Rashida',
+      lastName: 'Fuseini',
+      gender: 'female',
+      dob: new Date('2013-09-14'),
+      currentClass: classPrimary6._id,
+      guardians: [guardianA._id],
+      enrollmentDate: new Date('2026-09-08'),
+      status: 'active',
+      transport: { usesBus: true, bus: busPrimary._id, stop: 'National Investment Bank (NIB)' },
+    });
+
+    // ── JHS 1 students (JHS bus) ──
+    const studentJhs1A = await Student.create({
+      admissionNumber: 'HNRA/2026/0004',
+      firstName: 'Ibrahim',
+      lastName: 'Abdulai',
+      gender: 'male',
+      dob: new Date('2012-01-18'),
+      currentClass: classJhs1._id,
+      guardians: [guardianB._id],
+      enrollmentDate: new Date('2026-09-08'),
+      status: 'active',
+      transport: { usesBus: true, bus: busJHS._id, stop: 'Legion' },
+    });
+
+    const studentJhs1B = await Student.create({
+      admissionNumber: 'HNRA/2026/0005',
+      firstName: 'Fatima',
+      lastName: 'Abdulai',
+      gender: 'female',
+      dob: new Date('2012-07-30'),
+      currentClass: classJhs1._id,
+      guardians: [guardianB._id],
+      enrollmentDate: new Date('2026-09-08'),
+      status: 'active',
+      transport: { usesBus: true, bus: busJHS._id, stop: 'Tamale Teaching Hospital' },
+    });
+
+    // ── JHS 2 student (JHS bus) ──
+    const studentJhs2A = await Student.create({
+      admissionNumber: 'HNRA/2026/0006',
+      firstName: 'Yakubu',
+      lastName: 'Issah',
+      gender: 'male',
+      dob: new Date('2011-04-05'),
+      currentClass: classJhs2._id,
+      guardians: [guardianB._id],
+      enrollmentDate: new Date('2026-09-08'),
+      status: 'active',
+      transport: { usesBus: true, bus: busJHS._id, stop: 'National Investment Bank (NIB)' },
+    });
+
+    // ── JHS 3 student (JHS bus) ──
+    const studentJhs3A = await Student.create({
+      admissionNumber: 'HNRA/2026/0007',
+      firstName: 'Mariama',
+      lastName: 'Fuseini',
+      gender: 'female',
+      dob: new Date('2010-11-12'),
+      currentClass: classJhs3._id,
+      guardians: [guardianB._id],
+      enrollmentDate: new Date('2026-09-08'),
+      status: 'active',
+      transport: { usesBus: true, bus: busJHS._id, stop: 'Zogbeli (School Branch)' },
+    });
+
+    // Link students back to guardians
+    guardianA.students = [studentPri5A._id, studentPri5B._id, studentPri6A._id];
+    await guardianA.save();
+    guardianB.students = [studentJhs1A._id, studentJhs1B._id, studentJhs2A._id, studentJhs3A._id];
+    await guardianB.save();
+
 
     console.log('🎉 Seeding successfully completed!');
     process.exit(0);

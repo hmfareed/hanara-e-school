@@ -22,6 +22,11 @@ import ParentChildDetailsPage from '../features/parent/ParentChildDetailsPage';
 import MomoSandboxPage from '../features/parent/MomoSandboxPage';
 import MomoCallbackPage from '../features/parent/MomoCallbackPage';
 import SmsDashboardPage from '../features/sms/SmsDashboardPage';
+import SettingsPage from '../features/settings/SettingsPage';
+
+// Phase 5 Pages
+import TransportPage from '../features/transport/TransportPage';
+import DailyFeeRegisterPage from '../features/fees/DailyFeeRegisterPage';
 
 const AppRouter = () => {
   return (
@@ -171,6 +176,32 @@ const AppRouter = () => {
             element={
               <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
                 <AcademicYearPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="transport"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
+                <TransportPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="fees/daily-register"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher']}>
+                <DailyFeeRegisterPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="settings"
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
               </ProtectedRoute>
             }
           />
