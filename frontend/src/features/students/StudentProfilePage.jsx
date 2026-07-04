@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
-  ArrowLeft, User, Phone, CheckCircle, AlertCircle, Ban, Bus, X, Save, MapPin,
+  ArrowLeft, User, Phone, CheckCircle, AlertCircle, Ban, Bus, X, Save, MapPin, Pencil,
 } from 'lucide-react';
 
 // ─── Transport Info Modal ──────────────────────────────────────────────────────
@@ -16,7 +16,6 @@ const TransportModal = ({ student, onClose, onSaved }) => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Fetch all buses (populated with route)
   const { data: buses = [], isLoading: busesLoading } = useQuery({
     queryKey: ['busesList'],
     queryFn: async () => {
@@ -31,37 +30,21 @@ const TransportModal = ({ student, onClose, onSaved }) => {
     ? [...selectedBus.route.stops].sort((a, b) => a.order - b.order)
     : [];
 
-  // When bus selection changes, reset stop if current stop isn't in new bus's route
   useEffect(() => {
-    if (!selectedBusId) {
-      setSelectedStop('');
-      return;
-    }
+    if (!selectedBusId) { setSelectedStop(''); return; }
     const bus = buses.find((b) => b._id === selectedBusId);
     const stopNames = (bus?.route?.stops || []).map((s) => s.name);
-    if (selectedStop && !stopNames.includes(selectedStop)) {
-      setSelectedStop('');
-    }
+    if (selectedStop && !stopNames.includes(selectedStop)) setSelectedStop('');
   }, [selectedBusId, buses]);
 
   const handleSave = async () => {
     setError('');
-    if (usesBus && !selectedBusId) {
-      setError('Please select a bus.');
-      return;
-    }
-    if (usesBus && !selectedStop) {
-      setError('Please select a stop.');
-      return;
-    }
+    if (usesBus && !selectedBusId) { setError('Please select a bus.'); return; }
+    if (usesBus && !selectedStop) { setError('Please select a stop.'); return; }
     setSaving(true);
     try {
       await api.patch(`/students/${student._id}`, {
-        transport: {
-          usesBus,
-          bus: usesBus ? selectedBusId : null,
-          stop: usesBus ? selectedStop : '',
-        },
+        transport: { usesBus, bus: usesBus ? selectedBusId : null, stop: usesBus ? selectedStop : '' },
       });
       onSaved();
     } catch (err) {
@@ -74,23 +57,17 @@ const TransportModal = ({ student, onClose, onSaved }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 overflow-hidden">
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
           <div className="flex items-center gap-2 text-slate-800">
             <Bus size={18} className="text-emerald-600" />
             <h3 className="font-bold text-base">Update Transport Info</h3>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors"
-          >
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        {/* Body */}
         <div className="p-6 space-y-5">
-          {/* Toggle: uses bus */}
           <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
             <div>
               <p className="text-sm font-semibold text-slate-800">Uses School Bus</p>
@@ -99,25 +76,16 @@ const TransportModal = ({ student, onClose, onSaved }) => {
             <button
               type="button"
               onClick={() => setUsesBus((v) => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-                usesBus ? 'bg-emerald-500' : 'bg-slate-300'
-              }`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${usesBus ? 'bg-emerald-500' : 'bg-slate-300'}`}
             >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-200 ${
-                  usesBus ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-200 ${usesBus ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
 
           {usesBus && (
             <>
-              {/* Bus selector */}
               <div className="space-y-1.5">
-                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  Assigned Bus
-                </label>
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Assigned Bus</label>
                 {busesLoading ? (
                   <div className="h-10 bg-slate-100 animate-pulse rounded-lg" />
                 ) : (
@@ -128,15 +96,12 @@ const TransportModal = ({ student, onClose, onSaved }) => {
                   >
                     <option value="">-- Select a bus --</option>
                     {buses.map((b) => (
-                      <option key={b._id} value={b._id}>
-                        {b.plateNumber}{b.route ? ` · ${b.route.name}` : ''}
-                      </option>
+                      <option key={b._id} value={b._id}>{b.plateNumber}{b.route ? ` · ${b.route.name}` : ''}</option>
                     ))}
                   </select>
                 )}
               </div>
 
-              {/* Stop selector */}
               {selectedBusId && (
                 <div className="space-y-1.5">
                   <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1">
@@ -150,9 +115,7 @@ const TransportModal = ({ student, onClose, onSaved }) => {
                     >
                       <option value="">-- Select a stop --</option>
                       {stops.map((s) => (
-                        <option key={s.name} value={s.name}>
-                          Stop {s.order}: {s.name}{s.approxPickupTime ? ` (${s.approxPickupTime})` : ''}
-                        </option>
+                        <option key={s.name} value={s.name}>Stop {s.order}: {s.name}{s.approxPickupTime ? ` (${s.approxPickupTime})` : ''}</option>
                       ))}
                     </select>
                   ) : (
@@ -165,27 +128,152 @@ const TransportModal = ({ student, onClose, onSaved }) => {
 
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-medium">
-              <AlertCircle size={14} className="flex-shrink-0" />
-              {error}
+              <AlertCircle size={14} className="flex-shrink-0" />{error}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-200 transition-colors">Cancel</button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-60"
+          >
+            <Save size={14} />{saving ? 'Saving…' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Edit Profile Modal ────────────────────────────────────────────────────────
+const EditProfileModal = ({ student, classes, onClose, onSaved }) => {
+  const [form, setForm] = useState({
+    firstName: student.firstName || '',
+    lastName: student.lastName || '',
+    otherNames: student.otherNames || '',
+    gender: student.gender || 'male',
+    dob: student.dob ? new Date(student.dob).toISOString().slice(0, 10) : '',
+    currentClass: student.currentClass?._id || student.currentClass || '',
+    medicalNotes: student.medicalNotes || '',
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const handleSave = async () => {
+    setError('');
+    if (!form.firstName.trim()) { setError('First name is required.'); return; }
+    if (!form.lastName.trim()) { setError('Last name is required.'); return; }
+    if (!form.dob) { setError('Date of birth is required.'); return; }
+    setSaving(true);
+    try {
+      await api.patch(`/students/${student._id}`, {
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        otherNames: form.otherNames.trim(),
+        gender: form.gender,
+        dob: form.dob,
+        currentClass: form.currentClass || null,
+        medicalNotes: form.medicalNotes.trim(),
+      });
+      onSaved();
+    } catch (err) {
+      setError(err?.response?.data?.message || 'Failed to save profile changes.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const inputCls = 'mt-1.5 block w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 bg-white';
+  const labelCls = 'block text-[11px] font-bold text-slate-500 uppercase tracking-wider';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg border border-slate-200 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+          <div className="flex items-center gap-2 text-slate-800">
+            <Pencil size={18} className="text-emerald-600" />
+            <h3 className="font-bold text-base">Edit Student Profile</h3>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>First Name <span className="text-red-500">*</span></label>
+              <input type="text" value={form.firstName} onChange={set('firstName')} className={inputCls} placeholder="e.g. Alhassan" />
+            </div>
+            <div>
+              <label className={labelCls}>Last Name <span className="text-red-500">*</span></label>
+              <input type="text" value={form.lastName} onChange={set('lastName')} className={inputCls} placeholder="e.g. Bawumia" />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>Other Names</label>
+            <input type="text" value={form.otherNames} onChange={set('otherNames')} className={inputCls} placeholder="Middle / other names (optional)" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Gender <span className="text-red-500">*</span></label>
+              <select value={form.gender} onChange={set('gender')} className={inputCls}>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Date of Birth <span className="text-red-500">*</span></label>
+              <input type="date" value={form.dob} onChange={set('dob')} className={inputCls} />
+            </div>
+          </div>
+
+          <div>
+            <label className={labelCls}>Current Class</label>
+            <select value={form.currentClass} onChange={set('currentClass')} className={inputCls}>
+              <option value="">— Unassigned —</option>
+              {(classes || []).map((cls) => (
+                <option key={cls._id} value={cls._id}>{cls.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className={labelCls}>Medical Notes</label>
+            <textarea
+              value={form.medicalNotes}
+              onChange={set('medicalNotes')}
+              rows={3}
+              placeholder="Any relevant medical information for staff awareness…"
+              className="mt-1.5 block w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 bg-white resize-none"
+            />
+          </div>
+
+          {error && (
+            <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-xl text-red-700 text-xs font-medium">
+              <AlertCircle size={14} className="flex-shrink-0" />{error}
             </div>
           )}
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-200 transition-colors"
-          >
-            Cancel
-          </button>
+          <button onClick={onClose} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-200 transition-colors">Cancel</button>
           <button
             onClick={handleSave}
             disabled={saving}
             className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 transition-colors disabled:opacity-60"
           >
-            <Save size={14} />
-            {saving ? 'Saving…' : 'Save Changes'}
+            <Save size={14} />{saving ? 'Saving…' : 'Save Changes'}
           </button>
         </div>
       </div>
@@ -199,6 +287,7 @@ const StudentProfilePage = () => {
   const { id } = useParams();
   const queryClient = useQueryClient();
   const [showTransportModal, setShowTransportModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const { data: student, isLoading, error } = useQuery({
     queryKey: ['studentProfile', id],
@@ -206,6 +295,13 @@ const StudentProfilePage = () => {
       const res = await api.get(`/students/${id}`);
       return res.data?.data;
     },
+  });
+
+  // Fetch all classes for the class-change dropdown in EditProfileModal
+  const { data: classes = [] } = useQuery({
+    queryKey: ['classesList'],
+    queryFn: async () => (await api.get('/classes')).data?.data || [],
+    staleTime: 60_000,
   });
 
   const { data: attendanceSummary } = useQuery({
@@ -217,12 +313,8 @@ const StudentProfilePage = () => {
   });
 
   const withdrawMutation = useMutation({
-    mutationFn: async () => {
-      return await api.post(`/students/${id}/withdraw`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['studentProfile', id] });
-    },
+    mutationFn: async () => await api.post(`/students/${id}/withdraw`),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['studentProfile', id] }); },
   });
 
   if (isLoading) {
@@ -247,18 +339,8 @@ const StudentProfilePage = () => {
   }
 
   const {
-    admissionNumber,
-    firstName,
-    lastName,
-    otherNames,
-    gender,
-    dob,
-    currentClass,
-    guardians,
-    enrollmentDate,
-    status,
-    medicalNotes,
-    transport,
+    admissionNumber, firstName, lastName, otherNames, gender, dob,
+    currentClass, guardians, enrollmentDate, status, medicalNotes, transport,
   } = student;
 
   const handleWithdraw = () => {
@@ -269,14 +351,10 @@ const StudentProfilePage = () => {
 
   const getStatusBadge = (s) => {
     switch (s) {
-      case 'active':
-        return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-      case 'withdrawn':
-        return 'bg-red-100 text-red-800 border-red-200';
-      case 'graduated':
-        return 'bg-blue-100 text-blue-800 border-blue-200';
-      default:
-        return 'bg-slate-100 text-slate-800 border-slate-200';
+      case 'active':    return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+      case 'withdrawn': return 'bg-red-100 text-red-800 border-red-200';
+      case 'graduated': return 'bg-blue-100 text-blue-800 border-blue-200';
+      default:          return 'bg-slate-100 text-slate-800 border-slate-200';
     }
   };
 
@@ -292,6 +370,20 @@ const StudentProfilePage = () => {
           onSaved={() => {
             queryClient.invalidateQueries({ queryKey: ['studentProfile', id] });
             setShowTransportModal(false);
+          }}
+        />
+      )}
+
+      {/* Edit Profile Modal */}
+      {showEditModal && (
+        <EditProfileModal
+          student={student}
+          classes={classes}
+          onClose={() => setShowEditModal(false)}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ['studentProfile', id] });
+            queryClient.invalidateQueries({ queryKey: ['students'] });
+            setShowEditModal(false);
           }}
         />
       )}
@@ -317,7 +409,7 @@ const StudentProfilePage = () => {
           </div>
           <div>
             <h3 className="text-2xl font-bold text-slate-900">
-              {firstName} {otherNames ? `${otherNames} ` : ''} {lastName}
+              {firstName} {otherNames ? `${otherNames} ` : ''}{lastName}
             </h3>
             <div className="flex flex-wrap gap-2 mt-2">
               <span className="inline-flex font-mono text-xs font-semibold px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200/50">
@@ -334,6 +426,16 @@ const StudentProfilePage = () => {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {isAdmin && (
+            <button
+              id="edit-profile-btn"
+              onClick={() => setShowEditModal(true)}
+              className="flex items-center justify-center space-x-1.5 py-2 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-sm transition-colors cursor-pointer"
+            >
+              <Pencil size={14} />
+              <span>Edit Profile</span>
+            </button>
+          )}
           {isAdmin && (
             <button
               onClick={() => setShowTransportModal(true)}
@@ -359,9 +461,17 @@ const StudentProfilePage = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-6">
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-            <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider pb-3 border-b border-slate-100">
-              Student Personal Details
-            </h4>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Student Personal Details</h4>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowEditModal(true)}
+                  className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition-colors flex items-center gap-1"
+                >
+                  <Pencil size={12} /> Edit
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Gender</span>
@@ -369,15 +479,11 @@ const StudentProfilePage = () => {
               </div>
               <div>
                 <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Date of Birth</span>
-                <span className="text-slate-800 font-semibold">
-                  {new Date(dob).toLocaleDateString('en-GB')}
-                </span>
+                <span className="text-slate-800 font-semibold">{new Date(dob).toLocaleDateString('en-GB')}</span>
               </div>
               <div>
                 <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Admission Date</span>
-                <span className="text-slate-800 font-semibold">
-                  {new Date(enrollmentDate).toLocaleDateString('en-GB')}
-                </span>
+                <span className="text-slate-800 font-semibold">{new Date(enrollmentDate).toLocaleDateString('en-GB')}</span>
               </div>
               <div>
                 <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Bus Services</span>
@@ -402,10 +508,7 @@ const StudentProfilePage = () => {
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Transport Details</h4>
                 {isAdmin && (
-                  <button
-                    onClick={() => setShowTransportModal(true)}
-                    className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition-colors"
-                  >
+                  <button onClick={() => setShowTransportModal(true)} className="text-xs font-semibold text-emerald-600 hover:text-emerald-800 transition-colors">
                     Edit
                   </button>
                 )}
@@ -413,28 +516,21 @@ const StudentProfilePage = () => {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Bus Plate</span>
-                  <span className="text-slate-800 font-semibold font-mono">
-                    {transport.bus?.plateNumber || '—'}
-                  </span>
+                  <span className="text-slate-800 font-semibold font-mono">{transport.bus?.plateNumber || '—'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Route</span>
-                  <span className="text-slate-800 font-semibold">
-                    {transport.bus?.route?.name || '—'}
-                  </span>
+                  <span className="text-slate-800 font-semibold">{transport.bus?.route?.name || '—'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Stop</span>
                   <span className="text-slate-800 font-semibold flex items-center gap-1">
-                    <MapPin size={12} className="text-emerald-600" />
-                    {transport.stop || '—'}
+                    <MapPin size={12} className="text-emerald-600" />{transport.stop || '—'}
                   </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Pickup Time</span>
-                  <span className="text-slate-800 font-semibold">
-                    {transport.bus?.route?.pickupTime || '07:00 AM'}
-                  </span>
+                  <span className="text-slate-800 font-semibold">{transport.bus?.route?.pickupTime || '07:00 AM'}</span>
                 </div>
               </div>
             </div>
@@ -442,7 +538,7 @@ const StudentProfilePage = () => {
 
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
             <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider pb-3 border-b border-slate-100">
-              Guardian & Contact Details
+              Guardian &amp; Contact Details
             </h4>
             {guardians && guardians.length > 0 ? (
               guardians.map((guardian, i) => (
@@ -451,9 +547,7 @@ const StudentProfilePage = () => {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Name</span>
-                      <span className="text-slate-800 font-semibold">
-                        {guardian.firstName} {guardian.lastName}
-                      </span>
+                      <span className="text-slate-800 font-semibold">{guardian.firstName} {guardian.lastName}</span>
                     </div>
                     <div>
                       <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Relationship</span>

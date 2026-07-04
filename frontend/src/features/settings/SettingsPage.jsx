@@ -250,6 +250,84 @@ const SettingsPage = () => {
   });
 
   /* ────────────────────────────────────────────────────────
+     TAB 5: Grading Scales Configuration (Superadmin Only)
+     ──────────────────────────────────────────────────────── */
+  const [selectedScaleLevel, setSelectedScaleLevel] = useState('Primary');
+  const [editingScale, setEditingScale] = useState({
+    scaleType: 'descriptive_band',
+    caWeight: 30,
+    examWeight: 70,
+    bands: []
+  });
+  const [scalesMessage, setScalesMessage] = useState(null);
+
+  const { data: gradingScalesData, isLoading: loadingScales, refetch: refetchScales } = useQuery({
+    queryKey: ['settingsGradingScales'],
+    queryFn: async () => {
+      const res = await api.get('/grading-scales');
+      return res.data?.data;
+    },
+    enabled: isSuperAdmin && activeTab === 'grading-scales'
+  });
+
+  useEffect(() => {
+    if (gradingScalesData && gradingScalesData[selectedScaleLevel]) {
+      const scale = gradingScalesData[selectedScaleLevel];
+      setEditingScale({
+        scaleType: scale.scaleType || 'descriptive_band',
+        caWeight: scale.caWeight ?? 30,
+        examWeight: scale.examWeight ?? 70,
+        bands: scale.bands ? scale.bands.map(b => ({ ...b })) : []
+      });
+    }
+  }, [gradingScalesData, selectedScaleLevel]);
+
+  const updateScaleMutation = useMutation({
+    mutationFn: async (payload) => {
+      return await api.patch(`/grading-scales/${selectedScaleLevel}`, payload);
+    },
+    onSuccess: () => {
+      setScalesMessage({ type: 'success', text: `Grading scale for ${selectedScaleLevel} updated successfully!` });
+      queryClient.invalidateQueries({ queryKey: ['settingsGradingScales'] });
+      setTimeout(() => setScalesMessage(null), 3000);
+    },
+    onError: (err) => {
+      setScalesMessage({ type: 'error', text: err.response?.data?.message || 'Failed to update grading scale.' });
+    }
+  });
+
+  const handleBandChange = (index, field, value) => {
+    setEditingScale(prev => {
+      const newBands = [...prev.bands];
+      newBands[index] = { 
+        ...newBands[index], 
+        [field]: field === 'min' || field === 'max' ? Number(value) : value 
+      };
+      return { ...prev, bands: newBands };
+    });
+  };
+
+  const handleAddBand = () => {
+    setEditingScale(prev => ({
+      ...prev,
+      bands: [...prev.bands, { min: 0, max: 0, grade: '', label: '' }]
+    }));
+  };
+
+  const handleRemoveBand = (index) => {
+    setEditingScale(prev => ({
+      ...prev,
+      bands: prev.bands.filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleScalesSubmit = (e) => {
+    e.preventDefault();
+    setScalesMessage(null);
+    updateScaleMutation.mutate(editingScale);
+  };
+
+  /* ────────────────────────────────────────────────────────
      Render Helpers
      ──────────────────────────────────────────────────────── */
   if (loadingUser) {
@@ -300,6 +378,10 @@ const SettingsPage = () => {
               <button onClick={() => setActiveTab('users')} className={tabClass('users')}>
                 <UsersIcon size={16} />
                 <span>System Accounts</span>
+              </button>
+              <button onClick={() => setActiveTab('grading-scales')} className={tabClass('grading-scales')}>
+                <Award size={16} />
+                <span>Grading Scales</span>
               </button>
             </>
           )}
@@ -837,6 +919,207 @@ const SettingsPage = () => {
                     </tbody>
                   </table>
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 5: GRADING SCALES (Superadmin Only) */}
+          {activeTab === 'grading-scales' && isSuperAdmin && (
+            <div className="space-y-6">
+              <div className="flex items-center space-x-3 pb-3 border-b border-slate-100">
+                <div className="h-8 w-8 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-800">
+                  <Award size={16} />
+                </div>
+                <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                  Grading Scales & Score Bands
+                </h3>
+              </div>
+
+              {scalesMessage && (
+                <div className={`p-4 rounded-xl text-sm flex items-start space-x-3 border ${
+                  scalesMessage.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-red-50 border-red-200 text-red-700'
+                }`}>
+                  {scalesMessage.type === 'success' ? <CheckCircle2 size={16} className="mt-0.5" /> : <AlertCircle size={16} className="mt-0.5" />}
+                  <span>{scalesMessage.text}</span>
+                </div>
+              )}
+
+              {/* Level Selector tabs */}
+              <div className="flex bg-slate-100 p-1 rounded-xl w-fit space-x-1 select-none">
+                {['Nursery', 'KG', 'Primary', 'JHS'].map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setSelectedScaleLevel(cat)}
+                    className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
+                      selectedScaleLevel === cat
+                        ? 'bg-white text-emerald-950 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              {loadingScales ? (
+                <div className="flex justify-center p-8">
+                  <Loader2 className="animate-spin text-emerald-800" size={24} />
+                </div>
+              ) : (
+                <form onSubmit={handleScalesSubmit} className="space-y-6">
+                  {/* General Configs */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50/50 p-5 rounded-2xl border border-slate-200">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 font-sans">Scale Evaluation Type</label>
+                      <select
+                        value={editingScale.scaleType}
+                        onChange={(e) => setEditingScale({ ...editingScale, scaleType: e.target.value })}
+                        className={selectCls}
+                      >
+                        <option value="descriptive_band">Descriptive Band (Letters/Labels)</option>
+                        <option value="waec_9point">WAEC 9-Point Scale (JHS Numbers)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 font-sans">Continuous Assessment (CA) Weight %</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={editingScale.caWeight}
+                        onChange={(e) => setEditingScale({ ...editingScale, caWeight: Number(e.target.value) })}
+                        className={inputCls}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5 font-sans">Examination Weight %</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        value={editingScale.examWeight}
+                        onChange={(e) => setEditingScale({ ...editingScale, examWeight: Number(e.target.value) })}
+                        className={inputCls}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  {/* Bands Table */}
+                  <div>
+                    <div className="flex items-center justify-between mb-3.5">
+                      <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider font-sans">
+                        Grading Bands & Ranges
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={handleAddBand}
+                        className="py-1.5 px-3 bg-slate-100 hover:bg-slate-200 border border-slate-250 rounded-lg text-xs font-bold text-slate-700 transition cursor-pointer"
+                      >
+                        + Add New Band
+                      </button>
+                    </div>
+
+                    <div className="border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                      <table className="w-full text-left text-xs text-slate-600 border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-semibold uppercase tracking-wider">
+                            <th className="py-3 px-4 w-28">Min Score</th>
+                            <th className="py-3 px-4 w-28">Max Score</th>
+                            <th className="py-3 px-4 w-32">Grade Code</th>
+                            <th className="py-3 px-4">Description / Remarks</th>
+                            <th className="py-3 px-4 text-center w-24">Action</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100 bg-white">
+                          {editingScale.bands.length > 0 ? (
+                            editingScale.bands.map((band, idx) => (
+                              <tr key={idx} className="hover:bg-slate-50/10">
+                                <td className="py-2.5 px-4">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={band.min}
+                                    onChange={(e) => handleBandChange(idx, 'min', e.target.value)}
+                                    className="w-20 px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-800 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-800"
+                                    required
+                                  />
+                                </td>
+                                <td className="py-2.5 px-4">
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    value={band.max}
+                                    onChange={(e) => handleBandChange(idx, 'max', e.target.value)}
+                                    className="w-20 px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-800 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-emerald-800"
+                                    required
+                                  />
+                                </td>
+                                <td className="py-2.5 px-4">
+                                  <input
+                                    type="text"
+                                    value={band.grade}
+                                    onChange={(e) => handleBandChange(idx, 'grade', e.target.value)}
+                                    placeholder="e.g. A, 1, EX"
+                                    className="w-24 px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-800 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-800 font-bold uppercase text-center"
+                                    required
+                                  />
+                                </td>
+                                <td className="py-2.5 px-4">
+                                  <input
+                                    type="text"
+                                    value={band.label}
+                                    onChange={(e) => handleBandChange(idx, 'label', e.target.value)}
+                                    placeholder="e.g. Excellent, Very Good"
+                                    className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-slate-800 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-800"
+                                    required
+                                  />
+                                </td>
+                                <td className="py-2.5 px-4 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveBand(idx)}
+                                    className="text-red-600 hover:text-red-900 font-semibold transition cursor-pointer text-xs animate-pulse"
+                                  >
+                                    Delete
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          ) : (
+                            <tr>
+                              <td colSpan="5" className="py-8 text-center text-slate-400 text-xs">
+                                No grading bands defined yet. Click '+ Add New Band' to configure.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Submit Button */}
+                  <div className="flex justify-end pt-3">
+                    <button
+                      type="submit"
+                      disabled={updateScaleMutation.isPending}
+                      className="flex items-center space-x-2 py-2.5 px-5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-sm font-bold shadow-sm transition duration-150 disabled:opacity-50 cursor-pointer"
+                    >
+                      {updateScaleMutation.isPending ? (
+                        <Loader2 className="animate-spin h-4 w-4" />
+                      ) : (
+                        <Save size={16} />
+                      )}
+                      <span>Save Grading Scale</span>
+                    </button>
+                  </div>
+                </form>
               )}
             </div>
           )}

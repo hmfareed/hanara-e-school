@@ -16,9 +16,6 @@ describe('Fire/Sack Staff Member API', () => {
   let superadminUser, adminUser, teacherUser, targetStaff, academicYear, classLevel, testClass, testBus, testSubject, testAssignment;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
   });
 
   beforeEach(async () => {
@@ -135,7 +132,6 @@ describe('Fire/Sack Staff Member API', () => {
   });
 
   afterAll(async () => {
-    await mongoose.connection.close();
   });
 
   it('should block non-superadmin users from firing staff', async () => {

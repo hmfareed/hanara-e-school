@@ -4,7 +4,7 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
   ClipboardList, Check, AlertCircle, Save, Loader2,
-  BookOpen, Layers, Calendar
+  BookOpen, Layers, Calendar, FileDown, Award
 } from 'lucide-react';
 
 const ResultsEntryPage = () => {
@@ -21,6 +21,8 @@ const ResultsEntryPage = () => {
   const [gradesGrid, setGradesGrid] = useState([]);
   const [notification, setNotification] = useState({ text: '', type: '' });
   const [savingRows, setSavingRows] = useState({});
+  const [finalizing, setFinalizing] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState({});
 
   // 1. Fetch Academic Years
   const { data: academicYears = [] } = useQuery({
@@ -286,6 +288,65 @@ const ResultsEntryPage = () => {
     setTimeout(() => setNotification({ text: '', type: '' }), 5000);
   };
 
+  const handleFinalize = async () => {
+    if (!selectedClass || !selectedYear || !selectedTerm) return;
+    if (!window.confirm("Are you sure you want to finalize this term? This will compute all student rankings, positions, and averages for this class.")) {
+      return;
+    }
+    
+    setFinalizing(true);
+    setNotification({ text: 'Computing class rankings and averages...', type: 'info' });
+    try {
+      const res = await api.post(`/grades/class/${selectedClass}/finalize`, {
+        academicYear: selectedYear,
+        term: selectedTerm
+      });
+      setNotification({
+        text: res.data?.message || 'Class term successfully finalized and rankings computed!',
+        type: 'success'
+      });
+      setTimeout(() => setNotification({ text: '', type: '' }), 5000);
+      queryClient.invalidateQueries({
+        queryKey: ['classGrades', selectedClass, selectedSubject, selectedYear, selectedTerm]
+      });
+    } catch (err) {
+      console.error(err);
+      setNotification({ text: err.response?.data?.message || 'Failed to finalize term.', type: 'error' });
+    } finally {
+      setFinalizing(false);
+    }
+  };
+
+  const handleDownloadPdf = async (studentId, studentName) => {
+    if (!selectedYear || !selectedTerm) {
+      setNotification({ text: 'Academic Year and Term are required to download PDF.', type: 'error' });
+      return;
+    }
+    setDownloadingPdf(prev => ({ ...prev, [studentId]: true }));
+    try {
+      const response = await api.get(`/grades/student/${studentId}/report-card/pdf`, {
+        params: { academicYear: selectedYear, term: selectedTerm },
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `ReportCard_${studentName.replace(/\s+/g, '_')}_Term${selectedTerm}_${selectedYear.replace(/\//g, '-')}.pdf`;
+      link.click();
+      window.URL.revokeObjectURL(link.href);
+    } catch (err) {
+      console.error(err);
+      setNotification({ text: 'Failed to download report card PDF.', type: 'error' });
+    } finally {
+      setDownloadingPdf(prev => {
+        const next = { ...prev };
+        delete next[studentId];
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -433,13 +494,23 @@ const ResultsEntryPage = () => {
                 )}
               </div>
               
-              <button
-                onClick={saveAllModified}
-                className="flex items-center space-x-1.5 py-2 px-4 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer"
-              >
-                <Save size={14} />
-                <span>Save All Marks</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={handleFinalize}
+                  disabled={finalizing}
+                  className="flex items-center space-x-1.5 py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer"
+                >
+                  {finalizing ? <Loader2 size={14} className="animate-spin" /> : <Award size={14} />}
+                  <span>Finalize Term & Rankings</span>
+                </button>
+                <button
+                  onClick={saveAllModified}
+                  className="flex items-center space-x-1.5 py-2 px-4 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer"
+                >
+                  <Save size={14} />
+                  <span>Save All Marks</span>
+                </button>
+              </div>
             </div>
 
             <div className="overflow-x-auto">
@@ -636,26 +707,42 @@ const ResultsEntryPage = () => {
                           </td>
                           
                           <td className="py-3 px-4 text-right">
-                            {row.isEdited ? (
+                            <div className="flex items-center justify-end space-x-2">
+                              {row.isEdited ? (
+                                <button
+                                  type="button"
+                                  onClick={() => saveRow(row)}
+                                  disabled={isSaving}
+                                  className="inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg bg-emerald-850 hover:bg-emerald-950 disabled:opacity-50 text-white font-bold text-xs transition-colors cursor-pointer"
+                                >
+                                  {isSaving ? (
+                                    <Loader2 size={12} className="animate-spin" />
+                                  ) : (
+                                    <Save size={12} />
+                                  )}
+                                  <span>Save Row</span>
+                                </button>
+                              ) : (
+                                <span className="text-xs text-slate-400 font-medium inline-flex items-center space-x-1 py-1.5">
+                                  <Check size={12} className="text-emerald-700" />
+                                  <span>Synced</span>
+                                </span>
+                              )}
+                              
                               <button
                                 type="button"
-                                onClick={() => saveRow(row)}
-                                disabled={isSaving}
-                                className="inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg bg-emerald-850 hover:bg-emerald-950 disabled:opacity-50 text-white font-bold text-xs transition-colors cursor-pointer"
+                                onClick={() => handleDownloadPdf(row.studentId, row.name)}
+                                disabled={!!downloadingPdf[row.studentId]}
+                                title="Download Report Card PDF"
+                                className="inline-flex items-center justify-center p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-slate-800 hover:bg-slate-50 transition-colors disabled:opacity-50 cursor-pointer"
                               >
-                                {isSaving ? (
+                                {downloadingPdf[row.studentId] ? (
                                   <Loader2 size={12} className="animate-spin" />
                                 ) : (
-                                  <Save size={12} />
+                                  <FileDown size={12} />
                                 )}
-                                <span>Save Row</span>
                               </button>
-                            ) : (
-                              <span className="text-xs text-slate-400 font-medium inline-flex items-center space-x-1 py-1.5">
-                                <Check size={12} className="text-emerald-700" />
-                                <span>Synced</span>
-                              </span>
-                            )}
+                            </div>
                           </td>
                         </tr>
                       );

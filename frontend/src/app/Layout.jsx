@@ -20,6 +20,7 @@ import {
   ClipboardCheck,
   Settings,
   ClipboardList,
+  Award,
 } from 'lucide-react';
 
 /* ── Dynamic header badge showing current academic year ── */
@@ -78,6 +79,12 @@ const Layout = () => {
       name: 'Enter Results',
       path: '/grades',
       icon: ClipboardCheck,
+      roles: ['superadmin', 'admin', 'teacher'],
+    },
+    {
+      name: 'BECE Candidates',
+      path: '/bece',
+      icon: Award,
       roles: ['superadmin', 'admin', 'teacher'],
     },
     {

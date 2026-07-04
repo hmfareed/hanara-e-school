@@ -21,17 +21,9 @@ describe('Subject & Form Teacher Assignment & Grading API', () => {
   let subjectMath, subjectScience;
   let studentA;
 
-  beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
-  });
-
-  afterAll(async () => {
-    await mongoose.connection.close();
-  });
 
   beforeEach(async () => {
+
     await Promise.all([
       User.deleteMany({}),
       Staff.deleteMany({}),
@@ -206,7 +198,7 @@ describe('Subject & Form Teacher Assignment & Grading API', () => {
           subjectId: subjectScience._id.toString(),
           academicYear: '2026/2027',
           term: '1',
-          classScore: 40,
+          classScore: 28,
           examScore: 60,
         });
 
@@ -296,7 +288,7 @@ describe('Subject & Form Teacher Assignment & Grading API', () => {
           subjectId: subjectMath._id.toString(),
           academicYear: '2026/2027',
           term: '1',
-          classScore: 35,
+          classScore: 28,
           examScore: 55,
         });
     });
@@ -317,7 +309,7 @@ describe('Subject & Form Teacher Assignment & Grading API', () => {
         academicYear: '2026/2027',
       });
       expect(grade).toBeTruthy();
-      expect(grade.totalScore).toBe(90);
+      expect(grade.totalScore).toBe(83);
 
       // Verify teacher 1 is now blocked from entering/updating grades for math
       const resGrade2 = await request(app)
@@ -329,7 +321,7 @@ describe('Subject & Form Teacher Assignment & Grading API', () => {
           subjectId: subjectMath._id.toString(),
           academicYear: '2026/2027',
           term: '1',
-          classScore: 40,
+          classScore: 28,
           examScore: 60,
         });
 

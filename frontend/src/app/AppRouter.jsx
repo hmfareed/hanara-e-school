@@ -28,6 +28,9 @@ import SettingsPage from '../features/settings/SettingsPage';
 import TransportPage from '../features/transport/TransportPage';
 import DailyFeeRegisterPage from '../features/fees/DailyFeeRegisterPage';
 
+// Phase 4 Pages
+import BecePage from '../features/bece/BecePage';
+
 const AppRouter = () => {
   return (
     <BrowserRouter>
@@ -193,6 +196,15 @@ const AppRouter = () => {
             element={
               <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher']}>
                 <DailyFeeRegisterPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="bece"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher']}>
+                <BecePage />
               </ProtectedRoute>
             }
           />

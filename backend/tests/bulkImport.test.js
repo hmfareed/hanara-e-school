@@ -17,10 +17,6 @@ describe('Bulk Student Onboarding API', () => {
   let classB;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
-
     await Promise.all([
       User.deleteMany({}),
       Student.deleteMany({}),
@@ -61,7 +57,6 @@ describe('Bulk Student Onboarding API', () => {
       ClassLevel.deleteMany({}),
       AcademicYear.deleteMany({}),
     ]);
-    await mongoose.connection.close();
   });
 
   describe('POST /api/students/bulk', () => {

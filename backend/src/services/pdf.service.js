@@ -141,4 +141,220 @@ async function generateReceipt({ payment, invoice, student, schoolProfile }) {
   return Buffer.from(pdfBytes);
 }
 
-module.exports = { generateReceipt };
+/* ─────────────────────────────────────────────────────────── */
+/*  REPORT CARD PDF                                            */
+/* ─────────────────────────────────────────────────────────── */
+
+/**
+ * generateReportCardPdf({ student, report, grades, gradingDetails, schoolProfile, academicYear, term })
+ *
+ * grades — array of { subject: { name, code }, totalScore, classScore, examScore }
+ * gradingDetails — array of { subject: { name }, grade, label }  (from grading.service)
+ * report — StudentReport doc (position, averages, remarks, attendance)
+ * Returns a Buffer containing A4 PDF bytes.
+ */
+async function generateReportCardPdf({
+  student,
+  report,
+  grades,
+  gradingDetails,
+  schoolProfile,
+  academicYear,
+  term,
+}) {
+  const { PDFDocument: PDF, rgb: c, StandardFonts: SF } = require('pdf-lib');
+
+  const doc = await PDF.create();
+  // A4 portrait: 595 x 842 pt
+  const page = doc.addPage([595, 842]);
+  const { width, height } = page.getSize();
+
+  const bold = await doc.embedFont(SF.HelveticaBold);
+  const reg  = await doc.embedFont(SF.Helvetica);
+
+  const green  = c(0.067, 0.416, 0.298); // #116a4c
+  const dark   = c(0.08, 0.08, 0.08);
+  const gray   = c(0.45, 0.45, 0.45);
+  const ltGray = c(0.93, 0.93, 0.93);
+  const white  = c(1, 1, 1);
+  const red    = c(0.75, 0.1, 0.1);
+
+  let y = height - 20;
+
+  /* ── Header Banner ──────────────────────────────────── */
+  page.drawRectangle({ x: 0, y: y - 60, width, height: 70, color: green });
+  page.drawText(schoolProfile?.name?.toUpperCase() || 'HANARA SCHOOLS', {
+    x: 24, y: y - 22, font: bold, size: 15, color: white,
+  });
+  page.drawText('TERMINAL REPORT CARD', {
+    x: 24, y: y - 40, font: reg, size: 9.5, color: c(0.78, 0.95, 0.87),
+  });
+
+  // Right: Year / Term
+  const yearLabel = `${academicYear}  ·  Term ${term}`;
+  const ylw = bold.widthOfTextAtSize(yearLabel, 9);
+  page.drawText(yearLabel, { x: width - ylw - 24, y: y - 28, font: bold, size: 9, color: white });
+
+  y -= 80;
+
+  /* ── Student Info Card ──────────────────────────────── */
+  page.drawRectangle({ x: 20, y: y - 64, width: width - 40, height: 68, color: ltGray });
+
+  const studentName = `${student.firstName}${student.otherNames ? ' ' + student.otherNames : ''} ${student.lastName}`;
+  page.drawText(studentName, { x: 28, y: y - 16, font: bold, size: 13, color: dark });
+
+  const infoItems = [
+    ['Admission No.', student.admissionNumber || '—'],
+    ['Class',        student.currentClass?.name || '—'],
+    ['Position',     report?.position ? `${report.position} / ${report.totalStudents}` : '—'],
+    ['Average',      report?.studentAverage != null ? `${report.studentAverage}%` : '—'],
+  ];
+
+  let infoX = 28;
+  infoItems.forEach(([label, value]) => {
+    page.drawText(label, { x: infoX, y: y - 35, font: reg, size: 7.5, color: gray });
+    page.drawText(value, { x: infoX, y: y - 48, font: bold, size: 9, color: dark });
+    infoX += 130;
+  });
+
+  y -= 78;
+
+  /* ── Grades Table ───────────────────────────────────── */
+  const tableLeft = 20;
+  const colWidths = [170, 55, 55, 55, 40, 80]; // Subject | CA/30 | Exam/70 | Total | Grade | Remark
+  const colHeaders = ['Subject', 'Class Score\n(/30)', 'Exam Score\n(/70)', 'Total\n(/100)', 'Grade', 'Remark'];
+  const rowH = 18;
+  const tableWidth = colWidths.reduce((a, b) => a + b, 0); // = 455 (fits in 555)
+
+  // Header row
+  page.drawRectangle({ x: tableLeft, y: y - rowH, width: tableWidth, height: rowH, color: green });
+
+  let cx = tableLeft;
+  colHeaders.forEach((h, i) => {
+    const lines = h.split('\n');
+    const textY = lines.length > 1 ? y - 8 : y - 12;
+    lines.forEach((line, li) => {
+      page.drawText(line, {
+        x: cx + 4, y: textY - li * 8,
+        font: bold, size: 7, color: white,
+      });
+    });
+    cx += colWidths[i];
+  });
+
+  y -= rowH;
+
+  // Data rows
+  const mergedGrades = grades.map((g) => {
+    const detail = (gradingDetails || []).find(
+      (d) => d.subjectId?.toString() === g.subject?._id?.toString()
+    );
+    return { ...g, grade: detail?.grade || '—', label: detail?.label || '—' };
+  });
+
+  mergedGrades.forEach((g, idx) => {
+    const rowColor = idx % 2 === 0 ? white : c(0.97, 0.98, 0.97);
+    page.drawRectangle({ x: tableLeft, y: y - rowH, width: tableWidth, height: rowH, color: rowColor });
+
+    const rowData = [
+      g.subject?.name || '—',
+      String(g.classScore ?? '—'),
+      String(g.examScore ?? '—'),
+      String(g.totalScore ?? '—'),
+      String(g.grade),
+      g.label,
+    ];
+
+    let rx = tableLeft;
+    rowData.forEach((val, ci) => {
+      const textColor = ci === 4 && g.grade === '9' ? red : dark;
+      page.drawText(String(val), {
+        x: rx + 4, y: y - 12,
+        font: ci === 0 ? reg : bold,
+        size: 7.5,
+        color: textColor,
+        maxWidth: colWidths[ci] - 6,
+      });
+      rx += colWidths[ci];
+    });
+
+    // Thin border line
+    page.drawLine({
+      start: { x: tableLeft, y: y - rowH },
+      end:   { x: tableLeft + tableWidth, y: y - rowH },
+      thickness: 0.3,
+      color: c(0.85, 0.85, 0.85),
+    });
+
+    y -= rowH;
+  });
+
+  y -= 14;
+
+  /* ── Attendance Summary ─────────────────────────────── */
+  const att = report?.attendanceSummary || { present: 0, absent: 0, total: 0 };
+  page.drawText('ATTENDANCE SUMMARY', { x: tableLeft, y, font: bold, size: 8, color: gray });
+  y -= 14;
+  const attItems = [
+    ['Days Present', att.present],
+    ['Days Absent',  att.absent],
+    ['School Days',  att.total],
+  ];
+  let ax = tableLeft;
+  attItems.forEach(([label, val]) => {
+    page.drawRectangle({ x: ax, y: y - 26, width: 100, height: 28, color: ltGray });
+    page.drawText(label, { x: ax + 6, y: y - 10, font: reg, size: 7, color: gray });
+    page.drawText(String(val), { x: ax + 6, y: y - 22, font: bold, size: 11, color: dark });
+    ax += 108;
+  });
+
+  y -= 40;
+
+  /* ── Remarks ────────────────────────────────────────── */
+  if (y > 180) {
+    page.drawLine({ start: { x: tableLeft, y }, end: { x: width - 20, y }, thickness: 0.4, color: ltGray });
+    y -= 14;
+
+    const drawRemark = (label, text, startY) => {
+      page.drawText(label.toUpperCase(), { x: tableLeft, y: startY, font: bold, size: 7.5, color: gray });
+      page.drawRectangle({ x: tableLeft, y: startY - 26, width: width - 40, height: 28, color: c(0.97, 0.97, 0.97) });
+      page.drawText(text || 'N/A', { x: tableLeft + 6, y: startY - 16, font: reg, size: 8.5, color: dark, maxWidth: width - 60 });
+      return startY - 40;
+    };
+
+    y = drawRemark("Class Teacher's Remark", report?.classTeacherRemark || report?.conductRemarks, y);
+    if (y > 130) {
+      y = drawRemark("Head Teacher's Remark", report?.headTeacherRemark, y);
+    }
+
+    /* ── Promotion Decision ─────────────────────────── */
+    if (report?.promotionDecision && y > 100) {
+      y -= 4;
+      page.drawText('PROMOTION DECISION:', { x: tableLeft, y, font: bold, size: 8, color: gray });
+      page.drawText(report.promotionDecision, { x: tableLeft + 120, y, font: bold, size: 8.5, color: dark });
+      y -= 18;
+    }
+  }
+
+  /* ── Signature Line ─────────────────────────────────── */
+  const sigY = 60;
+  const sigItems = ["Class Teacher's Signature", "Head Teacher's Signature", "Parent / Guardian's Signature"];
+  let sx = tableLeft;
+  sigItems.forEach((label) => {
+    page.drawLine({ start: { x: sx, y: sigY + 14 }, end: { x: sx + 140, y: sigY + 14 }, thickness: 0.5, color: gray });
+    page.drawText(label, { x: sx, y: sigY, font: reg, size: 6.5, color: gray });
+    sx += 155;
+  });
+
+  /* ── Footer ─────────────────────────────────────────── */
+  page.drawText(
+    'This report was generated by HANARA Schools Management System. For queries contact the school office.',
+    { x: tableLeft, y: 30, font: reg, size: 6, color: gray }
+  );
+
+  const pdfBytes = await doc.save();
+  return Buffer.from(pdfBytes);
+}
+
+module.exports = { generateReceipt, generateReportCardPdf };
+

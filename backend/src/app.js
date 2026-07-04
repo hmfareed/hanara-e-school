@@ -26,6 +26,8 @@ const gradeRoutes = require('./routes/grade.routes');
 const settingsRoutes = require('./routes/settings.routes');
 const transportRoutes = require('./routes/transport.routes');
 const dailyFeeRoutes = require('./routes/dailyFee.routes');
+const beceRoutes = require('./routes/bece.routes');
+const gradingScaleRoutes = require('./routes/gradingScale.routes');
 
 const app = express();
 
@@ -78,6 +80,8 @@ app.use('/api/grades', gradeRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/transport', transportRoutes);
 app.use('/api/fees/daily-register', dailyFeeRoutes);
+app.use('/api/bece-candidates', beceRoutes);
+app.use('/api/grading-scales', gradingScaleRoutes);
 
 
 

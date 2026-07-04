@@ -230,6 +230,17 @@ const registerTeacher = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'First name, last name, email, password and role are required.' });
     }
 
+    if (role === 'teacher') {
+      const { classesAssigned, subjectsAssigned } = req.body;
+      if (!classesAssigned || !Array.isArray(classesAssigned) || classesAssigned.length === 0 ||
+          !subjectsAssigned || !Array.isArray(subjectsAssigned) || subjectsAssigned.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Teacher must be assigned to at least one class and one subject.',
+        });
+      }
+    }
+
     // Validate the registration code. Since codes are now multi-use, we do not check isUsed: false.
     // We still mark it as used and record the latest user who registered with it.
     const codeRecord = await RegistrationCode.findOneAndUpdate(
@@ -264,7 +275,33 @@ const registerTeacher = async (req, res, next) => {
       role,
       qualification: qualification || '',
       employmentStatus: 'active',
+      classesAssigned: role === 'teacher' ? req.body.classesAssigned : [],
     });
+
+    // Create ClassSubjectAssignment records for teacher
+    if (role === 'teacher') {
+      const ClassSubjectAssignment = require('../models/ClassSubjectAssignment');
+      const AcademicYear = require('../models/AcademicYear');
+      const currentYear = await AcademicYear.findOne({ isCurrent: true });
+      if (!currentYear) {
+        return res.status(400).json({
+          success: false,
+          message: 'No current academic year found. Please configure the academic year first.',
+        });
+      }
+
+      const { classesAssigned, subjectsAssigned } = req.body;
+      for (const classId of classesAssigned) {
+        for (const subjectId of subjectsAssigned) {
+          await ClassSubjectAssignment.create({
+            class: classId,
+            subject: subjectId,
+            teacher: staff._id,
+            academicYear: currentYear._id,
+          });
+        }
+      }
+    }
 
     // Create linked User account — inactive until superadmin approves
 

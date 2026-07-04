@@ -13,6 +13,8 @@ const {
   updatePromotion,
   getReportCard,
   getClassGrades,
+  finalizeClassTerm,
+  getReportCardPdf,
 } = require('../controllers/grade.controller');
 
 // POST /api/grades - enter grade, protected by requireSubjectAssignment
@@ -27,10 +29,16 @@ router.patch('/attendance', protect, authorize('superadmin', 'admin', 'teacher')
 // PATCH /api/grades/promotion - update promotion, protected by requireFormTeacher
 router.patch('/promotion', protect, authorize('superadmin', 'admin', 'teacher'), requireFormTeacher, updatePromotion);
 
-// GET /api/grades/student/:studentId/report-card - generate report card
+// GET /api/grades/student/:studentId/report-card - get report card data (JSON)
 router.get('/student/:studentId/report-card', protect, authorize('superadmin', 'admin', 'teacher'), getReportCard);
+
+// GET /api/grades/student/:studentId/report-card/pdf - download report card as PDF
+router.get('/student/:studentId/report-card/pdf', protect, authorize('superadmin', 'admin', 'teacher'), getReportCardPdf);
 
 // GET /api/grades/class/:classId/subject/:subjectId - get class grades, protected by requireSubjectAssignment
 router.get('/class/:classId/subject/:subjectId', protect, authorize('superadmin', 'admin', 'teacher'), requireSubjectAssignment, getClassGrades);
+
+// POST /api/grades/class/:classId/finalize - finalize term & compute class rankings
+router.post('/class/:classId/finalize', protect, authorize('superadmin', 'admin', 'teacher'), finalizeClassTerm);
 
 module.exports = router;

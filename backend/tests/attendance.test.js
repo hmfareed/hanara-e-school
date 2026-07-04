@@ -18,10 +18,6 @@ describe('Attendance API & authorization', () => {
   let studentA, studentB;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
-    
     await Promise.all([
       User.deleteMany({}),
       Staff.deleteMany({}),
@@ -87,7 +83,6 @@ describe('Attendance API & authorization', () => {
       Student.deleteMany({}),
       AttendanceRecord.deleteMany({}),
     ]);
-    await mongoose.connection.close();
   });
 
   describe('GET /api/attendance', () => {

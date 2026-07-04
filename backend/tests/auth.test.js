@@ -4,15 +4,6 @@ const app = require('../src/app');
 const User = require('../src/models/User');
 
 describe('Auth Endpoints', () => {
-  beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
-  });
-
-  afterAll(async () => {
-    await mongoose.connection.close();
-  });
 
   beforeEach(async () => {
     await User.deleteMany({});

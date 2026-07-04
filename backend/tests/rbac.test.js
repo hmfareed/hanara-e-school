@@ -9,9 +9,6 @@ describe('RBAC Authorization', () => {
   let superadminUser, adminUser, teacherUser, parentUser;
 
   beforeAll(async () => {
-    if (mongoose.connection.readyState === 0) {
-      await mongoose.connect(process.env.MONGODB_URI);
-    }
     await User.deleteMany({});
 
     superadminUser = await User.create({ email: 'superadmin@hanara.edu.gh', phone: '0241000000', passwordHash: 'pwd', role: 'superadmin' });
@@ -27,7 +24,6 @@ describe('RBAC Authorization', () => {
 
   afterAll(async () => {
     await User.deleteMany({});
-    await mongoose.connection.close();
   });
 
   describe('GET /api/staff - Staff Management access', () => {
