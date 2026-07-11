@@ -18,7 +18,7 @@ const getStudents = async (req, res, next) => {
     const filter = {};
     if (status) filter.status = status;
     
-    if (req.user && req.user.role === 'teacher') {
+    if (req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher')))) {
       const { getTeacherClasses } = require('../utils/authHelpers');
       const allowedClassIds = await getTeacherClasses(req.user.id, req.user.refStaff);
       if (classId) {
@@ -122,7 +122,7 @@ const getStudentById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Student not found' });
     }
 
-    if (req.user && req.user.role === 'teacher') {
+    if (req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher')))) {
       const { getTeacherClasses } = require('../utils/authHelpers');
       const allowedClassIds = await getTeacherClasses(req.user.id, req.user.refStaff);
       const studentClassId = student.currentClass ? student.currentClass._id.toString() : null;

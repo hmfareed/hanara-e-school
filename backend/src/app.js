@@ -28,6 +28,8 @@ const transportRoutes = require('./routes/transport.routes');
 const dailyFeeRoutes = require('./routes/dailyFee.routes');
 const beceRoutes = require('./routes/bece.routes');
 const gradingScaleRoutes = require('./routes/gradingScale.routes');
+const adminRoutes = require('./routes/admin.routes');
+const mockExamRoutes = require('./routes/mockExam.routes');
 
 const app = express();
 
@@ -82,6 +84,8 @@ app.use('/api/transport', transportRoutes);
 app.use('/api/fees/daily-register', dailyFeeRoutes);
 app.use('/api/bece-candidates', beceRoutes);
 app.use('/api/grading-scales', gradingScaleRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/mock-exams', mockExamRoutes);
 
 
 

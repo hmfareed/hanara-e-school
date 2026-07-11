@@ -22,8 +22,17 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['superadmin', 'admin', 'teacher', 'accountant', 'parent', 'driver'],
+      enum: ['superadmin', 'admin', 'teacher', 'accountant', 'parent', 'driver', 'system_admin'],
       required: [true, 'Role is required'],
+    },
+    secondaryCapacities: {
+      type: [String],
+      enum: ['teacher'],
+      default: [],
+    },
+    isSuperAdmin: {
+      type: Boolean,
+      default: false,
     },
     refStaff: {
       type: mongoose.Schema.Types.ObjectId,

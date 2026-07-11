@@ -2,34 +2,57 @@ const mongoose = require('mongoose');
 
 const auditLogSchema = new mongoose.Schema(
   {
-    actor: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    actorId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+    actorRole: {
+      type: String,
+      required: true,
+    },
+    actingAs: {
+      type: String,
+      enum: ['admin', 'teacher', 'accountant', 'parent', 'driver', 'superadmin', null],
+      default: null,
+    },
     action: {
       type: String,
-      required: true,
-      // e.g. "FINALIZE_REPORT_CARD", "UPDATE_STUDENT", "VOID_INVOICE", "RECORD_PAYMENT"
+      required: true, // e.g. "grade.update" | "account.create" | "settings.change" | "backup.restore"
     },
-    entityType: {
+    targetType: {
       type: String,
-      required: true,
-      // e.g. "StudentReport", "Student", "Invoice", "Payment"
+      required: true, // e.g. "Student" | "User" | "SystemSetting" | "Payment"
     },
-    entityId: {
+    targetId: {
       type: mongoose.Schema.Types.ObjectId,
       required: true,
+      index: true,
     },
-    before: { type: mongoose.Schema.Types.Mixed, default: null },
-    after: { type: mongoose.Schema.Types.Mixed, default: null },
-    ip: { type: String, default: '' },
-    userAgent: { type: String, default: '' },
+    beforeValue: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    afterValue: {
+      type: mongoose.Schema.Types.Mixed,
+      default: null,
+    },
+    ipAddress: {
+      type: String,
+      default: '',
+    },
+    severity: {
+      type: String,
+      enum: ['info', 'sensitive', 'critical'],
+      default: 'info',
+    },
   },
   {
     timestamps: true,
-    // Never modify audit logs after creation
-    versionKey: false,
   }
 );
 
-auditLogSchema.index({ actor: 1, createdAt: -1 });
-auditLogSchema.index({ entityType: 1, entityId: 1, createdAt: -1 });
+auditLogSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('AuditLog', auditLogSchema);

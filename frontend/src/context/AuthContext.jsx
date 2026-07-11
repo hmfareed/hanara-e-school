@@ -6,6 +6,17 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [activeMode, setActiveMode] = useState(() => {
+    return localStorage.getItem('activeMode') || 'admin';
+  });
+
+  const toggleActiveMode = () => {
+    setActiveMode((prev) => {
+      const next = prev === 'admin' ? 'teacher' : 'admin';
+      localStorage.setItem('activeMode', next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const initAuth = async () => {
@@ -89,12 +100,19 @@ export const AuthProvider = ({ children }) => {
     return roles.includes(user.role);
   };
 
+  // True when the logged-in teacher is also a form teacher / class teacher of at least one class.
+  // Subject-only teachers will have this as false.
+  const isFormTeacher = user?.isFormTeacher === true;
+
   const value = {
     user,
     loading,
     login,
     logout,
     hasRole,
+    isFormTeacher,
+    activeMode,
+    toggleActiveMode,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

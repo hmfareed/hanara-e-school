@@ -55,8 +55,34 @@ const getTeacherClasses = async (userId, refStaffId) => {
   return [...new Set(classIds)];
 };
 
+/**
+ * isFormTeacherOfAnyClass
+ * Returns true if the user (by userId / refStaffId) is the designated
+ * formTeacher (User ref) OR classTeacher (Staff ref) of at least one class.
+ *
+ * Form teachers / class teachers are responsible for:
+ *  - Attendance register
+ *  - Daily fee register
+ *
+ * Subject-only teachers are NOT eligible for those duties.
+ */
+const isFormTeacherOfAnyClass = async (userId, refStaffId) => {
+  // Check formTeacher (User ObjectId reference)
+  const formTeacherClass = await Class.findOne({ formTeacher: userId });
+  if (formTeacherClass) return true;
+
+  // Check classTeacher (Staff ObjectId reference)
+  if (refStaffId) {
+    const classTeacherClass = await Class.findOne({ classTeacher: refStaffId });
+    if (classTeacherClass) return true;
+  }
+
+  return false;
+};
+
 module.exports = {
   canGradeSubject,
   isFormTeacherOf,
   getTeacherClasses,
+  isFormTeacherOfAnyClass,
 };

@@ -8,7 +8,7 @@ const {
 } = require('../controllers/gradingScale.controller');
 
 // GET /api/grading-scales - get all configurations
-router.get('/', protect, authorize('superadmin', 'admin', 'teacher'), getGradingScales);
+router.get('/', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), getGradingScales);
 
 // PATCH /api/grading-scales/:levelCategory - update a specific level category's grading scale (superadmin only)
 router.patch('/:levelCategory', protect, authorize('superadmin'), updateGradingScale);

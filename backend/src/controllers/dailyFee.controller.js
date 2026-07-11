@@ -72,7 +72,7 @@ const submitDailyRegister = async (req, res, next) => {
     }
 
     // RBAC: Class Teachers can only submit for their assigned class
-    const isTeacher = req.user.role === 'teacher';
+    const isTeacher = req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher'));
     const isClassTeacher =
       targetClass.classTeacher &&
       targetClass.classTeacher.toString() === req.user.refStaff?.toString();

@@ -11,7 +11,7 @@ const {
 } = require('../controllers/bece.controller');
 
 // GET /api/bece-candidates - list all JHS 3 candidate registration statuses
-router.get('/', protect, authorize('superadmin', 'admin', 'teacher'), listCandidates);
+router.get('/', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), listCandidates);
 
 // POST /api/bece-candidates/:studentId - register student as BECE candidate
 router.post('/:studentId', protect, authorize('superadmin', 'admin'), registerCandidate);
@@ -23,6 +23,6 @@ router.patch('/:candidateId', protect, authorize('superadmin', 'admin'), updateC
 router.delete('/:candidateId/mock/:index', protect, authorize('superadmin', 'admin'), removeMockResult);
 
 // GET /api/bece-candidates/student/:studentId/aggregate - get student's computed BECE aggregate
-router.get('/student/:studentId/aggregate', protect, authorize('superadmin', 'admin', 'teacher'), getAggregate);
+router.get('/student/:studentId/aggregate', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), getAggregate);
 
 module.exports = router;

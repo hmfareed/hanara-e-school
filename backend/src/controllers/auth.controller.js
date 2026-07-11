@@ -2,6 +2,7 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../services/token.service');
 const logger = require('../utils/logger');
+const { isFormTeacherOfAnyClass } = require('../utils/authHelpers');
 
 const ensureSuperAdminStaffProfile = async (user) => {
   if (user.role === 'superadmin' && !user.refStaff) {
@@ -90,11 +91,19 @@ const login = async (req, res, next) => {
       })
       .populate('refGuardian');
 
+    // Attach form teacher flag so the frontend can conditionally show register duties
+    const formTeacherFlag = await isFormTeacherOfAnyClass(
+      user._id.toString(),
+      populatedUser?.refStaff?._id?.toString() || null
+    );
+    const userWithFlag = populatedUser.toObject();
+    userWithFlag.isFormTeacher = formTeacherFlag;
+
     res.json({
       success: true,
       data: {
         accessToken,
-        user: populatedUser,
+        user: userWithFlag,
       },
     });
   } catch (error) {
@@ -150,11 +159,19 @@ const refresh = async (req, res, next) => {
       })
       .populate('refGuardian');
 
+    // Attach form teacher flag
+    const formTeacherFlag = await isFormTeacherOfAnyClass(
+      user._id.toString(),
+      populatedUser?.refStaff?._id?.toString() || null
+    );
+    const userWithFlag = populatedUser.toObject();
+    userWithFlag.isFormTeacher = formTeacherFlag;
+
     res.json({
       success: true,
       data: {
         accessToken: newAccessToken,
-        user: populatedUser,
+        user: userWithFlag,
       },
     });
   } catch (error) {
@@ -200,7 +217,16 @@ const getMe = async (req, res, next) => {
         populate: { path: 'classesAssigned', select: 'name' }
       })
       .populate('refGuardian');
-    res.json({ success: true, data: populatedUser });
+
+    // Attach form teacher flag
+    const formTeacherFlag = await isFormTeacherOfAnyClass(
+      req.user.id,
+      populatedUser?.refStaff?._id?.toString() || null
+    );
+    const userWithFlag = populatedUser.toObject();
+    userWithFlag.isFormTeacher = formTeacherFlag;
+
+    res.json({ success: true, data: userWithFlag });
   } catch (error) {
     next(error);
   }

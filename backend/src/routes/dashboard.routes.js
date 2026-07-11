@@ -4,6 +4,6 @@ const { getSummary } = require('../controllers/dashboard.controller');
 const { protect } = require('../middleware/auth');
 const { authorize } = require('../middleware/rbac');
 
-router.get('/summary', protect, authorize('superadmin', 'admin', 'teacher', 'accountant'), getSummary);
+router.get('/summary', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin', 'accountant'), getSummary);
 
 module.exports = router;

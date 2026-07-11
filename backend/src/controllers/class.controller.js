@@ -10,7 +10,7 @@ const getClasses = async (req, res, next) => {
     const filter = {};
     if (academicYearId) filter.academicYear = academicYearId;
 
-    if (req.user && req.user.role === 'teacher') {
+    if (req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher')))) {
       const { getTeacherClasses } = require('../utils/authHelpers');
       const allowedClassIds = await getTeacherClasses(req.user.id, req.user.refStaff);
       filter._id = { $in: allowedClassIds };

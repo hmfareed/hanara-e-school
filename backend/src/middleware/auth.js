@@ -32,6 +32,8 @@ const protect = async (req, res, next) => {
       email: user.email,
       refStaff: user.refStaff ? user.refStaff.toString() : null,
       refGuardian: user.refGuardian ? user.refGuardian.toString() : null,
+      secondaryCapacities: user.secondaryCapacities || [],
+      isSuperAdmin: !!user.isSuperAdmin,
     };
 
     next();
@@ -64,6 +66,8 @@ const softProtect = async (req, res, next) => {
         email: user.email,
         refStaff: user.refStaff ? user.refStaff.toString() : null,
         refGuardian: user.refGuardian ? user.refGuardian.toString() : null,
+        secondaryCapacities: user.secondaryCapacities || [],
+        isSuperAdmin: !!user.isSuperAdmin,
       };
     }
     next();

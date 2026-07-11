@@ -42,8 +42,8 @@ const authorizeClassAccess = async (req, res, next) => {
       return next();
     }
 
-    // Teachers and subject teachers: check class assignment
-    if (role === 'teacher') {
+    // Teachers and subject teachers, or system_admin acting in teaching capacity: check class assignment
+    if (role === 'teacher' || (role === 'system_admin' && req.user.secondaryCapacities && req.user.secondaryCapacities.includes('teacher'))) {
       const classId =
         req.params.classId ||
         req.query.class ||

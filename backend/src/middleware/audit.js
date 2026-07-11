@@ -1,55 +1,53 @@
-/**
- * audit.js
- *
- * Lightweight helper to write immutable audit log entries for DPC compliance.
- *
- * Usage in controllers:
- *   const { logAction } = require('../middleware/audit');
- *   await logAction(req, 'FINALIZE_REPORT_CARD', 'StudentReport', report._id, null, report);
- */
-
 const AuditLog = require('../models/AuditLog');
 const logger = require('../utils/logger');
 
 /**
- * logAction(req, action, entityType, entityId, before, after)
- *
- * @param {Object}   req        - Express request (used for actor id and IP)
- * @param {string}   action     - Uppercase action name e.g. 'UPDATE_STUDENT'
- * @param {string}   entityType - Model name e.g. 'Student', 'Invoice'
- * @param {*}        entityId   - The affected document's _id
- * @param {Object}   before     - Snapshot of the document before the change (null for create)
- * @param {Object}   after      - Snapshot of the document after the change (null for delete)
+ * auditLogger middleware
+ * Hooks into the response finish event to write to AuditLog if req.auditInfo is present.
  */
-async function logAction(req, action, entityType, entityId, before = null, after = null) {
-  try {
-    const actorId = req?.user?.id || req?.user?._id;
-    if (!actorId) {
-      logger.warn(`[Audit] Skipped logging ${action} — no actor in request`);
-      return;
+const auditLogger = (req, res, next) => {
+  res.on('finish', async () => {
+    try {
+      // Log only on successful responses when audit info was attached
+      if (res.statusCode >= 200 && res.statusCode < 300 && req.auditInfo) {
+        const { action, targetType, targetId, beforeValue, afterValue, severity = 'info' } = req.auditInfo;
+
+        if (!req.user) {
+          logger.warn('Audit logger triggered but no req.user context found');
+          return;
+        }
+
+        // Check if acting capacity is teacher or admin
+        // By default, if they are system_admin and accessing a teacher resource/route, it is 'teacher'.
+        // In other cases, they act as their primary role.
+        let actingAs = null;
+        if (req.user.role === 'system_admin') {
+          // If the action is academic (e.g. grade, attendance), tag as teacher
+          if (action.startsWith('grade.') || action.startsWith('attendance.')) {
+            actingAs = 'teacher';
+          } else {
+            actingAs = 'admin';
+          }
+        }
+
+        await AuditLog.create({
+          actorId: req.user.id,
+          actorRole: req.user.role,
+          actingAs,
+          action,
+          targetType,
+          targetId,
+          beforeValue,
+          afterValue,
+          ipAddress: req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress || '',
+          severity,
+        });
+      }
+    } catch (err) {
+      logger.error('Error saving AuditLog:', err);
     }
+  });
+  next();
+};
 
-    const ip =
-      req.ip ||
-      req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-      '';
-
-    const userAgent = req.headers['user-agent'] || '';
-
-    await AuditLog.create({
-      actor: actorId,
-      action,
-      entityType,
-      entityId,
-      before: before ? JSON.parse(JSON.stringify(before)) : null,
-      after: after ? JSON.parse(JSON.stringify(after)) : null,
-      ip,
-      userAgent,
-    });
-  } catch (err) {
-    // Audit failures must never break the main request flow — log and continue
-    logger.error(`[Audit] Failed to write audit log for ${action}: ${err.message}`);
-  }
-}
-
-module.exports = { logAction };
+module.exports = auditLogger;

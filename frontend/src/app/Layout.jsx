@@ -21,6 +21,7 @@ import {
   Settings,
   ClipboardList,
   Award,
+  BookOpenCheck,
 } from 'lucide-react';
 
 /* ── Dynamic header badge showing current academic year ── */
@@ -40,7 +41,7 @@ const ActiveYearBadge = () => {
 };
 
 const Layout = () => {
-  const { user, logout, hasRole } = useAuth();
+  const { user, logout, hasRole, activeMode, toggleActiveMode, isFormTeacher } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
@@ -74,6 +75,8 @@ const Layout = () => {
       path: '/attendance',
       icon: UserCheck,
       roles: ['superadmin', 'admin', 'teacher'],
+      // Subject-only teachers are excluded — only form teachers have register duties
+      requireFormTeacher: true,
     },
     {
       name: 'Enter Results',
@@ -86,6 +89,12 @@ const Layout = () => {
       path: '/bece',
       icon: Award,
       roles: ['superadmin', 'admin', 'teacher'],
+    },
+    {
+      name: 'Mock Exams',
+      path: '/mock-exams',
+      icon: BookOpenCheck,
+      roles: ['superadmin', 'admin', 'teacher', 'system_admin'],
     },
     {
       name: 'Classes & Subjects',
@@ -122,6 +131,8 @@ const Layout = () => {
       path: '/fees/daily-register',
       icon: ClipboardList,
       roles: ['superadmin', 'admin', 'teacher'],
+      // Subject-only teachers are excluded — only form teachers have register duties
+      requireFormTeacher: true,
     },
     {
       name: 'Settings',
@@ -131,7 +142,47 @@ const Layout = () => {
     },
   ];
 
-  const filteredItems = navItems.filter((item) => hasRole(item.roles));
+  const getNavItems = () => {
+    if (user?.role === 'system_admin') {
+      if (activeMode === 'admin') {
+        return [
+          { name: 'Admin Dashboard', path: '/', icon: LayoutDashboard },
+          { name: 'User Management', path: '/admin/users', icon: Users },
+          { name: 'System Settings', path: '/admin/settings', icon: Settings },
+          { name: 'Integrations Monitor', path: '/admin/integrations', icon: MessageSquare },
+          { name: 'Backup & Restore', path: '/admin/backups', icon: CalendarDays },
+          { name: 'Audit Log Viewer', path: '/admin/audit-logs', icon: ClipboardList },
+          { name: 'Data Protection Center', path: '/admin/data-requests', icon: UserCheck },
+        ];
+      } else {
+        // system_admin in teacher mode
+        const teacherNav = [
+          { name: 'My Classes Dashboard', path: '/', icon: LayoutDashboard },
+          { name: 'Students', path: '/students', icon: GraduationCap },
+          { name: 'Enter Results', path: '/grades', icon: ClipboardCheck },
+          { name: 'BECE Candidates', path: '/bece', icon: Award },
+          { name: 'Mock Exams', path: '/mock-exams', icon: BookOpenCheck },
+          { name: 'Settings', path: '/settings', icon: Settings },
+        ];
+        // Only form teachers / class teachers see register duties
+        if (isFormTeacher) {
+          teacherNav.splice(2, 0,
+            { name: 'Attendance', path: '/attendance', icon: UserCheck },
+            { name: 'Daily Fee Register', path: '/fees/daily-register', icon: ClipboardList },
+          );
+        }
+        return teacherNav;
+      }
+    }
+    return navItems.filter((item) => {
+      if (!hasRole(item.roles)) return false;
+      // Hide register-duty items from subject-only teachers
+      if (item.requireFormTeacher && user?.role === 'teacher' && !isFormTeacher) return false;
+      return true;
+    });
+  };
+
+  const filteredItems = getNavItems();
 
   const getRoleBadgeStyle = (role) => {
     switch (role) {
@@ -147,6 +198,8 @@ const Layout = () => {
         return 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20';
       case 'cleaner':
         return 'bg-teal-500/10 text-teal-400 border-teal-500/20';
+      case 'system_admin':
+        return 'bg-rose-500/10 text-rose-400 border-rose-500/20';
       default:
         return 'bg-slate-500/10 text-slate-400 border-slate-500/20';
     }
@@ -239,7 +292,7 @@ const Layout = () => {
                   : user?.email?.split('@')[0]}
               </p>
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border uppercase ${getRoleBadgeStyle(user?.role)}`}>
-                {user?.role === 'superadmin' ? 'headteacher' : user?.role}
+                {user?.role === 'superadmin' ? 'headteacher' : user?.role === 'system_admin' ? 'IT Admin' : user?.role}
               </span>
             </div>
           </div>
@@ -272,6 +325,33 @@ const Layout = () => {
           </div>
 
           <div className="flex items-center space-x-4">
+            {user?.role === 'system_admin' && user?.secondaryCapacities?.includes('teacher') && (
+              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <button
+                  onClick={() => activeMode !== 'admin' && toggleActiveMode()}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    activeMode === 'admin'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  Admin Panel
+                </button>
+                <button
+                  onClick={() => activeMode !== 'teacher' && toggleActiveMode()}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
+                    activeMode === 'teacher'
+                      ? 'bg-emerald-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  My Classes
+                </button>
+              </div>
+            )}
+            {user?.role === 'system_admin' && user?.secondaryCapacities?.includes('teacher') && (
+              <div className="h-8 w-px bg-slate-200"></div>
+            )}
             <div className="hidden md:flex flex-col text-right">
               <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Academic Period</span>
               <ActiveYearBadge />

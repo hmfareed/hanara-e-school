@@ -14,6 +14,7 @@
   "author": "HANARA Schools",
   "license": "ISC",
   "dependencies": {
+    "archiver": "^8.0.0",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -39,7 +40,9 @@
     "testMatch": [
       "**/tests/**/*.test.js"
     ],
-    "setupFilesAfterEnv": ["./tests/setup.js"],
+    "setupFilesAfterEnv": [
+      "./tests/setup.js"
+    ],
     "globalTeardown": "./tests/teardown.js",
     "testTimeout": 30000
   },

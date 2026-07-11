@@ -2,8 +2,8 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const ProtectedRoute = ({ children, allowedRoles }) => {
-  const { user, loading, hasRole } = useAuth();
+const ProtectedRoute = ({ children, allowedRoles, requireFormTeacher }) => {
+  const { user, loading, hasRole, isFormTeacher } = useAuth();
   const location = useLocation();
 
   if (loading) {
@@ -25,7 +25,14 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
     return <Navigate to="/" replace />;
   }
 
+  // If this route requires the user to be a form teacher, block subject-only teachers.
+  // Admins and superadmins are always allowed through.
+  if (requireFormTeacher && user.role === 'teacher' && !isFormTeacher) {
+    return <Navigate to="/" replace />;
+  }
+
   return children;
 };
 
 export default ProtectedRoute;
+
