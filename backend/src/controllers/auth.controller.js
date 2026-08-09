@@ -213,7 +213,6 @@ const getMe = async (req, res, next) => {
     const populatedUser = await User.findById(req.user.id)
       .populate({
         path: 'refStaff',
-        select: 'title photoUrl firstName lastName role classesAssigned',
         populate: { path: 'classesAssigned', select: 'name' }
       })
       .populate('refGuardian');
@@ -430,4 +429,28 @@ const changePassword = async (req, res, next) => {
   }
 };
 
-module.exports = { login, refresh, logout, getMe, registerTeacher, updateMe, changePassword };
+// GET /api/auth/public-stats
+const getPublicStats = async (req, res, next) => {
+  try {
+    const Student = require('../models/Student');
+    const Staff = require('../models/Staff');
+    const Class = require('../models/Class');
+
+    const totalStudents = await Student.countDocuments({ status: 'active' });
+    const totalStaff = await Staff.countDocuments({ employmentStatus: 'active' });
+    const totalClasses = await Class.countDocuments({});
+
+    res.json({
+      success: true,
+      data: {
+        students: totalStudents,
+        teachers: totalStaff,
+        classes: totalClasses,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { login, refresh, logout, getMe, registerTeacher, updateMe, changePassword, getPublicStats };

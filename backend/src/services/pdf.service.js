@@ -289,7 +289,13 @@ async function generateReportCardPdf({
     y -= rowH;
   });
 
-  y -= 14;
+  /* ── Grading Scale Legend ───────────────────────────── */
+  page.drawRectangle({ x: tableLeft, y: y - 18, width: tableWidth, height: 16, color: ltGray });
+  page.drawText('GES GRADING KEY: 80-100: A (Highest Distinction) | 70-79: B (Credit) | 60-69: C (Good) | 50-59: D (Pass) | 0-49: F (Fail)', {
+    x: tableLeft + 6, y: y - 12, font: bold, size: 6.5, color: dark,
+  });
+
+  y -= 26;
 
   /* ── Attendance Summary ─────────────────────────────── */
   const att = report?.attendanceSummary || { present: 0, absent: 0, total: 0 };
@@ -354,6 +360,41 @@ async function generateReportCardPdf({
 
   const pdfBytes = await doc.save();
   return Buffer.from(pdfBytes);
+}
+
+/**
+ * generateClassReportCardZip(cards)
+ * cards: Array<{ filename: string, student, report, grades, gradingDetails, schoolProfile, academicYear, term }>
+ * Returns a Buffer containing a zip archive of all class report card PDFs.
+ */
+async function generateClassReportCardZip(cards) {
+  const archiver = require('archiver');
+  const { PassThrough } = require('stream');
+
+  const pdfFiles = await Promise.all(
+    cards.map(async (item) => {
+      const buffer = await generateReportCardPdf(item);
+      return { filename: item.filename, buffer };
+    })
+  );
+
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const passThrough = new PassThrough();
+    passThrough.on('data', (chunk) => chunks.push(chunk));
+    passThrough.on('end', () => resolve(Buffer.concat(chunks)));
+    passThrough.on('error', reject);
+
+    const archive = archiver('zip', { zlib: { level: 6 } });
+    archive.on('error', reject);
+    archive.pipe(passThrough);
+
+    pdfFiles.forEach(({ filename, buffer }) => {
+      archive.append(buffer, { name: filename });
+    });
+
+    archive.finalize();
+  });
 }
 
 
@@ -568,6 +609,6 @@ async function generateMockSlipZip(slips) {
   });
 }
 
-module.exports = { generateReceipt, generateReportCardPdf, generateMockSlipPdf, generateMockSlipZip };
+module.exports = { generateReceipt, generateReportCardPdf, generateClassReportCardZip, generateMockSlipPdf, generateMockSlipZip };
 
 

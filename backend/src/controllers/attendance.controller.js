@@ -199,4 +199,80 @@ const getStudentAttendanceSummary = async (req, res, next) => {
   }
 };
 
-module.exports = { getAttendance, bulkMarkAttendance, getStudentAttendanceSummary };
+// GET /api/attendance/history
+const getAttendanceHistory = async (req, res, next) => {
+  try {
+    const { classId, subjectId, timeframe, from, to, search } = req.query;
+
+    const filter = {};
+    if (classId) filter.class = classId;
+    if (subjectId) filter.subject = subjectId;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    if (timeframe === 'yesterday') {
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      filter.date = { $gte: yesterday, $lt: today };
+    } else if (timeframe === 'last_week') {
+      const lastWeek = new Date(today);
+      lastWeek.setDate(today.getDate() - 7);
+      filter.date = { $gte: lastWeek, $lte: new Date() };
+    } else if (timeframe === 'last_month') {
+      const lastMonth = new Date(today);
+      lastMonth.setDate(today.getDate() - 30);
+      filter.date = { $gte: lastMonth, $lte: new Date() };
+    } else if (from || to) {
+      filter.date = {};
+      if (from) filter.date.$gte = new Date(from);
+      if (to) filter.date.$lte = new Date(to);
+    }
+
+    const records = await AttendanceRecord.find(filter)
+      .populate('student', 'firstName lastName admissionNumber photoUrl currentClass')
+      .populate('class', 'name')
+      .sort({ date: -1 });
+
+    let filteredRecords = records;
+    if (search) {
+      const query = search.toLowerCase();
+      filteredRecords = records.filter(
+        (r) =>
+          r.student &&
+          (r.student.firstName?.toLowerCase().includes(query) ||
+            r.student.lastName?.toLowerCase().includes(query) ||
+            r.student.admissionNumber?.toLowerCase().includes(query))
+      );
+    }
+
+    const summary = filteredRecords.reduce(
+      (acc, r) => {
+        acc[r.status] = (acc[r.status] || 0) + 1;
+        acc.total++;
+        return acc;
+      },
+      { present: 0, absent: 0, late: 0, excused: 0, total: 0 }
+    );
+
+    summary.rate = summary.total > 0 ? Math.round(((summary.present + summary.late) / summary.total) * 100) : 100;
+
+    res.json({
+      success: true,
+      data: {
+        summary,
+        records: filteredRecords,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = {
+  getAttendance,
+  bulkMarkAttendance,
+  getStudentAttendanceSummary,
+  getAttendanceHistory,
+};
+

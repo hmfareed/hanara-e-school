@@ -15,6 +15,8 @@ const {
   getClassGrades,
   finalizeClassTerm,
   getReportCardPdf,
+  getClassReportCardsZip,
+  getClassMasterBroadsheet,
 } = require('../controllers/grade.controller');
 
 // POST /api/grades - enter grade, protected by requireSubjectAssignment
@@ -34,6 +36,12 @@ router.get('/student/:studentId/report-card', protect, authorize('superadmin', '
 
 // GET /api/grades/student/:studentId/report-card/pdf - download report card as PDF
 router.get('/student/:studentId/report-card/pdf', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), getReportCardPdf);
+
+// GET /api/grades/class/:classId/report-card/zip - download all class report cards as ZIP archive
+router.get('/class/:classId/report-card/zip', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), getClassReportCardsZip);
+
+// GET /api/grades/class/:classId/master - master broadsheet with all subjects and student ranking
+router.get('/class/:classId/master', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), getClassMasterBroadsheet);
 
 // GET /api/grades/class/:classId/subject/:subjectId - get class grades, protected by requireSubjectAssignment
 router.get('/class/:classId/subject/:subjectId', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), requireSubjectAssignment, getClassGrades);

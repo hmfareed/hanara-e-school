@@ -9,7 +9,13 @@ const getStaff = async (req, res, next) => {
     const { page = 1, limit = 20, role, status, search } = req.query;
 
     const filter = {};
-    if (role) filter.role = role;
+    if (role) {
+      if (role.includes(',')) {
+        filter.role = { $in: role.split(',') };
+      } else {
+        filter.role = role;
+      }
+    }
     if (status) filter.employmentStatus = status;
     if (search) {
       filter.$or = [

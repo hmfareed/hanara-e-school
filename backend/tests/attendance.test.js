@@ -104,7 +104,7 @@ describe('Attendance API & authorization', () => {
 
       expect(res.status).toBe(403);
       expect(res.body.success).toBe(false);
-      expect(res.body.message).toContain('permission');
+      expect(res.body.message).toContain('Access denied');
     });
 
     it('should allow admin to get register for any class', async () => {

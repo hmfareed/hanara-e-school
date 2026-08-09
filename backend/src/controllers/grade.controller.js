@@ -4,7 +4,7 @@ const SubjectAssignment = require('../models/SubjectAssignment');
 const Student = require('../models/Student');
 const SchoolProfile = require('../models/SchoolProfile');
 const { calculateClassRankings, getGradeAndRemark, loadConfig } = require('../services/grading.service');
-const { generateReportCardPdf } = require('../services/pdf.service');
+const { generateReportCardPdf, generateClassReportCardZip } = require('../services/pdf.service');
 const { logAction } = require('../middleware/audit');
 
 
@@ -86,9 +86,12 @@ const enterGrade = async (req, res, next) => {
       finalHomework4 = Number(homework4) || 0;
       finalRawExamScore = Number(rawExamScore) || 0;
 
-      finalRawClassScore = finalClassExercise1 + finalClassExercise2 + finalClassExercise3 + finalClassExercise4 + finalWeeklyTest + finalHomework1 + finalHomework2 + finalHomework3 + finalHomework4;
-      finalClassScore = parseFloat(((finalRawClassScore / 80) * 30).toFixed(2));
-      finalExamScore = parseFloat(((finalRawExamScore / 100) * 70).toFixed(2));
+      // Continuous Assessment (CA) raw total = Class Exercise (10+10+5+5=30) + Homework (10+10+5+5=30) + Weekly Test (20) = 80 max
+      finalRawClassScore = finalClassExercise1 + finalClassExercise2 + finalClassExercise3 + finalClassExercise4 + finalHomework1 + finalHomework2 + finalHomework3 + finalHomework4 + finalWeeklyTest;
+      // CA is scaled to 40%
+      finalClassScore = parseFloat(((finalRawClassScore / 80) * 40).toFixed(2));
+      // Exam is scaled to 60% (out of 100 max)
+      finalExamScore = parseFloat(((finalRawExamScore / 100) * 60).toFixed(2));
     } else {
       // Fallback/Legacy mode: Use classScore and examScore directly
       finalClassScore = Number(req.body.classScore) || 0;
@@ -120,6 +123,13 @@ const enterGrade = async (req, res, next) => {
       },
       { new: true, upsert: true, runValidators: true }
     );
+
+    // Auto sync class rankings & student report cards live
+    try {
+      await calculateClassRankings(classId, academicYear, term);
+    } catch (e) {
+      console.error('Auto rank calculation error:', e);
+    }
 
     res.status(201).json({ success: true, data: grade });
   } catch (error) {
@@ -419,6 +429,232 @@ const getReportCardPdf = async (req, res, next) => {
   }
 };
 
+// GET /api/grades/class/:classId/report-card/zip
+const getClassReportCardsZip = async (req, res, next) => {
+  try {
+    const { classId } = req.params;
+    const { academicYear, term } = req.query;
+
+    if (!academicYear || !term) {
+      return res.status(400).json({
+        success: false,
+        message: 'academicYear and term query parameters are required',
+      });
+    }
+
+    const Class = require('../models/Class');
+    const ClassLevel = require('../models/ClassLevel');
+
+    const targetClass = await Class.findById(classId);
+    if (!targetClass) {
+      return res.status(404).json({ success: false, message: 'Class not found' });
+    }
+
+    let levelCategory = 'Primary';
+    if (targetClass.level) {
+      const lvl = await ClassLevel.findById(targetClass.level);
+      levelCategory = lvl?.category || 'Primary';
+    }
+
+    const students = await Student.find({ currentClass: classId, status: 'active' })
+      .sort({ lastName: 1, firstName: 1 });
+
+    if (students.length === 0) {
+      return res.status(404).json({ success: false, message: 'No active students found in this class' });
+    }
+
+    const schoolProfile = await SchoolProfile.findOne({});
+
+    const cardsData = await Promise.all(
+      students.map(async (student) => {
+        student.currentClass = targetClass;
+
+        const grades = await Grade.find({
+          student: student._id,
+          academicYear,
+          term,
+        }).populate('subject', 'name code _id');
+
+        const gradingDetails = await Promise.all(
+          grades.map(async (g) => {
+            const { grade, label } = await getGradeAndRemark(g.totalScore, levelCategory);
+            return { subjectId: g.subject?._id, grade, label };
+          })
+        );
+
+        const report = await StudentReport.findOne({
+          student: student._id,
+          class: classId,
+          academicYear,
+          term,
+        });
+
+        const safeStudentName = `${student.firstName}_${student.lastName}`.replace(/\s+/g, '_');
+        const filename = `ReportCard_${student.admissionNumber || safeStudentName}_Term${term}.pdf`;
+
+        return {
+          filename,
+          student,
+          report,
+          grades,
+          gradingDetails,
+          schoolProfile,
+          academicYear,
+          term,
+        };
+      })
+    );
+
+    const zipBuffer = await generateClassReportCardZip(cardsData);
+
+    const safeClassName = targetClass.name.replace(/\s+/g, '_');
+    const zipFilename = `ReportCards_Class_${safeClassName}_Term${term}_${academicYear.replace('/', '-')}.zip`;
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${zipFilename}"`);
+    res.setHeader('Content-Length', zipBuffer.length);
+    res.send(zipBuffer);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/grades/class/:classId/master
+const getClassMasterBroadsheet = async (req, res, next) => {
+  try {
+    const { classId } = req.params;
+    const { academicYear, term } = req.query;
+
+    if (!classId || !academicYear || !term) {
+      return res.status(400).json({ success: false, message: 'classId, academicYear, and term are required' });
+    }
+
+    const Class = require('../models/Class');
+    const Student = require('../models/Student');
+    const Grade = require('../models/Grade');
+    const Subject = require('../models/Subject');
+    const ClassSubjectAssignment = require('../models/ClassSubjectAssignment');
+
+    const classDoc = await Class.findById(classId).populate('level', 'displayName category');
+    if (!classDoc) {
+      return res.status(404).json({ success: false, message: 'Class not found' });
+    }
+
+    // Auto calculate class rankings to ensure fresh data
+    await calculateClassRankings(classId, academicYear, term);
+
+    // Fetch subjects for class
+    const subAssignments = await ClassSubjectAssignment.find({ class: classId }).populate('subject', 'name code type');
+    let subjects = subAssignments.map((sa) => sa.subject).filter(Boolean);
+    if (subjects.length === 0 && classDoc.level) {
+      subjects = await Subject.find({ appliesToLevels: classDoc.level._id }).select('name code type');
+    }
+
+    // Fetch active students
+    const students = await Student.find({ currentClass: classId, status: 'active' })
+      .sort({ lastName: 1, firstName: 1 })
+      .select('firstName lastName admissionNumber gender photoUrl');
+
+    const studentIds = students.map((s) => s._id);
+
+    // Fetch grades
+    const grades = await Grade.find({
+      class: classId,
+      academicYear,
+      term,
+      student: { $in: studentIds },
+    });
+
+    const gradeMap = {};
+    grades.forEach((g) => {
+      const sKey = g.student.toString();
+      const subKey = g.subject.toString();
+      if (!gradeMap[sKey]) gradeMap[sKey] = {};
+      gradeMap[sKey][subKey] = g;
+    });
+
+    // Fetch student reports
+    const reports = await StudentReport.find({
+      class: classId,
+      academicYear,
+      term,
+      student: { $in: studentIds },
+    });
+
+    const reportMap = {};
+    reports.forEach((r) => {
+      reportMap[r.student.toString()] = r;
+    });
+
+    // Build Student Rows
+    const studentRows = students.map((student) => {
+      const sKey = student._id.toString();
+      const sGrades = gradeMap[sKey] || {};
+      const sReport = reportMap[sKey] || {};
+
+      let totalOverallScore = 0;
+      let subjectCount = 0;
+
+      const subjectMarks = subjects.map((sub) => {
+        const subKey = sub._id.toString();
+        const g = sGrades[subKey];
+        if (g) {
+          totalOverallScore += g.totalScore || 0;
+          subjectCount += 1;
+        }
+        return {
+          subjectId: sub._id,
+          subjectCode: sub.code || sub.name.substring(0, 3).toUpperCase(),
+          subjectName: sub.name,
+          classScore: g ? g.classScore : 0,
+          examScore: g ? g.examScore : 0,
+          totalScore: g ? g.totalScore : 0,
+        };
+      });
+
+      const averageScore = subjectCount > 0 ? parseFloat((totalOverallScore / subjectCount).toFixed(2)) : (sReport.studentAverage || 0);
+
+      return {
+        studentId: student._id,
+        fullName: `${student.firstName} ${student.lastName}`,
+        admissionNumber: student.admissionNumber,
+        gender: student.gender,
+        photoUrl: student.photoUrl,
+        position: sReport.position || null,
+        averageScore,
+        totalOverallScore: parseFloat(totalOverallScore.toFixed(2)),
+        subjectMarks,
+      };
+    });
+
+    // Sort from Highest Average Student to Lowest Student
+    studentRows.sort((a, b) => b.averageScore - a.averageScore);
+
+    studentRows.forEach((row, idx) => {
+      if (!row.position) {
+        row.position = idx + 1;
+      }
+    });
+
+    res.json({
+      success: true,
+      data: {
+        classDetails: {
+          _id: classDoc._id,
+          name: classDoc.name,
+          levelName: classDoc.level?.displayName || 'Basic Education',
+        },
+        academicYear,
+        term,
+        subjects: subjects.map(s => ({ _id: s._id, name: s.name, code: s.code || s.name.substring(0, 3).toUpperCase() })),
+        students: studentRows,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   enterGrade,
   updateConduct,
@@ -428,5 +664,8 @@ module.exports = {
   getClassGrades,
   finalizeClassTerm,
   getReportCardPdf,
+  getClassReportCardsZip,
+  getClassMasterBroadsheet,
 };
+
 

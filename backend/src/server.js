@@ -9,9 +9,14 @@ connectDB();
 
 const PORT = env.PORT || 5000;
 
+const socketService = require('./services/socket.service');
+
 const server = app.listen(PORT, () => {
   logger.info(`Server is running in ${env.NODE_ENV} mode on port ${PORT}`);
 });
+
+// Initialize Socket.io
+socketService.init(server);
 
 // Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {

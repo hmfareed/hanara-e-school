@@ -11,6 +11,8 @@ const envSchema = z.object({
   CLIENT_ORIGIN: z.string().default('http://localhost:5173'),
   SEED_ADMIN_EMAIL: z.string().email().default('admin@hanaraschools.edu.gh'),
   SEED_ADMIN_PASSWORD: z.string().default('Admin@2026'),
+  SEED_ACCOUNTANT_EMAIL: z.string().email().default('acc@hanaraschools.edu.gh'),
+  SEED_ACCOUNTANT_PASSWORD: z.string().default('Accountant@2026'),
 });
 
 const parsed = envSchema.safeParse(process.env);

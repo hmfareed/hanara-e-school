@@ -261,29 +261,7 @@ const seed = async () => {
       isActive: true,
     });
 
-    const adminStaff = await Staff.create({
-      firstName: 'Abubakar', lastName: 'Sadik', gender: 'male',
-      dob: new Date('1985-05-15'), phone: '0244123456',
-      email: 'abubakar@hanaraschools.edu.gh',
-      qualification: 'B.Ed. Educational Administration',
-      employmentDate: new Date('2020-09-01'), employmentStatus: 'active', role: 'admin',
-    });
-    await User.create({
-      email: 'abubakar@hanaraschools.edu.gh', phone: '0244123456',
-      passwordHash: 'Admin@2026', role: 'admin', refStaff: adminStaff._id, isActive: true,
-    });
-
-    const teacherStaff = await Staff.create({
-      firstName: 'Mariam', lastName: 'Issah', gender: 'female',
-      dob: new Date('1990-07-20'), phone: '0244223344',
-      email: 'mariam@hanaraschools.edu.gh',
-      qualification: 'Diploma in Basic Education',
-      employmentDate: new Date('2022-01-15'), employmentStatus: 'active', role: 'teacher',
-    });
-    await User.create({
-      email: 'mariam@hanaraschools.edu.gh', phone: '0244223344',
-      passwordHash: 'Teacher@2026', role: 'teacher', refStaff: teacherStaff._id, isActive: true,
-    });
+    // Seeded staff members Abubakar Sadik and Mariam Issah have been removed per request.
 
     const fareedStaff = await Staff.create({
       firstName: 'Mohammed', lastName: 'Fareed', gender: 'male',
@@ -298,16 +276,19 @@ const seed = async () => {
       isActive: true, approvalStatus: 'approved',
     });
 
+    const accountantEmail = process.env.SEED_ACCOUNTANT_EMAIL || 'acc@hanaraschools.edu.gh';
+    const accountantPassword = process.env.SEED_ACCOUNTANT_PASSWORD || 'Accountant@2026';
+
     const accountantStaff = await Staff.create({
       firstName: 'Joseph', lastName: 'Mensah', gender: 'male',
       dob: new Date('1988-11-05'), phone: '0244334455',
-      email: 'joseph@hanaraschools.edu.gh',
+      email: accountantEmail,
       qualification: 'B.Com. Accounting',
       employmentDate: new Date('2021-06-01'), employmentStatus: 'active', role: 'accountant',
     });
     await User.create({
-      email: 'joseph@hanaraschools.edu.gh', phone: '0244334455',
-      passwordHash: 'Accountant@2026', role: 'accountant', refStaff: accountantStaff._id, isActive: true,
+      email: accountantEmail, phone: '0244334455',
+      passwordHash: accountantPassword, role: 'accountant', refStaff: accountantStaff._id, isActive: true,
     });
 
     const driverMba = await Staff.create({
@@ -352,7 +333,7 @@ const seed = async () => {
         level: levelMap[def.levelCode],
         name: def.name,
         academicYear: academicYear._id,
-        classTeacher: def.levelCode === 'BS5' ? fareedStaff._id : (def.levelCode === 'BS2' ? teacherStaff._id : null),
+        classTeacher: def.levelCode === 'BS5' ? fareedStaff._id : null,
         capacity: 40,
       });
       // Attach levelOrder for student DOB calculations
@@ -361,8 +342,6 @@ const seed = async () => {
     }
 
     // Assign teachers to their classes
-    teacherStaff.classesAssigned = [createdClasses[0]._id]; // Primary 2
-    await teacherStaff.save();
     fareedStaff.classesAssigned = [createdClasses[3]._id]; // Primary 5
     await fareedStaff.save();
 

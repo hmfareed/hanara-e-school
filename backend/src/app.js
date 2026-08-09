@@ -30,6 +30,11 @@ const beceRoutes = require('./routes/bece.routes');
 const gradingScaleRoutes = require('./routes/gradingScale.routes');
 const adminRoutes = require('./routes/admin.routes');
 const mockExamRoutes = require('./routes/mockExam.routes');
+const offlineAssignmentRoutes = require('./routes/offlineAssignment.routes');
+const lessonPlanRoutes = require('./routes/lessonPlan.routes');
+const behaviourRoutes = require('./routes/behaviour.routes');
+const learningResourceRoutes = require('./routes/learningResource.routes');
+const teacherMessageRoutes = require('./routes/teacherMessage.routes');
 
 const app = express();
 
@@ -53,9 +58,9 @@ app.use(
   })
 );
 
-// Parse JSON and URL-encoded request body
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Parse JSON and URL-encoded request body (increase limit to 50mb for base64 photo uploads)
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Cookie parser for refresh token cookie
 app.use(cookieParser());
@@ -78,6 +83,7 @@ app.use('/api/sms', smsRoutes);
 app.use('/api/parent', parentRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/teachers', teacherRoutes);
+app.use('/api/teacher', teacherRoutes);
 app.use('/api/grades', gradeRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/transport', transportRoutes);
@@ -86,6 +92,11 @@ app.use('/api/bece-candidates', beceRoutes);
 app.use('/api/grading-scales', gradingScaleRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/mock-exams', mockExamRoutes);
+app.use('/api/offline-assignments', offlineAssignmentRoutes);
+app.use('/api/lesson-plans', lessonPlanRoutes);
+app.use('/api/behaviour-records', behaviourRoutes);
+app.use('/api/learning-resources', learningResourceRoutes);
+app.use('/api/teacher-messages', teacherMessageRoutes);
 
 
 

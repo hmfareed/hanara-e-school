@@ -13,6 +13,7 @@ const {
   createSeries,
   listSeries,
   closeSeries,
+  deleteSeries,
   getMyEntries,
   getEntryScores,
   saveScores,
@@ -34,6 +35,7 @@ router.use(protect);
 router.post('/series', createSeries);
 router.get('/series', listSeries);
 router.patch('/series/:id/close', closeSeries);
+router.delete('/series/:id', deleteSeries);
 
 /* ── Teacher entry flow ── */
 // List teacher's JHS 3 subject/class combos for a series

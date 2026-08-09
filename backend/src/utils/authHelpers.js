@@ -16,16 +16,28 @@ const canGradeSubject = async (userId, classId, subjectId, academicYear) => {
   const AcademicYear = require('../models/AcademicYear');
 
   const user = await User.findById(userId);
-  if (user && user.refStaff) {
-    const academicYearDoc = await AcademicYear.findOne({ name: academicYear });
-    if (academicYearDoc) {
-      const classSubAssignment = await ClassSubjectAssignment.findOne({
-        teacher: user.refStaff,
-        class: classId,
-        subject: subjectId,
-        academicYear: academicYearDoc._id,
-      });
-      if (classSubAssignment) return true;
+  if (user) {
+    // Check if designated formTeacher of the class
+    const isForm = await isFormTeacherOf(userId, classId);
+    if (isForm) return true;
+
+    // Check if designated classTeacher of the class via staff profile
+    if (user.refStaff) {
+      const classDoc = await Class.findById(classId);
+      if (classDoc && classDoc.classTeacher && classDoc.classTeacher.toString() === user.refStaff.toString()) {
+        return true;
+      }
+
+      const academicYearDoc = await AcademicYear.findOne({ name: academicYear });
+      if (academicYearDoc) {
+        const classSubAssignment = await ClassSubjectAssignment.findOne({
+          teacher: user.refStaff,
+          class: classId,
+          subject: subjectId,
+          academicYear: academicYearDoc._id,
+        });
+        if (classSubAssignment) return true;
+      }
     }
   }
 
@@ -49,9 +61,18 @@ const getTeacherClasses = async (userId, refStaffId) => {
     }
     const classSubAssignments = await ClassSubjectAssignment.find({ teacher: refStaffId }).distinct('class');
     classIds = classIds.concat(classSubAssignments.map(id => id.toString()));
+    
+    // Classes where designated classTeacher
+    const classTeacherClasses = await Class.find({ classTeacher: refStaffId }).distinct('_id');
+    classIds = classIds.concat(classTeacherClasses.map(id => id.toString()));
   }
   const subjectClasses = await SubjectAssignment.find({ teacher: userId, isActive: true }).distinct('class');
   classIds = classIds.concat(subjectClasses.map(id => id.toString()));
+
+  // Classes where designated formTeacher
+  const formTeacherClasses = await Class.find({ formTeacher: userId }).distinct('_id');
+  classIds = classIds.concat(formTeacherClasses.map(id => id.toString()));
+
   return [...new Set(classIds)];
 };
 
@@ -67,13 +88,16 @@ const getTeacherClasses = async (userId, refStaffId) => {
  * Subject-only teachers are NOT eligible for those duties.
  */
 const isFormTeacherOfAnyClass = async (userId, refStaffId) => {
-  // Check formTeacher (User ObjectId reference)
-  const formTeacherClass = await Class.findOne({ formTeacher: userId });
-  if (formTeacherClass) return true;
+  const uId = userId?.toString();
+  const sId = (refStaffId?._id || refStaffId)?.toString();
 
-  // Check classTeacher (Staff ObjectId reference)
-  if (refStaffId) {
-    const classTeacherClass = await Class.findOne({ classTeacher: refStaffId });
+  if (uId) {
+    const formTeacherClass = await Class.findOne({ formTeacher: uId });
+    if (formTeacherClass) return true;
+  }
+
+  if (sId) {
+    const classTeacherClass = await Class.findOne({ classTeacher: sId });
     if (classTeacherClass) return true;
   }
 

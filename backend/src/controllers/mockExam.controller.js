@@ -154,12 +154,38 @@ const closeSeries = async (req, res, next) => {
   }
 };
 
+// DELETE /api/mock-exams/series/:id
+const deleteSeries = async (req, res, next) => {
+  try {
+    if (!isAdminOrHT(req.user)) {
+      return res.status(403).json({ success: false, message: 'Not authorised to delete mock exam series' });
+    }
+
+    const seriesId = req.params.id;
+    const series = await MockExamSeries.findById(seriesId);
+    if (!series) return res.status(404).json({ success: false, message: 'Series not found' });
+
+    // Cascade delete mock aggregates, results, and entries
+    await MockAggregate.deleteMany({ seriesId });
+    await MockExamResult.deleteMany({ seriesId });
+    await MockSubjectEntry.deleteMany({ seriesId });
+    await series.deleteOne();
+
+    logger.info(`Mock series "${series.name}" (${seriesId}) deleted by user ${req.user.id}`);
+    res.json({ success: true, message: `Mock series "${series.name}" and all associated results deleted successfully.` });
+  } catch (err) {
+    next(err);
+  }
+};
+
 /* ─────────────────────────────────────────────────────────
    TEACHER ENTRY
 ───────────────────────────────────────────────────────── */
 
 // GET /api/mock-exams/:seriesId/my-entries
-// Returns this teacher's JHS 3 class/subject assignments with their entry status
+// Returns this teacher's JHS 3 class/subject assignments with their entry status.
+// Checks BOTH SubjectAssignment (User._id based) AND ClassSubjectAssignment (Staff._id based)
+// since the admin UI creates ClassSubjectAssignment records.
 const getMyEntries = async (req, res, next) => {
   try {
     const { seriesId } = req.params;
@@ -170,9 +196,10 @@ const getMyEntries = async (req, res, next) => {
     const jhs3LevelIds = await getJhs3LevelIds();
     const jhs3Classes = await Class.find({ level: { $in: jhs3LevelIds } }).select('_id name');
     const jhs3ClassIds = jhs3Classes.map((c) => c._id);
+    const jhs3ClassIdStrings = new Set(jhs3ClassIds.map((id) => id.toString()));
 
-    // Find this teacher's active subject assignments for JHS 3 classes
-    const assignments = await SubjectAssignment.find({
+    // ── Source 1: SubjectAssignment (teacher = User._id) ──────────────────────
+    const subjectAssignments = await SubjectAssignment.find({
       teacher: req.user.id,
       class: { $in: jhs3ClassIds },
       isActive: true,
@@ -180,22 +207,65 @@ const getMyEntries = async (req, res, next) => {
       .populate('class', 'name')
       .populate('subject', 'name code');
 
-    // For each assignment, find or describe the MockSubjectEntry
+    // ── Source 2: ClassSubjectAssignment (teacher = Staff._id via refStaff) ───
+    const ClassSubjectAssignment = require('../models/ClassSubjectAssignment');
+    const User = require('../models/User');
+
+    const teacherUser = await User.findById(req.user.id);
+    let classSubjectAssignments = [];
+    if (teacherUser?.refStaff) {
+      const raw = await ClassSubjectAssignment.find({
+        teacher: teacherUser.refStaff,
+      })
+        .populate('class', 'name')
+        .populate('subject', 'name code');
+
+      // Filter to JHS 3 classes only
+      classSubjectAssignments = raw.filter((a) =>
+        a.class && jhs3ClassIdStrings.has(a.class._id.toString())
+      );
+    }
+
+    // ── Merge, deduplicating by class+subject ─────────────────────────────────
+    const seen = new Set();
+    const merged = [];
+
+    const addIfUnseen = (classDoc, subjectDoc, assignmentId) => {
+      const key = `${classDoc._id}-${subjectDoc._id}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push({ assignmentId, class: classDoc, subject: subjectDoc });
+      }
+    };
+
+    for (const sa of subjectAssignments) {
+      addIfUnseen(sa.class, sa.subject, sa._id);
+    }
+    for (const csa of classSubjectAssignments) {
+      addIfUnseen(csa.class, csa.subject, csa._id);
+    }
+
+    // ── Attach MockSubjectEntry status to each merged assignment ───────────────
     const entries = await Promise.all(
-      assignments.map(async (sa) => {
+      merged.map(async ({ assignmentId, class: classDoc, subject: subjectDoc }) => {
         const entry = await MockSubjectEntry.findOne({
           seriesId,
-          classId: sa.class._id,
-          subjectId: sa.subject._id,
+          classId: classDoc._id,
+          subjectId: subjectDoc._id,
         });
 
+        // If no entry yet, fetch the real student count so the teacher card
+        // shows the correct total rather than 0.
+        const studentCount = entry?.studentCount
+          || (await Student.countDocuments({ currentClass: classDoc._id, status: 'active' }));
+
         return {
-          assignmentId: sa._id,
-          class: sa.class,
-          subject: sa.subject,
+          assignmentId,
+          class: classDoc,
+          subject: subjectDoc,
           entryId: entry?._id || null,
           status: entry?.status || 'not_started',
-          studentCount: entry?.studentCount || 0,
+          studentCount,
           enteredCount: entry?.enteredCount || 0,
           submittedAt: entry?.submittedAt || null,
           isCore: entry?.isCore ?? false,
@@ -419,10 +489,19 @@ const submitEntry = async (req, res, next) => {
     entry.submittedAt = new Date();
     await entry.save();
 
-    // Recompute rankings for the class
-    recomputeRankings(seriesId, entry.classId.toString()).catch((e) =>
-      logger.warn('ranking recompute warning:', e.message)
-    );
+    // Trigger aggregate and ranking recomputation for the class
+    try {
+      const students = await Student.find({ currentClass: entry.classId, status: 'active' }).select('_id');
+      const studentIds = students.map((s) => s._id.toString());
+
+      // Recompute aggregates for all affected students in this class now that the subject is submitted
+      await Promise.all(studentIds.map((sid) => recomputeAggregate(seriesId, sid)));
+
+      // Recompute rankings for the class (dense-ranks complete students)
+      await recomputeRankings(seriesId, entry.classId.toString());
+    } catch (e) {
+      logger.warn('Error recomputing aggregates and rankings on submit:', e.message);
+    }
 
     res.json({ success: true, data: entry });
   } catch (err) {
@@ -620,26 +699,27 @@ const getClassGradesGrid = async (req, res, next) => {
     });
 
     // Get all results
-    const results = await MockExamResult.find({ seriesId, classId }).select('studentId subjectId grade');
-    const resultMap = {}; // resultMap[studentId][subjectId] = grade
+    const results = await MockExamResult.find({ seriesId, classId }).select('studentId subjectId rawScore grade');
+    const resultMap = {}; // resultMap[studentId][subjectId] = { rawScore, grade }
     results.forEach((r) => {
       const stuId = r.studentId.toString();
       const subId = r.subjectId.toString();
       if (!resultMap[stuId]) resultMap[stuId] = {};
-      resultMap[stuId][subId] = r.grade;
+      resultMap[stuId][subId] = { rawScore: r.rawScore ?? null, grade: r.grade ?? null };
     });
 
     // Build grid rows
     const rows = students.map((s) => {
-      const studentGrades = {};
+      const studentScores = {};
       subjects.forEach((sub) => {
         const subId = sub._id.toString();
         const status = entryStatusMap[subId];
-        // Only show grade if status is 'submitted'
+        // Only show score/grade if status is 'submitted'
         if (status === 'submitted') {
-          studentGrades[subId] = resultMap[s._id.toString()]?.[subId] ?? 'N/A';
+          const cell = resultMap[s._id.toString()]?.[subId];
+          studentScores[subId] = cell ?? { rawScore: null, grade: null };
         } else {
-          studentGrades[subId] = 'N/A';
+          studentScores[subId] = null; // not yet submitted
         }
       });
 
@@ -647,7 +727,7 @@ const getClassGradesGrid = async (req, res, next) => {
         studentId: s._id,
         name: `${s.firstName} ${s.lastName}`,
         admissionNumber: s.admissionNumber || '—',
-        grades: studentGrades,
+        scores: studentScores,
       };
     });
 
@@ -846,6 +926,7 @@ module.exports = {
   createSeries,
   listSeries,
   closeSeries,
+  deleteSeries,
   getMyEntries,
   getEntryScores,
   saveScores,
