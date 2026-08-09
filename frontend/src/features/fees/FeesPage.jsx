@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Receipt, FileText, CreditCard, ClipboardList } from 'lucide-react';
 import FeeStructuresTab from './FeeStructuresTab';
 import InvoicesTab from './InvoicesTab';
@@ -13,7 +14,14 @@ const TABS = [
 ];
 
 const FeesPage = () => {
-  const [activeTab, setActiveTab] = useState('structures');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState(tabParam || 'structures');
+
+  const handleTabChange = (tabId) => {
+    setActiveTab(tabId);
+    setSearchParams({ tab: tabId });
+  };
 
   return (
     <div className="space-y-6">
@@ -37,7 +45,7 @@ const FeesPage = () => {
               <button
                 key={tab.id}
                 id={`fees-tab-${tab.id}`}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`flex items-center gap-2 px-6 py-4 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors ${
                   isActive
                     ? 'border-emerald-600 text-emerald-700 bg-emerald-50/60'

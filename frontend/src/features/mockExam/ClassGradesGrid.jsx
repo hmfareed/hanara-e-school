@@ -82,19 +82,27 @@ const ClassGradesGrid = ({ seriesId }) => {
                     {row.name}
                   </td>
                   {subjects.map((sub) => {
-                    const grade = row.grades[sub._id];
-                    const isNa = grade === 'N/A';
+                    const cell = row.scores?.[sub._id];
+                    const hasData = cell && cell.rawScore !== null && cell.grade !== null;
+                    const rawScore = hasData ? cell.rawScore : null;
+                    const grade = hasData ? cell.grade : null;
+
                     return (
                       <td key={sub._id} className="py-2.5 px-3 text-center">
-                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-xl font-bold border text-xs ${
-                          isNa
-                            ? 'bg-slate-50 text-slate-400 border-slate-100'
-                            : grade === 9
-                            ? 'bg-red-50 text-red-600 border-red-100'
-                            : 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                        }`}>
-                          {grade}
-                        </span>
+                        {!hasData ? (
+                          <span className="text-slate-300 font-semibold select-none">—</span>
+                        ) : (
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span className="font-bold text-slate-800 text-sm">{rawScore}</span>
+                            <span className={`inline-flex items-center justify-center w-5 h-5 rounded-md font-extrabold border text-[10px] ${
+                              grade === 9
+                                ? 'bg-red-50 text-red-600 border-red-100'
+                                : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                            }`} title={`Grade ${grade}`}>
+                              {grade}
+                            </span>
+                          </div>
+                        )}
                       </td>
                     );
                   })}

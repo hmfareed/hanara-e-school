@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
+import { connectSocket, disconnectSocket } from '../services/socket';
 
 const AuthContext = createContext(null);
 
@@ -61,6 +62,15 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
+  // Synchronize real-time socket connection with user session lifecycle
+  useEffect(() => {
+    if (user) {
+      connectSocket();
+    } else {
+      disconnectSocket();
+    }
+  }, [user]);
+
   const login = async (email, password) => {
     setLoading(true);
     try {
@@ -104,6 +114,17 @@ export const AuthProvider = ({ children }) => {
   // Subject-only teachers will have this as false.
   const isFormTeacher = user?.isFormTeacher === true;
 
+  const refreshUser = async () => {
+    try {
+      const res = await api.get('/auth/me');
+      if (res.data?.success) {
+        setUser(res.data.data);
+      }
+    } catch (error) {
+      console.error('Failed to refresh user profile:', error);
+    }
+  };
+
   const value = {
     user,
     loading,
@@ -113,6 +134,7 @@ export const AuthProvider = ({ children }) => {
     isFormTeacher,
     activeMode,
     toggleActiveMode,
+    refreshUser,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

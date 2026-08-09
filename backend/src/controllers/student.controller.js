@@ -143,6 +143,23 @@ const getStudentById = async (req, res, next) => {
 // PATCH /api/students/:id
 const updateStudent = async (req, res, next) => {
   try {
+    const existingStudent = await Student.findById(req.params.id);
+    if (!existingStudent) {
+      return res.status(404).json({ success: false, message: 'Student not found' });
+    }
+
+    if (req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher')))) {
+      const { getTeacherClasses } = require('../utils/authHelpers');
+      const allowedClassIds = await getTeacherClasses(req.user.id, req.user.refStaff);
+      const studentClassId = existingStudent.currentClass ? existingStudent.currentClass.toString() : null;
+      if (!studentClassId || !allowedClassIds.includes(studentClassId)) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied: You do not have permission to update this student',
+        });
+      }
+    }
+
     const { guardian: guardianData, ...updateData } = req.body;
 
     const student = await Student.findByIdAndUpdate(
@@ -153,10 +170,6 @@ const updateStudent = async (req, res, next) => {
       .populate('currentClass', 'name')
       .populate('guardians')
       .populate({ path: 'transport.bus', populate: { path: 'route' } });
-
-    if (!student) {
-      return res.status(404).json({ success: false, message: 'Student not found' });
-    }
 
     res.json({ success: true, data: student });
   } catch (error) {

@@ -13,18 +13,26 @@ const StudentResultCard = ({ seriesId, studentId }) => {
     enabled: !!seriesId && !!studentId,
   });
 
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState('');
+
   const handleDownloadPdf = async () => {
     try {
+      setDownloading(true);
+      setDownloadError('');
       const blob = await mockExamApi.downloadSingleSlip(seriesId, studentId);
-      const url = window.URL.createObjectURL(new Blob([blob]));
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `MockSlip_${reportData?.student?.admissionNumber || studentId}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.parentNode.removeChild(link);
+      window.URL.revokeObjectURL(url);
     } catch (err) {
-      alert('Error downloading student PDF slip.');
+      setDownloadError(err.response?.data?.message || 'Error generating PDF slip. Please ensure scores are available.');
+    } finally {
+      setDownloading(false);
     }
   };
 
@@ -51,6 +59,13 @@ const StudentResultCard = ({ seriesId, studentId }) => {
 
   return (
     <div className="space-y-6">
+      {downloadError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-xl text-sm font-semibold flex items-center justify-between">
+          <span>{downloadError}</span>
+          <button onClick={() => setDownloadError('')} className="text-xs font-bold text-red-600 hover:text-red-900">Dismiss</button>
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
         <div>
           <h2 className="text-xl font-bold text-slate-900">
@@ -63,10 +78,11 @@ const StudentResultCard = ({ seriesId, studentId }) => {
 
         <button
           onClick={handleDownloadPdf}
-          className="flex items-center space-x-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-sm transition-all shadow-sm"
+          disabled={downloading}
+          className="flex items-center space-x-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-900 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all shadow-sm"
         >
-          <Download size={16} />
-          <span>Download PDF Slip</span>
+          {downloading ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}
+          <span>{downloading ? 'Generating PDF...' : 'Download PDF Slip'}</span>
         </button>
       </div>
 

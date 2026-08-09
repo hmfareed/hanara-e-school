@@ -24,8 +24,14 @@ import {
   Award
 } from 'lucide-react';
 
+import TeacherProfileSettingsPage from './TeacherProfileSettingsPage';
+
 const SettingsPage = () => {
   const { user, hasRole } = useAuth();
+
+  if (user?.role === 'teacher') {
+    return <TeacherProfileSettingsPage />;
+  }
   const queryClient = useQueryClient();
   const isSuperAdmin = user?.role === 'superadmin';
 

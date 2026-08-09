@@ -14,6 +14,10 @@ export const mockExamApi = {
     const res = await api.patch(`/mock-exams/series/${id}/close`);
     return res.data;
   },
+  deleteSeries: async (id) => {
+    const res = await api.delete(`/mock-exams/series/${id}`);
+    return res.data;
+  },
 
   // Teacher entries
   getMyEntries: async (seriesId) => {

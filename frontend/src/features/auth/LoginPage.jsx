@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import HanaraLogo from '../../components/HanaraLogo';
 
 import api from '../../services/api';
 import {
@@ -69,6 +70,26 @@ const LoginPage = () => {
   const maxSteps = 2;
 
   /* ──── No class/subject data needed in registration ──── */
+
+  const [stats, setStats] = useState({ students: null, teachers: null, classes: null });
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await api.get('/auth/public-stats');
+        if (res.data?.success && res.data?.data) {
+          setStats({
+            students: res.data.data.students,
+            teachers: res.data.data.teachers,
+            classes: res.data.data.classes,
+          });
+        }
+      } catch (err) {
+        console.error('Failed to fetch public stats:', err);
+      }
+    };
+    fetchStats();
+  }, []);
 
   useEffect(() => { if (user) navigate(from, { replace: true }); }, [user, navigate, from]);
 
@@ -203,7 +224,7 @@ const LoginPage = () => {
         <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-black/20 rounded-full blur-2xl transform -translate-x-1/3 translate-y-1/3" />
 
         <div className="flex items-center space-x-3 z-10">
-          <div className="h-10 w-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center font-bold text-xl shadow-lg">H</div>
+          <HanaraLogo size={68} className="drop-shadow-md" />
           <span className="font-bold text-xl tracking-wider uppercase text-slate-100">HANARA SCHOOLS</span>
         </div>
 
@@ -221,7 +242,11 @@ const LoginPage = () => {
 
           {/* decorative stats */}
           <div className="grid grid-cols-3 gap-4 pt-4">
-            {[['Students', '800+'], ['Teachers', '60+'], ['Classes', '30+']].map(([k, v]) => (
+            {[
+              ['Students', stats.students !== null ? stats.students : '...'],
+              ['Teachers', stats.teachers !== null ? stats.teachers : '...'],
+              ['Classes', stats.classes !== null ? stats.classes : '...'],
+            ].map(([k, v]) => (
               <div key={k} className="bg-white/5 rounded-2xl p-4 border border-white/10">
                 <p className="text-2xl font-extrabold text-emerald-300">{v}</p>
                 <p className="text-xs text-slate-400 mt-1">{k}</p>
@@ -238,17 +263,20 @@ const LoginPage = () => {
         <div className="w-full max-w-lg space-y-6 py-6">
 
           {/* Mobile logo */}
-          <div className="lg:hidden flex items-center space-x-3 mb-2">
-            <div className="h-10 w-10 bg-emerald-900 text-white rounded-xl flex items-center justify-center font-bold text-xl shadow-md">H</div>
+          <div className="lg:hidden flex items-center space-x-3 mb-4">
+            <HanaraLogo size={58} className="drop-shadow-md" />
             <span className="font-bold text-lg tracking-wider uppercase text-slate-800">HANARA SCHOOLS</span>
           </div>
 
           {/* ════════ LOGIN VIEW ════════ */}
           {view === 'login' && (
             <>
-              <div>
-                <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">Sign In</h2>
-                <p className="mt-1 text-sm text-slate-500">Enter your credentials to access the portal</p>
+              <div className="flex flex-col items-center text-center space-y-3">
+                <HanaraLogo size={180} className="mx-auto mb-2 block drop-shadow-md" />
+                <div>
+                  <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">Sign In</h2>
+                  <p className="mt-1 text-sm text-slate-500">Enter your credentials to access the portal</p>
+                </div>
               </div>
 
               {loginError && (

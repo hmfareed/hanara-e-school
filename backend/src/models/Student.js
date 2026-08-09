@@ -94,6 +94,51 @@ const studentSchema = new mongoose.Schema(
         default: '',
       },
     },
+    dailyFeeConfig: {
+      planType: {
+        type: String,
+        enum: [
+          'both_daily',
+          'feeding_only_daily',
+          'bus_only_daily',
+          'feeding_weekly_bus_daily',
+          'feeding_weekly_only',
+          'both_weekly',
+          'exempt',
+        ],
+        default: 'both_daily',
+      },
+      feedingPlan: {
+        type: String,
+        enum: ['daily', 'weekly', 'exempt'],
+        default: 'daily',
+      },
+      feedingWeeklyAmount: {
+        type: Number,
+        default: 20,
+      },
+      busPlan: {
+        type: String,
+        enum: ['daily', 'weekly', 'none'],
+        default: 'daily',
+      },
+      busWeeklyAmount: {
+        type: Number,
+        default: 25,
+      },
+      customFeedingRate: {
+        type: Number,
+        default: null,
+      },
+      customBusRate: {
+        type: Number,
+        default: null,
+      },
+      notes: {
+        type: String,
+        default: '',
+      },
+    },
     documents: [documentSchema],
   },
   {

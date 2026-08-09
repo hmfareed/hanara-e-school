@@ -4,8 +4,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import {
-  ArrowLeft, User, Phone, CheckCircle, AlertCircle, Ban, Bus, X, Save, MapPin, Pencil,
+  ArrowLeft, User, Phone, CheckCircle, AlertCircle, Ban, Bus, X, Save, MapPin, Pencil, FileDown, Loader2, Receipt, Coins,
 } from 'lucide-react';
+import DailyFeeConfigModal from './DailyFeeConfigModal';
 
 // ─── Transport Info Modal ──────────────────────────────────────────────────────
 const TransportModal = ({ student, onClose, onSaved }) => {
@@ -288,6 +289,35 @@ const StudentProfilePage = () => {
   const queryClient = useQueryClient();
   const [showTransportModal, setShowTransportModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showFeeConfigModal, setShowFeeConfigModal] = useState(false);
+  const [downloadingReportCard, setDownloadingReportCard] = useState(false);
+
+  const handleDownloadReportCard = async () => {
+    setDownloadingReportCard(true);
+    try {
+      const yrRes = await api.get('/academic-years');
+      const yearsList = yrRes.data?.data || [];
+      const currentYr = yearsList.find(y => y.isCurrent)?.name || '2025/2026';
+
+      const response = await api.get(`/grades/student/${id}/report-card/pdf`, {
+        params: { academicYear: currentYr, term: '1' },
+        responseType: 'blob'
+      });
+      
+      const blob = new Blob([response.data], { type: 'application/pdf' });
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      const safeName = `${student?.firstName || 'Student'}_${student?.lastName || ''}`.replace(/\s+/g, '_');
+      link.download = `ReportCard_${student?.admissionNumber || safeName}.pdf`;
+      link.click();
+      window.URL.revokeObjectURL(link.href);
+    } catch (err) {
+      console.error(err);
+      alert('Failed to download report card. Please ensure grades have been entered for this student.');
+    } finally {
+      setDownloadingReportCard(false);
+    }
+  };
 
   const { data: student, isLoading, error } = useQuery({
     queryKey: ['studentProfile', id],
@@ -362,7 +392,17 @@ const StudentProfilePage = () => {
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto">
-      {/* Transport Modal */}
+      {/* Fee Config Modal */}
+      {showFeeConfigModal && (
+        <DailyFeeConfigModal
+          student={student}
+          onClose={() => setShowFeeConfigModal(false)}
+          onSaved={() => {
+            queryClient.invalidateQueries({ queryKey: ['studentProfile', id] });
+            setShowFeeConfigModal(false);
+          }}
+        />
+      )}
       {showTransportModal && (
         <TransportModal
           student={student}
@@ -426,6 +466,14 @@ const StudentProfilePage = () => {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          <button
+            onClick={handleDownloadReportCard}
+            disabled={downloadingReportCard}
+            className="flex items-center justify-center space-x-1.5 py-2 px-4 rounded-xl border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 font-bold text-xs shadow-sm transition-colors cursor-pointer disabled:opacity-60"
+          >
+            {downloadingReportCard ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+            <span>Report Card (PDF)</span>
+          </button>
           {isAdmin && (
             <button
               id="edit-profile-btn"
@@ -498,6 +546,68 @@ const StudentProfilePage = () => {
               <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl">
                 <span className="text-amber-800 font-bold text-xs uppercase">Medical Notes</span>
                 <p className="text-slate-700 text-xs mt-1 leading-relaxed">{medicalNotes}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Fee Collection Configuration Card */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Receipt className="w-5 h-5 text-emerald-600" />
+                <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Fee Collection Configuration</h4>
+              </div>
+              {['superadmin', 'admin', 'teacher', 'system_admin'].includes(user?.role) && (
+                <button
+                  onClick={() => setShowFeeConfigModal(true)}
+                  className="text-xs font-semibold text-emerald-700 hover:bg-emerald-50 px-3 py-1 border border-emerald-200 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                >
+                  <Pencil size={12} /> Configure Plan
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Collection Plan Category</span>
+                <span className="text-slate-900 font-extrabold capitalize text-xs">
+                  {student?.dailyFeeConfig?.planType === 'feeding_weekly_bus_daily' ? 'Feeding Weekly (20 GHS/wk) + Bus Daily (5 GHS/day)' :
+                   student?.dailyFeeConfig?.planType === 'feeding_only_daily' ? 'Feeding Fee Only (Daily)' :
+                   student?.dailyFeeConfig?.planType === 'bus_only_daily' ? 'Transport Bus Fare Only (Daily)' :
+                   student?.dailyFeeConfig?.planType === 'feeding_weekly_only' ? 'Feeding Fee Weekly Only (20 GHS/wk)' :
+                   student?.dailyFeeConfig?.planType === 'both_weekly' ? 'Both Feeding & Bus (Weekly)' :
+                   student?.dailyFeeConfig?.planType === 'exempt' ? 'Fee Exempt' :
+                   'Both Feeding & Bus Fare (Daily)'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Feeding Subscription</span>
+                <span className="text-slate-800 font-bold text-xs capitalize">
+                  {student?.dailyFeeConfig?.feedingPlan === 'weekly' ? `Weekly (${student?.dailyFeeConfig?.feedingWeeklyAmount || 20} GHS/week)` :
+                   student?.dailyFeeConfig?.feedingPlan === 'exempt' ? 'Exempt' : 'Daily (Standard 4.00 GHS)'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Transport Bus Pass</span>
+                <span className="text-slate-800 font-bold text-xs capitalize">
+                  {student?.dailyFeeConfig?.busPlan === 'weekly' ? `Weekly (${student?.dailyFeeConfig?.busWeeklyAmount || 25} GHS/week)` :
+                   student?.dailyFeeConfig?.busPlan === 'none' ? 'None (Walks)' : 'Daily Fare (Standard 5.00 GHS)'}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Rate Overrides</span>
+                <span className="text-slate-800 font-semibold text-xs">
+                  {student?.dailyFeeConfig?.customFeedingRate ? `Feed: ${student.dailyFeeConfig.customFeedingRate} GHS ` : ''}
+                  {student?.dailyFeeConfig?.customBusRate ? `Bus: ${student.dailyFeeConfig.customBusRate} GHS` : ''}
+                  {!student?.dailyFeeConfig?.customFeedingRate && !student?.dailyFeeConfig?.customBusRate ? 'Standard School Rates' : ''}
+                </span>
+              </div>
+            </div>
+
+            {student?.dailyFeeConfig?.notes && (
+              <div className="p-3 bg-slate-50 border border-slate-200/80 rounded-xl text-xs text-slate-700">
+                <span className="font-bold text-slate-500 uppercase text-[10px] block mb-0.5">Special Fee Instructions:</span>
+                {student.dailyFeeConfig.notes}
               </div>
             )}
           </div>

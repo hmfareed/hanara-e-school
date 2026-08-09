@@ -43,6 +43,8 @@ services:
       CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@hanaraschools.edu.gh}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin@2026}
+      SEED_ACCOUNTANT_EMAIL: ${SEED_ACCOUNTANT_EMAIL:-acc@hanaraschools.edu.gh}
+      SEED_ACCOUNTANT_PASSWORD: ${SEED_ACCOUNTANT_PASSWORD:-Accountant@2026}
     networks:
       - hanara_net
     # Backend is NOT exposed to the host; only the frontend nginx proxy can reach it

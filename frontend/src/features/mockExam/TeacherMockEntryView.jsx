@@ -9,7 +9,7 @@ const TeacherMockEntryView = ({ seriesId }) => {
   const [scores, setScores] = useState([]); // [{ studentId, rawScore, grade }]
 
   // Fetch entries assigned to teacher
-  const { data: entryData, isLoading: entriesLoading, refetch: refetchEntries } = useQuery({
+  const { data: entryData = [], isLoading: entriesLoading, refetch: refetchEntries } = useQuery({
     queryKey: ['myMockEntries', seriesId],
     queryFn: async () => {
       const res = await mockExamApi.getMyEntries(seriesId);
@@ -73,6 +73,13 @@ const TeacherMockEntryView = ({ seriesId }) => {
     );
   };
 
+  const [toast, setToast] = useState(null); // { message: '', type: 'success' | 'error' }
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  };
+
   // Draft Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -85,10 +92,10 @@ const TeacherMockEntryView = ({ seriesId }) => {
     onSuccess: () => {
       queryClient.invalidateQueries(['myMockEntries', seriesId]);
       refetchGrid();
-      alert('Draft scores saved successfully.');
+      showToast('Draft scores saved successfully.', 'success');
     },
     onError: (err) => {
-      alert(err.response?.data?.message || 'Error saving scores');
+      showToast(err.response?.data?.message || 'Error saving scores', 'error');
     },
   });
 
@@ -99,12 +106,15 @@ const TeacherMockEntryView = ({ seriesId }) => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries(['myMockEntries', seriesId]);
+      // Refresh admin panels so Submission Matrix and Class Score Sheets update immediately
+      queryClient.invalidateQueries(['mockMatrix']);
+      queryClient.invalidateQueries(['classGradesGrid']);
       setActiveGrid(prev => ({ ...prev, status: 'submitted' }));
       refetchGrid();
-      alert('Scores submitted and locked.');
+      showToast('Scores submitted and locked.', 'success');
     },
     onError: (err) => {
-      alert(err.response?.data?.message || 'Error submitting scores');
+      showToast(err.response?.data?.message || 'Error submitting scores', 'error');
     },
   });
 
@@ -124,6 +134,15 @@ const TeacherMockEntryView = ({ seriesId }) => {
 
     return (
       <div className="space-y-6">
+        {toast && (
+          <div className={`p-4 rounded-xl border font-semibold text-sm flex items-center justify-between shadow-sm transition-all ${
+            toast.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+          }`}>
+            <span>{toast.message}</span>
+            <button onClick={() => setToast(null)} className="text-xs font-bold px-2 py-1 rounded bg-white/50 hover:bg-white">Dismiss</button>
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <button
             onClick={() => {
@@ -250,37 +269,58 @@ const TeacherMockEntryView = ({ seriesId }) => {
         <p className="text-sm text-slate-500">Select a class grid below to enter or view mock exam results.</p>
       </div>
 
+      {toast && (
+        <div className={`p-4 rounded-xl border font-semibold text-sm flex items-center justify-between shadow-sm transition-all ${
+          toast.type === 'error' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+        }`}>
+          <span>{toast.message}</span>
+          <button onClick={() => setToast(null)} className="text-xs font-bold px-2 py-1 rounded bg-white/50 hover:bg-white">Dismiss</button>
+        </div>
+      )}
+
       {entryData.length === 0 ? (
         <div className="text-center py-12 text-slate-500">
           No mock exam subject assignments found for you this term.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {entryData.map((item) => (
-            <div
-              key={item.assignmentId}
-              className="group relative bg-slate-50/50 hover:bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-2xl p-6 transition-all duration-200 flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-bold text-slate-800 text-base">{item.class.name}</h3>
-                    <p className="text-sm text-slate-500">{item.subject.name} ({item.subject.code})</p>
+          {entryData.map((item) => {
+            const pct = item.studentCount > 0 ? Math.round((item.enteredCount / item.studentCount) * 100) : 0;
+            return (
+              <div
+                key={item.assignmentId}
+                className="group relative bg-slate-50/50 hover:bg-slate-50 border border-slate-100 hover:border-slate-200 rounded-2xl p-6 transition-all duration-200 flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-bold text-slate-800 text-base">{item.class.name}</h3>
+                      <p className="text-sm text-slate-500">{item.subject.name} ({item.subject.code})</p>
+                    </div>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      item.isCore
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                        : 'bg-indigo-50 text-indigo-700 border-indigo-100'
+                    }`}>
+                      {item.isCore ? 'Core' : 'Elective'}
+                    </span>
                   </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                    item.isCore
-                      ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                      : 'bg-indigo-50 text-indigo-700 border-indigo-100'
-                  }`}>
-                    {item.isCore ? 'Core' : 'Elective'}
-                  </span>
-                </div>
 
-                <div className="flex justify-between items-center text-xs text-slate-500 bg-white border border-slate-100 p-3 rounded-xl">
-                  <span>Scores entered:</span>
-                  <span className="font-bold text-slate-700">{item.enteredCount} / {item.studentCount}</span>
+                  <div className="space-y-1 bg-white border border-slate-100 p-3 rounded-xl">
+                    <div className="flex justify-between items-center text-xs text-slate-500">
+                      <span>Scores entered:</span>
+                      <span className="font-bold text-slate-700">{item.enteredCount} / {item.studentCount} ({pct}%)</span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          pct === 100 ? 'bg-emerald-500' : pct > 0 ? 'bg-amber-500' : 'bg-slate-200'
+                        }`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
 
               <div className="mt-6 flex justify-between items-center">
                 <span className={`text-[11px] font-bold uppercase tracking-wider ${
@@ -295,7 +335,9 @@ const TeacherMockEntryView = ({ seriesId }) => {
 
                 <button
                   onClick={() => setActiveGrid({
-                    entryId: item.entryId,
+                    // Use 'new' when no MockSubjectEntry exists yet — the backend
+                    // upserts the entry on first load and returns the student grid.
+                    entryId: item.entryId || 'new',
                     classId: item.class._id,
                     subjectId: item.subject._id,
                     className: item.class.name,
@@ -310,7 +352,8 @@ const TeacherMockEntryView = ({ seriesId }) => {
                 </button>
               </div>
             </div>
-          ))}
+          );
+        })}
         </div>
       )}
     </div>

@@ -59,7 +59,7 @@ const ClassesPage = () => {
   const { data: levels } = useQuery({ queryKey: ['levelsList'], queryFn: async () => (await api.get('/classes/levels')).data?.data || [] });
   const { data: subjects } = useQuery({ queryKey: ['subjectsList'], queryFn: async () => (await api.get('/classes/subjects')).data?.data || [] });
   const { data: assignments } = useQuery({ queryKey: ['assignmentsList'], queryFn: async () => (await api.get('/classes/assignments')).data?.data || [] });
-  const { data: teachers } = useQuery({ queryKey: ['teachersList'], queryFn: async () => (await api.get('/staff?role=teacher')).data?.data || [] });
+  const { data: teachers } = useQuery({ queryKey: ['teachersList'], queryFn: async () => (await api.get('/staff?role=teacher,system_admin')).data?.data || [] });
   const { data: academicYears } = useQuery({ queryKey: ['academicYearsList'], queryFn: async () => (await api.get('/academic-years')).data?.data || [] });
 
   const activeAcademicYear = academicYears?.find((y) => y.isCurrent) || academicYears?.[0] || null;

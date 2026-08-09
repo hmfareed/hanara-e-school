@@ -427,7 +427,7 @@ const YearCard = ({ year, isSelected, onSelect, onSetCurrent, onDelete, isSettin
 
       {/* Actions */}
       <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100" onClick={e => e.stopPropagation()}>
-        {!year.isCurrent && (
+        {!year.isCurrent ? (
           <button
             onClick={onSetCurrent}
             disabled={isSettingCurrent}
@@ -435,17 +435,20 @@ const YearCard = ({ year, isSelected, onSelect, onSetCurrent, onDelete, isSettin
           >
             {isSettingCurrent ? 'Setting…' : '✓ Set as Active'}
           </button>
+        ) : (
+          <div className="flex-1 text-[11px] font-bold py-1.5 px-3 rounded-lg bg-emerald-500 text-white flex items-center justify-center gap-1">
+            <Star size={11} fill="white" /> Active Academic Year
+          </div>
         )}
-        {!year.isCurrent && (
-          <button
-            onClick={onDelete}
-            disabled={isDeleting}
-            className="p-1.5 rounded-lg text-slate-300 hover:text-rose-500 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition-colors"
-            title="Delete year"
-          >
-            <Trash2 size={13} />
-          </button>
-        )}
+        <button
+          onClick={onDelete}
+          disabled={isDeleting}
+          className="flex items-center gap-1 text-[11px] font-bold py-1.5 px-3 rounded-lg text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition-colors disabled:opacity-50"
+          title="Delete academic year and associated data"
+        >
+          <Trash2 size={13} />
+          <span>Delete</span>
+        </button>
       </div>
     </div>
   );
@@ -501,9 +504,9 @@ const AcademicYearPage = () => {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.delete(`/academic-years/${id}`),
     onSuccess: (_, id) => {
-      queryClient.invalidateQueries({ queryKey: ['academicYearsList'] });
+      queryClient.invalidateQueries(); // Refresh all cache across all portals (classes, grades, fees, mock exams)
       if (selectedYear?._id === id) { setSelectedYear(null); setMode('list'); }
-      showToast('Academic year deleted');
+      showToast('Academic year and all associated data deleted successfully');
     },
     onError: (err) => showToast(err.response?.data?.message || 'Cannot delete', 'error'),
   });
@@ -598,7 +601,15 @@ const AcademicYearPage = () => {
                   isSelected={selectedYear?._id === year._id}
                   onSelect={() => { setSelectedYear(year); }}
                   onSetCurrent={() => setCurrentMutation.mutate(year._id)}
-                  onDelete={() => deleteMutation.mutate(year._id)}
+                  onDelete={() => {
+                    if (
+                      window.confirm(
+                        `⚠️ PERMANENT DELETION WARNING\n\nDeleting "${year.name}" will permanently erase ALL associated data from all portals:\n- Classes & Subject Assignments\n- Grades & Student Report Cards\n- Attendance & Daily Fee Registers\n- Assignments & Lesson Plans\n- Fee Structures, Invoices & Payments\n- Mock Exam Series, Results & Aggregates\n\nAre you sure you want to delete "${year.name}"?`
+                      )
+                    ) {
+                      deleteMutation.mutate(year._id);
+                    }
+                  }}
                   isSettingCurrent={setCurrentMutation.isPending && setCurrentMutation.variables === year._id}
                   isDeleting={deleteMutation.isPending && deleteMutation.variables === year._id}
                 />
@@ -615,12 +626,29 @@ const AcademicYearPage = () => {
                     <h3 className="text-lg font-bold text-slate-900">{selectedYear.name}</h3>
                     <p className="text-xs text-slate-500 mt-0.5">{selectedYear.terms?.length} term(s) · click Edit to modify</p>
                   </div>
-                  <button
-                    onClick={() => setMode('edit')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-colors"
-                  >
-                    <Pencil size={12} /> Edit Year
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setMode('edit')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition-colors"
+                    >
+                      <Pencil size={12} /> Edit Year
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `⚠️ PERMANENT DELETION WARNING\n\nDeleting "${selectedYear.name}" will permanently erase ALL associated data from all portals:\n- Classes & Subject Assignments\n- Grades & Student Report Cards\n- Attendance & Daily Fee Registers\n- Assignments & Lesson Plans\n- Fee Structures, Invoices & Payments\n- Mock Exam Series, Results & Aggregates\n\nAre you sure you want to delete "${selectedYear.name}"?`
+                          )
+                        ) {
+                          deleteMutation.mutate(selectedYear._id);
+                        }
+                      }}
+                      disabled={deleteMutation.isPending}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold transition-colors disabled:opacity-50"
+                    >
+                      <Trash2 size={12} /> Delete Year
+                    </button>
+                  </div>
                 </div>
 
                 {/* Term detail cards */}

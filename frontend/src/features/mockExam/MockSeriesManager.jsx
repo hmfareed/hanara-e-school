@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { mockExamApi } from './mockExamApi';
 import { Plus, Lock, Calendar, Trash, Loader2 } from 'lucide-react';
 
 const MockSeriesManager = ({ seriesList, onRefresh, selectedSeriesId, setSelectedSeriesId }) => {
+  const queryClient = useQueryClient();
   const [name, setName] = useState('');
   const [academicYear, setAcademicYear] = useState('');
   const [order, setOrder] = useState('');
@@ -17,6 +18,7 @@ const MockSeriesManager = ({ seriesList, onRefresh, selectedSeriesId, setSelecte
       setName('');
       setAcademicYear('');
       setOrder('');
+      queryClient.invalidateQueries();
       onRefresh();
       alert('Mock series created successfully.');
     },
@@ -31,11 +33,27 @@ const MockSeriesManager = ({ seriesList, onRefresh, selectedSeriesId, setSelecte
       return await mockExamApi.closeSeries(id);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries();
       onRefresh();
       alert('Mock series closed successfully.');
     },
     onError: (err) => {
       alert(err.response?.data?.message || 'Error closing series');
+    },
+  });
+
+  // Delete Series Mutation
+  const deleteMutation = useMutation({
+    mutationFn: async (id) => {
+      return await mockExamApi.deleteSeries(id);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries(); // Invalidate all mock exam data & matrix
+      onRefresh();
+      alert('Mock series and associated results deleted successfully.');
+    },
+    onError: (err) => {
+      alert(err.response?.data?.message || 'Error deleting series');
     },
   });
 
@@ -140,23 +158,37 @@ const MockSeriesManager = ({ seriesList, onRefresh, selectedSeriesId, setSelecte
               </div>
 
               <div className="flex items-center space-x-2">
-                {s.status === 'open' ? (
+                {s.status === 'open' && (
                   <button
                     onClick={() => {
                       if (window.confirm('Are you sure you want to close this mock series? This locks all score grids and aggregates.')) {
                         closeMutation.mutate(s._id);
                       }
                     }}
-                    className="flex items-center space-x-1 px-4 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-sm transition-all"
+                    className="flex items-center space-x-1 px-3 py-2 text-xs font-bold bg-slate-800 hover:bg-slate-900 text-white rounded-xl shadow-sm transition-all"
                   >
                     <Lock size={12} />
                     <span>Close Series</span>
                   </button>
-                ) : (
-                  <span className="text-xs font-bold text-slate-400">
+                )}
+                {s.status === 'closed' && (
+                  <span className="text-xs font-bold text-slate-400 mr-2">
                     Closed on {new Date(s.closedAt).toLocaleDateString()}
                   </span>
                 )}
+                <button
+                  onClick={() => {
+                    if (window.confirm(`⚠️ Are you sure you want to delete mock series "${s.name}"? This will permanently delete all student scores and aggregate rankings for this series.`)) {
+                      deleteMutation.mutate(s._id);
+                    }
+                  }}
+                  disabled={deleteMutation.isPending}
+                  className="flex items-center space-x-1 px-3 py-2 text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl transition-all disabled:opacity-50"
+                  title="Delete series"
+                >
+                  <Trash size={12} />
+                  <span>Delete</span>
+                </button>
               </div>
             </div>
           ))}

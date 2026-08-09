@@ -31,6 +31,24 @@ const createStudentSchema = z.object({
     bus: z.string().optional().nullable().default(null),
     stop: z.string().optional().default(''),
   }).optional().default({ usesBus: false, bus: null, stop: '' }),
+  dailyFeeConfig: z.object({
+    planType: z.enum([
+      'both_daily',
+      'feeding_only_daily',
+      'bus_only_daily',
+      'feeding_weekly_bus_daily',
+      'feeding_weekly_only',
+      'both_weekly',
+      'exempt',
+    ]).optional().default('both_daily'),
+    feedingPlan: z.enum(['daily', 'weekly', 'exempt']).optional().default('daily'),
+    feedingWeeklyAmount: z.number().optional().default(20),
+    busPlan: z.enum(['daily', 'weekly', 'none']).optional().default('daily'),
+    busWeeklyAmount: z.number().optional().default(25),
+    customFeedingRate: z.number().optional().nullable().default(null),
+    customBusRate: z.number().optional().nullable().default(null),
+    notes: z.string().optional().default(''),
+  }).optional(),
   guardian: guardianSchema.optional(),
 });
 

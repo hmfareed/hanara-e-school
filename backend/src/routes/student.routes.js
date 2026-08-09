@@ -18,7 +18,7 @@ router.get('/', protect, authorize('superadmin', 'admin', 'teacher', 'system_adm
 router.post('/', protect, authorize('superadmin', 'admin'), validate(createStudentSchema), createStudent);
 router.post('/bulk', protect, authorize('superadmin', 'admin'), createStudentsBulk);
 router.get('/:id', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin', 'accountant'), getStudentById);
-router.patch('/:id', protect, authorize('superadmin', 'admin'), validate(updateStudentSchema), updateStudent);
+router.patch('/:id', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), validate(updateStudentSchema), updateStudent);
 router.post('/:id/withdraw', protect, authorize('superadmin', 'admin'), withdrawStudent);
 router.post('/:id/promote', protect, authorize('superadmin', 'admin'), promoteStudent);
 
