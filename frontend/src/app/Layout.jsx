@@ -41,6 +41,8 @@ import {
 } from 'lucide-react';
 import OfflineBanner, { ConnectivityDot } from '../components/OfflineBanner';
 import SyncManagerModal from '../components/SyncManagerModal';
+import ErrorBoundary from '../components/ErrorBoundary';
+import Sidebar from '../components/Sidebar';
 
 /* ── Dynamic header badge showing current academic year ── */
 const ActiveYearBadge = () => {
@@ -63,6 +65,7 @@ const Layout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
+  const searchRef = useRef(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -119,6 +122,26 @@ const Layout = () => {
 
     return () => clearTimeout(delayDebounce);
   }, [searchQuery]);
+
+  // Clean up mobile sidebar and search overlays on route change
+  useEffect(() => {
+    setSidebarOpen(false);
+    setSearchQuery('');
+    setShowDropdown(false);
+  }, [location.pathname]);
+
+  // Click-outside listener for search bar (eliminates global transparent overlay backdrop)
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (searchRef.current && !searchRef.current.contains(event.target)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -277,12 +300,7 @@ const Layout = () => {
       icon: BarChart3,
       roles: ['superadmin', 'admin', 'accountant'],
     },
-    {
-      name: 'Parent Messages',
-      path: '/messages',
-      icon: Mail,
-      roles: ['superadmin', 'admin', 'teacher', 'parent', 'accountant', 'system_admin'],
-    },
+
     {
       name: 'School Store',
       path: '/store',
@@ -323,7 +341,7 @@ const Layout = () => {
       name: 'Messaging Hub',
       path: '/messages',
       icon: MessageSquare,
-      roles: ['superadmin', 'admin', 'teacher', 'system_admin'],
+      roles: ['superadmin', 'admin', 'teacher', 'parent', 'accountant', 'system_admin'],
     },
     {
       name: 'My Classes',
@@ -434,104 +452,13 @@ const Layout = () => {
       )}
 
       {/* Sidebar */}
-      <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#4A1C20] text-white flex flex-col transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:flex-shrink-0 relative overflow-hidden select-none ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        {/* Background School Watermark Pattern */}
-        <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]" />
-        
-        {/* Sidebar Header / Logo */}
-        <div className="h-16 flex items-center justify-between px-5 border-b border-[#310F12]/80 relative z-10">
-          <Link to="/" className="flex items-center space-x-3" onClick={() => setSidebarOpen(false)}>
-            <div className="h-9 w-9 bg-[#361114] border border-[#7D2A30]/40 rounded-xl flex items-center justify-center text-white shadow-xs">
-              <Shield size={20} className="fill-[#D9B4B8]/20 text-[#D9B4B8]" />
-            </div>
-            <div className="flex flex-col leading-tight">
-              <span className="font-black text-sm tracking-wider uppercase text-white">HANARA</span>
-              <span className="text-[10px] font-extrabold tracking-widest uppercase text-[#E8D0D2]/90">SCHOOLS</span>
-            </div>
-          </Link>
-          <button
-            className="lg:hidden p-1 rounded-md text-[#E8D0D2] hover:text-white"
-            onClick={() => setSidebarOpen(false)}
-          >
-            <X size={20} />
-          </button>
-        </div>
-
-        {/* Navigation Links */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto relative z-10 scrollbar-none">
-          {filteredItems.map((item) => {
-            const Icon = item.icon;
-            const isActive =
-              location.pathname === item.path ||
-              (item.path !== '/' && location.pathname.startsWith(item.path));
-            return (
-              <Link
-                key={item.name}
-                to={item.path}
-                onClick={() => setSidebarOpen(false)}
-                className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl font-semibold text-xs transition-all duration-150 ${
-                  isActive
-                    ? 'bg-[#78282E] text-white shadow-sm font-bold border border-[#9E363E]/40'
-                    : 'text-[#E8D0D2]/80 hover:bg-[#361114] hover:text-white'
-                }`}
-              >
-                <div className="flex items-center space-x-3">
-                  <Icon size={17} className={isActive ? 'text-white' : 'text-[#D9B4B8]/70'} />
-                  <span>{item.name}</span>
-                </div>
-                {item.badge && (
-                  <span className="text-[10px] font-black px-1.5 py-0.5 rounded-full bg-[#78282E] text-white border border-[#9E363E]/50">
-                    {item.badge}
-                  </span>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Sidebar Footer / Teacher Profile Card */}
-        <div className="p-3.5 border-t border-[#310F12]/80 bg-[#2D0D10] relative z-10">
-          <div className="flex items-center space-x-3 mb-3 bg-[#3B1115] p-2.5 rounded-xl border border-[#6B2228]/50">
-            <div 
-              onClick={handleAvatarClick}
-              className="relative h-10 w-10 bg-[#361114] rounded-full flex items-center justify-center text-white border border-[#852C33]/50 overflow-hidden cursor-pointer group transition-all shrink-0"
-              title="Change profile picture"
-            >
-              {(user?.photoUrl || user?.refStaff?.photoUrl) ? (
-                <img src={user.photoUrl || user.refStaff.photoUrl} alt="User Avatar" className="h-full w-full object-cover" />
-              ) : (
-                <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80" alt="Avatar" className="h-full w-full object-cover" />
-              )}
-            </div>
-            <input 
-              type="file" 
-              ref={fileInputRef} 
-              onChange={handleFileChange} 
-              accept="image/*" 
-              className="hidden" 
-            />
-            <div className="overflow-hidden flex-1 cursor-pointer" onClick={() => navigate('/settings')}>
-              <p className="text-xs font-bold text-white truncate" title={getUserName()}>
-                {getUserName()}
-              </p>
-              <span className="text-[9px] font-black px-2 py-0.5 rounded-md bg-[#78282E] text-white uppercase tracking-wider inline-block mt-0.5">
-                {user?.role ? user.role.toUpperCase() : 'TEACHER'}
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-xl bg-[#361114] hover:bg-[#4A1C20] text-[#E8D0D2] hover:text-white border border-[#6B2228]/60 font-bold text-xs transition-colors"
-          >
-            <LogOut size={14} />
-            <span>Logout</span>
-          </button>
-        </div>
-      </aside>
+      <Sidebar
+        sidebarOpen={sidebarOpen}
+        setSidebarOpen={setSidebarOpen}
+        handleAvatarClick={handleAvatarClick}
+        fileInputRef={fileInputRef}
+        handleFileChange={handleFileChange}
+      />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -546,7 +473,7 @@ const Layout = () => {
             </button>
             
             {/* Header Search Bar */}
-            <div className="relative max-w-md w-full hidden sm:block z-50">
+            <div className="relative max-w-md w-full hidden sm:block z-50" ref={searchRef}>
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                 <Search size={18} />
               </div>
@@ -561,15 +488,6 @@ const Layout = () => {
                 placeholder="Search students, classes, records..."
                 className="w-full pl-10 pr-4 py-2 text-sm bg-slate-50 border border-slate-200/80 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all text-slate-700 placeholder-slate-400"
               />
-
-              {/* Background click-away overlay */}
-              {showDropdown && (
-                <div 
-                  className="fixed inset-0 bg-transparent cursor-default" 
-                  style={{ zIndex: 40 }}
-                  onClick={() => setShowDropdown(false)}
-                />
-              )}
 
               {/* Dropdown panel */}
               {showDropdown && searchQuery.trim() && (
@@ -718,7 +636,11 @@ const Layout = () => {
 
         {/* Content Viewport */}
         <main className="flex-1 overflow-y-auto p-6 md:p-8 bg-slate-50">
-          <Outlet />
+          <ErrorBoundary key={location.pathname}>
+            <div className="animate-page-enter">
+              <Outlet />
+            </div>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

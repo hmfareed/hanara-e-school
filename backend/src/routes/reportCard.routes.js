@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const reportCardController = require('../controllers/reportCard.controller');
-const { protect, authorize } = require('../middleware/auth.middleware');
+const { protect } = require('../middleware/auth');
+const { authorize } = require('../middleware/rbac');
 
 // Public report card verification endpoint (for QR scans)
 router.get('/verify/:token', reportCardController.verifyReportToken);

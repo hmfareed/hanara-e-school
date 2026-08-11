@@ -4,6 +4,7 @@ const Student = require('../models/Student');
 const Staff = require('../models/Staff');
 const SystemSetting = require('../models/SystemSetting');
 const StaffAttendanceRecord = require('../models/StaffAttendanceRecord');
+const AttendanceRecord = require('../models/AttendanceRecord');
 
 const SECRET_KEY = process.env.JWT_ACCESS_SECRET || 'hanara-secret-key-2026';
 
@@ -58,7 +59,9 @@ exports.getBatchCardsPayload = async (req, res) => {
       items = await Promise.all(
         students.map(async (s) => {
           const token = createEntityQrToken('student', s._id.toString());
-          const qrDataUrl = await QRCode.toDataURL(token, { margin: 1, width: 200 });
+          const baseUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
+          const qrPayloadUrl = `${baseUrl}/verify-card/${token}`;
+          const qrDataUrl = await QRCode.toDataURL(qrPayloadUrl, { margin: 1, width: 200 });
           const primaryGuardian = s.guardians?.[0];
           return {
             _id: s._id,
@@ -74,6 +77,7 @@ exports.getBatchCardsPayload = async (req, res) => {
             emergencyContact: primaryGuardian?.primaryPhone || schoolProfile.phone,
             qrDataUrl,
             qrToken: token,
+            qrPayloadUrl,
             schoolProfile,
           };
         })
@@ -83,7 +87,9 @@ exports.getBatchCardsPayload = async (req, res) => {
       items = await Promise.all(
         staffList.map(async (st) => {
           const token = createEntityQrToken('staff', st._id.toString());
-          const qrDataUrl = await QRCode.toDataURL(token, { margin: 1, width: 200 });
+          const baseUrl = process.env.FRONTEND_URL || `${req.protocol}://${req.get('host')}`;
+          const qrPayloadUrl = `${baseUrl}/verify-card/${token}`;
+          const qrDataUrl = await QRCode.toDataURL(qrPayloadUrl, { margin: 1, width: 200 });
           const title = st.title ? `${st.title} ` : '';
           return {
             _id: st._id,
@@ -97,6 +103,7 @@ exports.getBatchCardsPayload = async (req, res) => {
             emergencyContact: st.emergencyContactPhone || st.phone || schoolProfile.phone,
             qrDataUrl,
             qrToken: token,
+            qrPayloadUrl,
             schoolProfile,
           };
         })
@@ -200,29 +207,223 @@ exports.processGateScan = async (req, res) => {
     }
 
     if (type === 'student') {
-      const student = await Student.findById(id).populate('currentClass', 'name').lean();
+      const student = await Student.findById(id)
+        .populate('currentClass', 'name')
+        .populate('guardians', 'primaryPhone firstName lastName')
+        .lean();
+
       if (!student) {
         return res.status(404).json({ success: false, message: 'Student record not found.' });
       }
 
+      // Upsert student daily attendance record for today
+      const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const currentMins = now.getHours() * 60 + now.getMinutes();
+      const lateCutoffMins = 8 * 60; // 8:00 AM late cutoff
+      const studentStatus = currentMins > lateCutoffMins ? 'late' : 'present';
+
+      if (student.currentClass?._id) {
+        await AttendanceRecord.findOneAndUpdate(
+          { student: id, class: student.currentClass._id, date: startOfDay },
+          {
+            student: id,
+            class: student.currentClass._id,
+            date: startOfDay,
+            status: studentStatus,
+            recordedBy: req.user?.id || req.user?._id || id,
+            notes: `Logged via Gate QR Terminal at ${timeStr}`,
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      }
+
       const name = `${student.firstName} ${student.lastName}`;
+      const primaryGuardian = student.guardians?.[0];
+
       return res.status(200).json({
         success: true,
         entityType: 'student',
         action: 'gate_entry',
-        status: 'present',
+        status: studentStatus,
         name,
         photoUrl: student.photoUrl || null,
         admissionNumber: student.admissionNumber || 'N/A',
-        className: student.currentClass?.name || 'Class',
+        className: student.currentClass?.name || 'Unassigned',
+        emergencyContact: primaryGuardian?.primaryPhone || 'N/A',
         timestamp: now.toLocaleTimeString(),
-        message: `Gate Pass Approved: ${name} (${student.currentClass?.name || 'Student'}) logged at ${timeStr}.`,
+        message: `Gate Entry Verified: ${name} (${student.currentClass?.name || 'Student'}) logged as ${studentStatus.toUpperCase()} at ${timeStr}.`,
       });
     }
 
     return res.status(400).json({ success: false, message: 'Unknown card type' });
   } catch (error) {
     console.error('Error processing gate scan:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * GET /api/gate-scanner/stats
+ * Returns today's terminal scan metrics
+ */
+exports.getGateStats = async (req, res) => {
+  try {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    const [staffPresent, studentsLogged] = await Promise.all([
+      StaffAttendanceRecord.countDocuments({ dateStr }),
+      AttendanceRecord.countDocuments({ date: startOfDay }),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        staffPresent,
+        studentsLogged,
+        totalScansToday: staffPresent + studentsLogged,
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching gate stats:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * GET /api/gate-scanner/sample-tokens
+ * Returns pre-signed QR sample tokens for instant testing
+ */
+exports.getSampleTokens = async (req, res) => {
+  try {
+    const [students, staffList] = await Promise.all([
+      Student.find({ status: 'active' }).limit(5).populate('currentClass', 'name').lean(),
+      Staff.find({ status: 'active' }).limit(5).lean(),
+    ]);
+
+    const sampleTokens = [
+      ...students.map((s) => ({
+        id: s._id,
+        entityType: 'student',
+        name: `${s.firstName} ${s.lastName}`,
+        sub: s.currentClass?.name || 'Student',
+        token: createEntityQrToken('student', s._id.toString()),
+      })),
+      ...staffList.map((st) => ({
+        id: st._id,
+        entityType: 'staff',
+        name: `${st.title ? st.title + ' ' : ''}${st.firstName} ${st.lastName}`,
+        sub: st.role ? st.role.toUpperCase() : 'STAFF',
+        token: createEntityQrToken('staff', st._id.toString()),
+      })),
+    ];
+
+    return res.status(200).json({
+      success: true,
+      data: sampleTokens,
+    });
+  } catch (error) {
+    console.error('Error fetching sample tokens:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * GET /api/id-cards/verify-public/:token
+ * Unauthenticated endpoint for verifying scanned ID cards via mobile phone cameras
+ */
+exports.verifyPublicCardToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const parsed = verifyEntityQrToken(token);
+
+    if (!parsed) {
+      return res.status(200).json({
+        success: true,
+        valid: false,
+        message: 'Invalid or forged ID Card QR code. Document authenticity cannot be verified.',
+      });
+    }
+
+    const schoolSetting = await SystemSetting.findOne({ key: 'school_profile' });
+    const schoolProfile = schoolSetting?.value || {
+      name: 'HANARA SCHOOLS',
+      motto: 'Knowledge, Character & Excellence',
+      phone: '+233 20 000 0000',
+      address: 'Tamale, Northern Region, Ghana',
+    };
+
+    const { type, id } = parsed;
+
+    if (type === 'student') {
+      const student = await Student.findById(id)
+        .populate('currentClass', 'name')
+        .populate('guardians', 'primaryPhone firstName lastName')
+        .lean();
+
+      if (!student) {
+        return res.status(200).json({
+          success: true,
+          valid: false,
+          message: 'Student record not found or has been revoked.',
+        });
+      }
+
+      const primaryGuardian = student.guardians?.[0];
+
+      return res.status(200).json({
+        success: true,
+        valid: true,
+        entityType: 'student',
+        token,
+        data: {
+          fullName: `${student.firstName} ${student.otherNames ? student.otherNames + ' ' : ''}${student.lastName}`,
+          admissionNumber: student.admissionNumber || 'N/A',
+          photoUrl: student.photoUrl || null,
+          gender: student.gender || 'N/A',
+          className: student.currentClass?.name || 'Unassigned',
+          status: student.status || 'active',
+          emergencyContact: primaryGuardian?.primaryPhone || schoolProfile.phone,
+          schoolProfile,
+          verifiedAt: new Date().toISOString(),
+        },
+      });
+    }
+
+    if (type === 'staff') {
+      const staff = await Staff.findById(id).lean();
+      if (!staff) {
+        return res.status(200).json({
+          success: true,
+          valid: false,
+          message: 'Staff record not found or has been revoked.',
+        });
+      }
+
+      const title = staff.title ? `${staff.title} ` : '';
+      return res.status(200).json({
+        success: true,
+        valid: true,
+        entityType: 'staff',
+        token,
+        data: {
+          fullName: `${title}${staff.firstName} ${staff.lastName}`,
+          staffId: staff.employeeId || staff.staffId || staff._id.toString().substring(0, 8).toUpperCase(),
+          photoUrl: staff.photoUrl || null,
+          role: staff.role ? staff.role.toUpperCase() : 'STAFF',
+          department: staff.department || 'Academic',
+          status: staff.status || 'active',
+          emergencyContact: staff.phone || schoolProfile.phone,
+          schoolProfile,
+          verifiedAt: new Date().toISOString(),
+        },
+      });
+    }
+
+    return res.status(200).json({ success: true, valid: false, message: 'Unrecognized card token type.' });
+  } catch (error) {
+    console.error('Error verifying public card token:', error);
     return res.status(500).json({ success: false, message: error.message });
   }
 };

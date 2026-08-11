@@ -24,25 +24,46 @@
   background: #94a3b8;
 }
 
-/* Smooth transition defaults for interactive elements */
+/* Fluid, modern transition defaults for interactive elements (avoiding 'transition: all' layout jank) */
 a, button, input, select, textarea {
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition-property: color, background-color, border-color, outline-color, box-shadow, transform, opacity;
+  transition-duration: 200ms;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* ── Offline/Sync Animations ─────────────────────────────── */
+/* Smooth page container scrolling */
+html, body {
+  scroll-behavior: smooth;
+}
+
+/* ── Sleek Physics-Based Keyframe Animations ─────────────────────────────── */
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 @keyframes slide-up {
   from { transform: translateY(100%); opacity: 0; }
   to   { transform: translateY(0);    opacity: 1; }
 }
+
 @keyframes slide-down {
   from { transform: translateY(-100%); opacity: 0; }
   to   { transform: translateY(0);     opacity: 1; }
 }
+
 @keyframes fade-in {
-  from { opacity: 0; transform: scale(0.97); }
+  from { opacity: 0; transform: scale(0.98); }
   to   { opacity: 1; transform: scale(1);    }
 }
 
-.animate-slide-up  { animation: slide-up  0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
-.animate-slide-down { animation: slide-down 0.3s ease-out both; }
-.animate-fade-in   { animation: fade-in   0.2s ease-out both; }
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1);    }
+}
+
+.animate-page-enter { animation: page-enter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-slide-up   { animation: slide-up   0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-slide-down { animation: slide-down 0.28s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-fade-in    { animation: fade-in    0.22s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-scale-in   { animation: scale-in   0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }

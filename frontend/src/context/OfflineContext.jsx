@@ -147,7 +147,23 @@ export const OfflineProvider = ({ children }) => {
 export const useOffline = () => {
   const context = useContext(OfflineContext);
   if (!context) {
-    throw new Error('useOffline must be used within an OfflineProvider');
+    return {
+      isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+      pendingCount: 0,
+      isSyncing: false,
+      lastSyncTime: null,
+      syncProgress: { done: 0, total: 0 },
+      syncNow: async () => {},
+      refreshPendingCount: async () => {},
+      isSyncManagerOpen: false,
+      openSyncManager: () => {},
+      closeSyncManager: () => {},
+      fetchQueuedItems: async () => [],
+      syncSingle: async () => {},
+      discardSingle: async () => {},
+      clearAll: async () => {},
+      fetchLogs: async () => [],
+    };
   }
   return context;
 };

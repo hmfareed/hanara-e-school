@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import ErrorBoundary from '../../components/ErrorBoundary';
 import {
   LayoutDashboard,
   ClipboardList,
@@ -62,6 +63,11 @@ const AccountantLayout = () => {
   const [notifBadge, setNotifBadge] = useState(0);
   const [socketConnected, setSocketConnected] = useState(true);
   const toastIdRef = useRef(0);
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   // Track socket connectivity for the status indicator
   useEffect(() => {
@@ -141,7 +147,7 @@ const AccountantLayout = () => {
         {/* ── Sidebar ── */}
         <aside
           className={`fixed inset-y-0 left-0 z-50 w-72 flex flex-col transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:flex-shrink-0 ${
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            sidebarOpen ? 'translate-x-0' : 'max-lg:-translate-x-full'
           }`}
           style={{
             background: 'linear-gradient(180deg, #0f172a 0%, #0d1526 100%)',
@@ -150,7 +156,13 @@ const AccountantLayout = () => {
         >
           {/* Logo */}
           <div className="h-16 flex items-center justify-between px-6 shrink-0" style={{ borderBottom: '1px solid rgba(20,184,166,0.1)' }}>
-            <Link to="/accountant" className="flex items-center gap-3" onClick={() => setSidebarOpen(false)}>
+            <Link
+              to="/accountant"
+              className="flex items-center gap-3 cursor-pointer"
+              onClick={() => {
+                setSidebarOpen(false);
+              }}
+            >
               <div
                 className="h-9 w-9 rounded-xl flex items-center justify-center font-black text-lg text-white shrink-0"
                 style={{ background: 'linear-gradient(135deg, #0d9488, #0891b2)' }}
@@ -185,8 +197,10 @@ const AccountantLayout = () => {
                 <Link
                   key={item.path}
                   to={item.path}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-150 group ${
+                  onClick={() => {
+                    setSidebarOpen(false);
+                  }}
+                  className={`flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-150 group cursor-pointer ${
                     isActive
                       ? 'text-teal-300'
                       : 'text-slate-400 hover:text-slate-200'
@@ -316,7 +330,11 @@ const AccountantLayout = () => {
 
           {/* Page content */}
           <main className="flex-1 overflow-y-auto p-6 md:p-8">
-            <Outlet />
+            <ErrorBoundary key={location.pathname}>
+              <div className="animate-page-enter">
+                <Outlet />
+              </div>
+            </ErrorBoundary>
           </main>
         </div>
       </div>

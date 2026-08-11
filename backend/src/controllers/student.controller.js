@@ -13,10 +13,14 @@ const getStudents = async (req, res, next) => {
       status = 'active',
       search,
       gender,
+      minAge,
+      maxAge,
     } = req.query;
 
     const filter = {};
-    if (status) filter.status = status;
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
     
     if (req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher')))) {
       const { getTeacherClasses } = require('../utils/authHelpers');
@@ -34,10 +38,30 @@ const getStudents = async (req, res, next) => {
       if (classId) filter.currentClass = classId;
     }
     if (gender) filter.gender = gender;
+    
+    // Age filtering based on dob (Date of Birth)
+    if (minAge || maxAge) {
+      const now = new Date();
+      filter.dob = {};
+      
+      if (maxAge) {
+        // Upper bound for age means lower bound for dob (born at least maxAge years ago, but not more than maxAge+1)
+        const minDob = new Date(now.getFullYear() - parseInt(maxAge) - 1, now.getMonth(), now.getDate() + 1);
+        filter.dob.$gte = minDob;
+      }
+      
+      if (minAge) {
+        // Lower bound for age means upper bound for dob (born at most minAge years ago)
+        const maxDob = new Date(now.getFullYear() - parseInt(minAge), now.getMonth(), now.getDate());
+        filter.dob.$lte = maxDob;
+      }
+    }
+
     if (search) {
       filter.$or = [
         { firstName: { $regex: search, $options: 'i' } },
         { lastName: { $regex: search, $options: 'i' } },
+        { otherNames: { $regex: search, $options: 'i' } },
         { admissionNumber: { $regex: search, $options: 'i' } },
       ];
     }

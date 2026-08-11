@@ -3,6 +3,8 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../services/api';
 import { X, Award, ArrowRight, Loader2, CheckCircle2, AlertCircle, Layers } from 'lucide-react';
 
+const EMPTY_ARRAY = [];
+
 const BatchPromotionModal = ({ isOpen, onClose, classes = [], onSuccess }) => {
   const [fromClassId, setFromClassId] = useState('');
   const [action, setAction] = useState('promote'); // 'promote' | 'graduate' | 'repeat'
@@ -11,7 +13,7 @@ const BatchPromotionModal = ({ isOpen, onClose, classes = [], onSuccess }) => {
   const [feedback, setFeedback] = useState(null);
 
   // Fetch student roster of source class
-  const { data: sourceStudents = [], isLoading: loadingRoster } = useQuery({
+  const { data, isLoading: loadingRoster } = useQuery({
     queryKey: ['batchPromotionRoster', fromClassId],
     queryFn: async () => {
       if (!fromClassId) return [];
@@ -20,6 +22,7 @@ const BatchPromotionModal = ({ isOpen, onClose, classes = [], onSuccess }) => {
     },
     enabled: !!fromClassId && isOpen,
   });
+  const sourceStudents = data ?? EMPTY_ARRAY;
 
   // Select all students when roster loads
   useEffect(() => {

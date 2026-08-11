@@ -5,6 +5,7 @@ import { putAll, getAll, putOne, deleteOne, enqueueSync } from './db';
 const rawApi = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
   withCredentials: true,
+  timeout: 10000, // 10 seconds timeout to prevent pending request hangs
   headers: {
     'Content-Type': 'application/json',
   },
@@ -131,18 +132,24 @@ async function offlineGet(url, config = {}) {
     try {
       const response = await rawApi.get(url, config);
 
-      // Cache successful response data into IndexedDB
+      // Cache successful response data into IndexedDB asynchronously in background (non-blocking)
       if (storeName && response.data?.success) {
         const payload = response.data?.data;
-        if (Array.isArray(payload)) {
-          const validItems = payload.filter((i) => i && i._id);
-          if (validItems.length > 0) {
-            await putAll(storeName, validItems);
+        (async () => {
+          try {
+            if (Array.isArray(payload)) {
+              const validItems = payload.filter((i) => i && i._id);
+              if (validItems.length > 0) {
+                await putAll(storeName, validItems);
+              }
+            } else if (payload && typeof payload === 'object') {
+              const docToSave = payload._id ? payload : { _id: url.replace(/[^a-zA-Z0-9_]/g, '_'), ...payload };
+              await putOne(storeName, docToSave);
+            }
+          } catch (cacheErr) {
+            console.warn('[OfflineAPI] Non-blocking cache write warning:', cacheErr);
           }
-        } else if (payload && typeof payload === 'object') {
-          const docToSave = payload._id ? payload : { _id: url.replace(/[^a-zA-Z0-9_]/g, '_'), ...payload };
-          await putOne(storeName, docToSave);
-        }
+        })();
       }
 
       return response;
@@ -212,6 +219,11 @@ async function loadCachedOrFallback(storeName, url, config, originalErr = null) 
 // ── Offline-Aware Mutation Handler (POST, PUT, PATCH, DELETE) ────────────────
 async function offlineMutate(method, url, data = null, config = {}) {
   const methodUpper = method.toUpperCase();
+
+  // Never queue authentication or token endpoints offline
+  if (url && (url.includes('/auth/') || url.includes('/login') || url.includes('/refresh'))) {
+    return rawApi({ method, url, data, ...config });
+  }
 
   if (navigator.onLine) {
     try {

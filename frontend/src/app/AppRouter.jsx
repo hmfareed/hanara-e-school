@@ -59,6 +59,7 @@ import DataProtectionCenter from '../features/admin/DataProtectionCenter';
 import IdCardGeneratorPage from '../features/idCards/IdCardGeneratorPage';
 import GateScannerPage from '../features/gateScanner/GateScannerPage';
 import PublicReportVerifyPage from '../features/reports/PublicReportVerifyPage';
+import PublicCardVerifyPage from '../features/idCards/PublicCardVerifyPage';
 
 // Accountant Module
 import AccountantLayout from '../features/accountant/AccountantLayout';
@@ -97,6 +98,7 @@ const AppRouter = () => {
 
         {/* Public Report Verification View (scanned from QR Code) */}
         <Route path="/verify-report/:token" element={<PublicReportVerifyPage />} />
+        <Route path="/verify-card/:token" element={<PublicCardVerifyPage />} />
 
         <Route
           path="/"
@@ -127,75 +129,79 @@ const AppRouter = () => {
             </ProtectedRoute>
           } />
 
-          <Route path="students">
-            <Route
-              index
-              element={
-                <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'accountant', 'system_admin']}>
-                  <StudentDirectoryPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="admit"
-              element={
-                <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
-                  <AdmissionFormPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path=":id"
-              element={
-                <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'accountant', 'system_admin']}>
-                  <StudentProfilePage />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
+          <Route
+            path="students"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'accountant', 'system_admin']}>
+                <StudentDirectoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="students/admit"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
+                <AdmissionFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="students/edit/:id"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
+                <AdmissionFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="students/:id"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'accountant', 'system_admin']}>
+                <StudentProfilePage />
+              </ProtectedRoute>
+            }
+          />
 
-          <Route path="staff">
-            <Route
-              index
-              element={
-                <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
-                  <StaffDirectoryPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="new"
-              element={
-                <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
-                  <StaffFormPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="edit/:id"
-              element={
-                <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
-                  <StaffFormPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="attendance"
-              element={
-                <ProtectedRoute allowedRoles={['superadmin', 'admin', 'system_admin']}>
-                  <StaffAttendancePage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="check-in"
-              element={
-                <ProtectedRoute allowedRoles={['superadmin', 'admin', 'system_admin', 'teacher', 'accountant']}>
-                  <StaffCheckInPage />
-                </ProtectedRoute>
-              }
-            />
-          </Route>
+          <Route
+            path="staff"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
+                <StaffDirectoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="staff/new"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
+                <StaffFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="staff/edit/:id"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin']}>
+                <StaffFormPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="staff/attendance"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'system_admin']}>
+                <StaffAttendancePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="staff/check-in"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'system_admin', 'teacher', 'accountant']}>
+                <StaffCheckInPage />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="id-cards"
@@ -368,14 +374,6 @@ const AppRouter = () => {
             }
           />
 
-          <Route
-            path="messages"
-            element={
-              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'parent', 'accountant', 'system_admin']}>
-                <ParentTeacherMessagingPage />
-              </ProtectedRoute>
-            }
-          />
 
           <Route
             path="academic-year"

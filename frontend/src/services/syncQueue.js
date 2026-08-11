@@ -59,6 +59,10 @@ export async function flush() {
   const startTime = Date.now();
 
   for (const item of items) {
+    if (item.url && (item.url.includes('/auth/') || item.url.includes('/login'))) {
+      await removeQueuedItem(item.id);
+      continue;
+    }
     try {
       await axios({
         method: item.method,
@@ -85,6 +89,7 @@ export async function flush() {
       } else {
         console.error(`[SyncQueue] Failed to sync ${item.method} ${item.url}`, err);
         failed++;
+        break; // Stop flushing remainder when network is unreachable to prevent CPU hang
       }
     }
   }
