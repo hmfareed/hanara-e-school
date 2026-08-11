@@ -39,6 +39,8 @@ const payrollRoutes = require('./routes/payroll.routes');
 const storeRoutes = require('./routes/store.routes');
 const syncRoutes = require('./routes/sync.routes');
 const staffAttendanceRoutes = require('./routes/staffAttendance.routes');
+const idCardsRoutes = require('./routes/idCards.routes');
+const reportCardRoutes = require('./routes/reportCard.routes');
 
 const app = express();
 
@@ -108,6 +110,9 @@ app.use('/api/analytics', require('./routes/analytics.routes'));
 app.use('/api/parent-queries', require('./routes/parentQuery.routes'));
 app.use('/api/sync', syncRoutes);
 app.use('/api/staff-attendance', staffAttendanceRoutes);
+app.use('/api/id-cards', idCardsRoutes);
+app.use('/api/gate-scanner', idCardsRoutes);
+app.use('/api/reports', reportCardRoutes);
 
 
 

@@ -56,6 +56,10 @@ import BackupRestorePage from '../features/admin/BackupRestorePage';
 import AuditLogViewer from '../features/admin/AuditLogViewer';
 import DataProtectionCenter from '../features/admin/DataProtectionCenter';
 
+import IdCardGeneratorPage from '../features/idCards/IdCardGeneratorPage';
+import GateScannerPage from '../features/gateScanner/GateScannerPage';
+import PublicReportVerifyPage from '../features/reports/PublicReportVerifyPage';
+
 // Accountant Module
 import AccountantLayout from '../features/accountant/AccountantLayout';
 import AccountantDashboardPage from '../features/accountant/AccountantDashboardPage';
@@ -90,6 +94,9 @@ const AppRouter = () => {
             </ProtectedRoute>
           }
         />
+
+        {/* Public Report Verification View (scanned from QR Code) */}
+        <Route path="/verify-report/:token" element={<PublicReportVerifyPage />} />
 
         <Route
           path="/"
@@ -189,6 +196,24 @@ const AppRouter = () => {
               }
             />
           </Route>
+
+          <Route
+            path="id-cards"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'system_admin', 'teacher']}>
+                <IdCardGeneratorPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="gate-scanner"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'system_admin', 'teacher']}>
+                <GateScannerPage />
+              </ProtectedRoute>
+            }
+          />
 
           <Route
             path="classes"

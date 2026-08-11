@@ -37,6 +37,7 @@ import {
   Megaphone,
   Mail,
   Fingerprint,
+  QrCode,
 } from 'lucide-react';
 import OfflineBanner, { ConnectivityDot } from '../components/OfflineBanner';
 import SyncManagerModal from '../components/SyncManagerModal';
@@ -239,6 +240,18 @@ const Layout = () => {
       path: '/staff/attendance',
       icon: Fingerprint,
       roles: ['superadmin', 'admin', 'system_admin'],
+    },
+    {
+      name: 'ID Cards Generator',
+      path: '/id-cards',
+      icon: CreditCard,
+      roles: ['superadmin', 'admin', 'teacher', 'system_admin'],
+    },
+    {
+      name: 'Gate QR Scanner',
+      path: '/gate-scanner',
+      icon: QrCode,
+      roles: ['superadmin', 'admin', 'teacher', 'system_admin'],
     },
     {
       name: 'Fees & Finance',
