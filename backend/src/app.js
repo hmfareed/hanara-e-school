@@ -35,6 +35,10 @@ const lessonPlanRoutes = require('./routes/lessonPlan.routes');
 const behaviourRoutes = require('./routes/behaviour.routes');
 const learningResourceRoutes = require('./routes/learningResource.routes');
 const teacherMessageRoutes = require('./routes/teacherMessage.routes');
+const payrollRoutes = require('./routes/payroll.routes');
+const storeRoutes = require('./routes/store.routes');
+const syncRoutes = require('./routes/sync.routes');
+const staffAttendanceRoutes = require('./routes/staffAttendance.routes');
 
 const app = express();
 
@@ -97,6 +101,13 @@ app.use('/api/lesson-plans', lessonPlanRoutes);
 app.use('/api/behaviour-records', behaviourRoutes);
 app.use('/api/learning-resources', learningResourceRoutes);
 app.use('/api/teacher-messages', teacherMessageRoutes);
+app.use('/api/payroll', payrollRoutes);
+app.use('/api/store', storeRoutes);
+app.use('/api/notices', require('./routes/notice.routes'));
+app.use('/api/analytics', require('./routes/analytics.routes'));
+app.use('/api/parent-queries', require('./routes/parentQuery.routes'));
+app.use('/api/sync', syncRoutes);
+app.use('/api/staff-attendance', staffAttendanceRoutes);
 
 
 

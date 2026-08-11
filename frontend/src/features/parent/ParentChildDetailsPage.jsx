@@ -13,11 +13,15 @@ import {
   ArrowRight,
   Printer,
   Sparkles,
+  Award,
+  UtensilsCrossed,
 } from 'lucide-react';
 import api from '../../services/api';
 
 const TABS = [
   { id: 'attendance', label: 'Attendance History', icon: Calendar },
+  { id: 'grades', label: 'Subject Grades & Marks', icon: Award },
+  { id: 'dailyFees', label: 'Daily Feeding & Bus Fees', icon: UtensilsCrossed },
   { id: 'invoices', label: 'School Invoices', icon: FileText },
   { id: 'payments', label: 'Payment Records', icon: CreditCard },
 ];
@@ -67,6 +71,26 @@ const ParentChildDetailsPage = () => {
     enabled: activeTab === 'payments',
   });
 
+  // Query Child Subject Grades (Live marks)
+  const { data: grades, isLoading: isGradesLoading } = useQuery({
+    queryKey: ['parentChildGrades', id],
+    queryFn: async () => {
+      const res = await api.get(`/parent/children/${id}/grades`);
+      return res.data?.data || [];
+    },
+    enabled: activeTab === 'grades',
+  });
+
+  // Query Child Daily Fees History (Feeding & Transport)
+  const { data: dailyFees, isLoading: isDailyFeesLoading } = useQuery({
+    queryKey: ['parentChildDailyFees', id],
+    queryFn: async () => {
+      const res = await api.get(`/parent/children/${id}/daily-fees`);
+      return res.data?.data || [];
+    },
+    enabled: activeTab === 'dailyFees',
+  });
+
   // Pay Invoice mutation - calls backend momo initiate Checkout
   const momoPayMutation = useMutation({
     mutationFn: async (invoiceId) => {
@@ -80,6 +104,36 @@ const ParentChildDetailsPage = () => {
       }
     },
   });
+
+  const handleDownloadReceipt = async (paymentId, receiptNumber) => {
+    try {
+      const res = await api.get(`/parent/payments/${paymentId}/receipt/pdf`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Receipt_${receiptNumber || paymentId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      alert('Failed to download payment receipt PDF.');
+    }
+  };
+
+  const handleDownloadStatement = async () => {
+    try {
+      const res = await api.get(`/parent/children/${id}/statement/pdf`, { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `FeeStatement_${child?.admissionNumber || id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      alert('Failed to download fee statement PDF.');
+    }
+  };
 
   if (isChildLoading) {
     return (
@@ -138,6 +192,12 @@ const ParentChildDetailsPage = () => {
             </div>
           </div>
         </div>
+        <button
+          onClick={handleDownloadStatement}
+          className="flex items-center gap-1.5 px-4 py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-xl text-xs font-bold shadow-xs transition-all cursor-pointer"
+        >
+          <Download size={14} /> Download Fee Statement PDF
+        </button>
       </div>
 
       {/* Tabs list */}
@@ -236,6 +296,143 @@ const ParentChildDetailsPage = () => {
                     </table>
                   </div>
                 </>
+              )}
+            </div>
+          )}
+
+          {/* Subject Grades & Marks Tab */}
+          {activeTab === 'grades' && (
+            <div className="space-y-6">
+              {isGradesLoading ? (
+                <div className="py-12 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-700 border-t-transparent"></div></div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Ward Academic Subject Performances</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Live subject marks updated immediately as teachers grade assignments and exams.</p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-sm text-slate-600">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr className="text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                          <th className="px-6 py-3">Subject Name</th>
+                          <th className="px-6 py-3 text-center">Class Score (/30)</th>
+                          <th className="px-6 py-3 text-center">Exam Score (/70)</th>
+                          <th className="px-6 py-3 text-center">Total (/100)</th>
+                          <th className="px-6 py-3 text-center">Grade</th>
+                          <th className="px-6 py-3 text-center">Remark</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {grades && grades.length > 0 ? (
+                          grades.map((g) => (
+                            <tr key={g._id} className="hover:bg-slate-50/50">
+                              <td className="px-6 py-4 font-bold text-slate-850">
+                                {g.subject?.name || 'Subject'}
+                                <span className="block text-[10px] text-slate-400 font-mono font-normal">{g.subject?.code}</span>
+                              </td>
+                              <td className="px-6 py-4 text-center font-semibold text-slate-700">{g.classScore?.toFixed(1)}</td>
+                              <td className="px-6 py-4 text-center font-semibold text-slate-700">{g.examScore?.toFixed(1)}</td>
+                              <td className="px-6 py-4 text-center font-black text-emerald-800 text-base">{g.totalScore?.toFixed(1)}</td>
+                              <td className="px-6 py-4 text-center">
+                                <span className={`inline-flex items-center justify-center h-7 w-7 rounded-full text-xs font-black ${
+                                  g.grade === '1' ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' :
+                                  g.grade === '9' ? 'bg-rose-100 text-rose-800 border border-rose-300' :
+                                  'bg-blue-50 text-blue-800 border border-blue-200'
+                                }`}>
+                                  {g.grade}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-center text-xs font-semibold text-slate-700">
+                                {g.remark}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="6" className="px-6 py-8 text-center text-xs text-slate-400">
+                              No subject scores entered for this academic term yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Daily Feeding & Bus Fees Tab */}
+          {activeTab === 'dailyFees' && (
+            <div className="space-y-6">
+              {isDailyFeesLoading ? (
+                <div className="py-12 flex justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-700 border-t-transparent"></div></div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-extrabold text-slate-800 uppercase tracking-wider">Daily Fee & Bus Fare Register Log</h3>
+                      <p className="text-xs text-slate-500 mt-0.5">Real-time breakdown of daily feeding (GHS 4.00) and transport bus fare (GHS 5.00) collections submitted by class teachers.</p>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto rounded-xl border border-slate-200">
+                    <table className="w-full text-left text-sm text-slate-600">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr className="text-slate-500 text-xs font-semibold uppercase tracking-wider">
+                          <th className="px-6 py-3">Date</th>
+                          <th className="px-6 py-3 text-center">Daily Feeding Fee</th>
+                          <th className="px-6 py-3 text-center">Transport Bus Fare</th>
+                          <th className="px-6 py-3 text-right">Total Paid (GHS)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200">
+                        {dailyFees && dailyFees.length > 0 ? (
+                          dailyFees.map((df) => (
+                            <tr key={df.submissionId} className="hover:bg-slate-50/50">
+                              <td className="px-6 py-4 font-bold text-slate-800">
+                                {new Date(df.date).toLocaleDateString('en-GB', {
+                                  weekday: 'short', day: '2-digit', month: 'short', year: 'numeric'
+                                })}
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <span className={`px-2.5 py-0.5 rounded border text-[10px] font-bold uppercase ${
+                                  df.feedingStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                  df.feedingStatus === 'absent' ? 'bg-slate-100 text-slate-500 border-slate-200' :
+                                  'bg-rose-50 text-rose-700 border-rose-200'
+                                }`}>
+                                  {df.feedingStatus === 'paid' ? `Paid (GHS ${df.feedingAmount.toFixed(2)})` : df.feedingStatus}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-center">
+                                <span className={`px-2.5 py-0.5 rounded border text-[10px] font-bold uppercase ${
+                                  df.busStatus === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                  df.busStatus === 'absent' ? 'bg-slate-100 text-slate-500 border-slate-200' :
+                                  'bg-rose-50 text-rose-700 border-rose-200'
+                                }`}>
+                                  {df.busStatus === 'paid' ? `Paid (GHS ${df.busAmount.toFixed(2)})` : df.busStatus}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4 text-right font-black text-emerald-800">
+                                GHS {df.totalPaid.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="4" className="px-6 py-8 text-center text-xs text-slate-400">
+                              No daily fee collection logs submitted for this student yet.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               )}
             </div>
           )}
@@ -358,11 +555,11 @@ const ParentChildDetailsPage = () => {
                             </td>
                             <td className="px-6 py-4 text-center">
                               <button
-                                onClick={() => window.open(`${api.defaults.baseURL}/fees/payments/${pay._id}/receipt`, '_blank')}
-                                className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg border border-slate-200 hover:bg-slate-100 font-semibold text-xs text-slate-600 transition-colors"
+                                onClick={() => handleDownloadReceipt(pay._id, pay.receiptNumber)}
+                                className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 font-bold text-xs text-emerald-800 transition-colors cursor-pointer"
                               >
                                 <Download size={12} />
-                                <span>Receipt</span>
+                                <span>Receipt PDF</span>
                               </button>
                             </td>
                           </tr>

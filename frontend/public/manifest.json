@@ -1,0 +1,20 @@
+{
+  "name": "HANARA Schools Management System",
+  "short_name": "HANARA SMS",
+  "description": "Comprehensive school management system for HANARA Schools",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#4A1C20",
+  "theme_color": "#4A1C20",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["education", "productivity"],
+  "lang": "en-GH"
+}

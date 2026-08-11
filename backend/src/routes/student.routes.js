@@ -8,6 +8,7 @@ const {
   updateStudent,
   withdrawStudent,
   promoteStudent,
+  promoteBatchStudents,
 } = require('../controllers/student.controller');
 const { protect } = require('../middleware/auth');
 const { authorize } = require('../middleware/rbac');
@@ -17,6 +18,7 @@ const { createStudentSchema, updateStudentSchema } = require('../validators/stud
 router.get('/', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin', 'accountant'), getStudents);
 router.post('/', protect, authorize('superadmin', 'admin'), validate(createStudentSchema), createStudent);
 router.post('/bulk', protect, authorize('superadmin', 'admin'), createStudentsBulk);
+router.post('/promote-batch', protect, authorize('superadmin', 'admin'), promoteBatchStudents);
 router.get('/:id', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin', 'accountant'), getStudentById);
 router.patch('/:id', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), validate(updateStudentSchema), updateStudent);
 router.post('/:id/withdraw', protect, authorize('superadmin', 'admin'), withdrawStudent);

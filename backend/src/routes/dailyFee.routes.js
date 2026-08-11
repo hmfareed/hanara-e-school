@@ -13,6 +13,8 @@ const {
   createDailyFeeStructure,
   getAccountantDashboardStats,
   getDiscrepancies,
+  getUnpaidStudents,
+  sendDefaulterSmsAlert,
 } = require('../controllers/dailyFeeCollection.controller');
 
 const { protect } = require('../middleware/auth');
@@ -33,6 +35,10 @@ router.post('/structures', protect, authorize('superadmin', 'admin', 'system_adm
 
 // ─── Accountant Reports (Accountant & Admin) ──────────────────────────────────
 router.get('/reports', protect, authorize('superadmin', 'admin', 'system_admin', 'accountant'), getCollectionReports);
+
+// ─── Unpaid Students / Defaulters (Admin, Accountant & Teacher) ───────────────
+router.get('/unpaid', protect, authorize('superadmin', 'admin', 'system_admin', 'accountant', 'teacher'), getUnpaidStudents);
+router.post('/unpaid/send-sms', protect, authorize('superadmin', 'admin', 'system_admin', 'accountant'), sendDefaulterSmsAlert);
 
 // ─── Accountant Dashboard Stats (today's summary cards) ──────────────────────
 router.get('/stats/today', protect, authorize('superadmin', 'admin', 'system_admin', 'accountant'), getAccountantDashboardStats);

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { useOffline } from '../../context/OfflineContext';
+import { loadUserSession } from '../../services/db';
 import HanaraLogo from '../../components/HanaraLogo';
 
 import api from '../../services/api';
 import {
   LogIn, Eye, EyeOff, AlertCircle, UserPlus, CheckCircle2,
-  ChevronLeft, User,
+  ChevronLeft, User, WifiOff,
 } from 'lucide-react';
 
 /* ─── tiny step indicator ─── */
@@ -47,11 +49,25 @@ const LoginPage = () => {
   const [step, setStep] = useState(1);
 
   /* ──── Login state ──── */
+  const [loginMethod, setLoginMethod] = useState('phone'); // 'phone' | 'email'
   const [email, setEmail]         = useState('');
   const [password, setPassword]   = useState('');
   const [showPwd, setShowPwd]     = useState(false);
   const [loginError, setLoginError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  const { isOnline } = useOffline();
+
+  // ── If offline and we have a cached session, redirect immediately ──
+  useEffect(() => {
+    if (!isOnline) {
+      loadUserSession().then((cachedUser) => {
+        if (cachedUser) {
+          navigate(from, { replace: true });
+        }
+      });
+    }
+  }, [isOnline, navigate, from]);
 
   /* ──── Register state ──── */
   const emptyReg = {
@@ -66,6 +82,14 @@ const LoginPage = () => {
   const [regSuccess, setRegSuccess] = useState('');
   const [registering, setRegistering] = useState(false);
   const [showRegPwd, setShowRegPwd]   = useState(false);
+
+  /* ──── Parent Activation state ──── */
+  const [parentInput, setParentInput] = useState(''); // phone or email
+  const [parentPwd, setParentPwd]     = useState('');
+  const [parentConfirmPwd, setParentConfirmPwd] = useState('');
+  const [parentError, setParentError] = useState('');
+  const [parentSuccess, setParentSuccess] = useState('');
+  const [parentSubmitting, setParentSubmitting] = useState(false);
 
   const maxSteps = 2;
 
@@ -101,9 +125,43 @@ const LoginPage = () => {
     setSubmitting(true);
     const res = await login(email, password);
     setSubmitting(false);
-    if (res.success) navigate(from, { replace: true });
-    else setLoginError(res.message || 'Invalid login credentials');
+
+    if (res.success) {
+      navigate(from, { replace: true });
+      return;
+    }
+
+    const rawMsg = res.message || '';
+
+    // Detect any server-unavailable / offline / network error
+    const isServiceDown =
+      rawMsg.includes('ENOTFOUND') ||
+      rawMsg.includes('ECONNREFUSED') ||
+      rawMsg.includes('mongodb') ||
+      rawMsg.includes('MongoServerError') ||
+      rawMsg.includes('ETIMEDOUT') ||
+      rawMsg.toLowerCase().includes('temporarily unavailable') ||
+      rawMsg.toLowerCase().includes('service unavailable') ||
+      rawMsg.toLowerCase().includes('offline') ||
+      rawMsg.toLowerCase().includes('internet');
+
+    if (isServiceDown) {
+      // Try restoring from IndexedDB cache before showing error
+      const cachedUser = await loadUserSession();
+      if (cachedUser) {
+        // We have a cached session — restore it and proceed
+        navigate(from, { replace: true });
+        return;
+      }
+      setLoginError(
+        'Cannot connect to the server. You need internet access to sign in for the first time. ' +
+        'If you have signed in before, please wait — your session will be restored automatically.'
+      );
+    } else {
+      setLoginError(rawMsg || 'Invalid login credentials');
+    }
   };
+
 
   /* ──── Reg helpers ──── */
   const setR = (key, val) => setReg((p) => ({ ...p, [key]: val }));
@@ -210,8 +268,47 @@ const LoginPage = () => {
     }
   };
 
-  const switchToLogin = () => { setView('login'); setRegSuccess(''); setRegError(''); setStep(1); };
+  const handleParentRegister = async (e) => {
+    e.preventDefault();
+    if (!parentInput || !parentPwd || !parentConfirmPwd) {
+      setParentError('Please fill in all fields.');
+      return;
+    }
+    if (parentPwd !== parentConfirmPwd) {
+      setParentError('Passwords do not match.');
+      return;
+    }
+    if (parentPwd.length < 6) {
+      setParentError('Password must be at least 6 characters.');
+      return;
+    }
+
+    setParentSubmitting(true);
+    setParentError('');
+    setParentSuccess('');
+
+    try {
+      const res = await api.post('/auth/register-parent', {
+        phoneOrEmail: parentInput.trim(),
+        password: parentPwd,
+      });
+
+      if (res.data?.success) {
+        setParentSuccess(res.data.message || 'Parent portal account activated! You can now sign in.');
+        setEmail(parentInput.trim());
+      } else {
+        setParentError(res.data?.message || 'Activation failed.');
+      }
+    } catch (err) {
+      setParentError(err.response?.data?.message || 'Failed to activate parent account.');
+    } finally {
+      setParentSubmitting(false);
+    }
+  };
+
+  const switchToLogin = () => { setView('login'); setRegSuccess(''); setRegError(''); setParentSuccess(''); setParentError(''); setStep(1); };
   const switchToRegister = () => { setView('register'); setLoginError(''); };
+  const switchToRegisterParent = () => { setView('registerParent'); setLoginError(''); setParentSuccess(''); setParentError(''); };
 
   /* ─────────────────────────────────────────────────────── */
 
@@ -279,6 +376,19 @@ const LoginPage = () => {
                 </div>
               </div>
 
+              {/* Offline notice banner */}
+              {!isOnline && (
+                <div className="flex items-start space-x-3 p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                  <WifiOff size={18} className="flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">You're offline</p>
+                    <p className="text-xs mt-0.5 text-amber-700">
+                      If you've signed in before, your session will be restored automatically. Otherwise, connect to the internet to log in.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {loginError && (
                 <div className="flex items-center space-x-2.5 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
                   <AlertCircle size={18} className="flex-shrink-0" />
@@ -286,12 +396,45 @@ const LoginPage = () => {
                 </div>
               )}
 
-              <form onSubmit={handleLogin} className="space-y-5">
-                <Field label="Email Address">
+              <form onSubmit={handleLogin} className="space-y-4">
+                {/* Method Switch: Phone vs Email */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5">Sign In Method</label>
+                  <div className="flex rounded-xl bg-slate-100 p-1 border border-slate-200 text-xs font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setLoginMethod('phone')}
+                      className={`flex-1 py-2 rounded-lg transition-all cursor-pointer ${
+                        loginMethod === 'phone'
+                          ? 'bg-white text-emerald-950 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      📱 Phone Number
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLoginMethod('email')}
+                      className={`flex-1 py-2 rounded-lg transition-all cursor-pointer ${
+                        loginMethod === 'email'
+                          ? 'bg-white text-emerald-950 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      ✉️ Email Address
+                    </button>
+                  </div>
+                </div>
+
+                <Field label={loginMethod === 'phone' ? 'Phone Number' : 'Email Address'}>
                   <input
-                    id="email" type="email" required disabled={submitting}
-                    value={email} onChange={(e) => setEmail(e.target.value)}
-                    placeholder="you@hanaraschools.edu.gh"
+                    id="email"
+                    type="text"
+                    required
+                    disabled={submitting}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder={loginMethod === 'phone' ? 'e.g. 0244123456 or 0541234567' : 'name@hanaraschools.edu.gh'}
                     className={inputCls}
                   />
                 </Field>
@@ -319,14 +462,123 @@ const LoginPage = () => {
                 </button>
               </form>
 
-              <div className="pt-4 border-t border-slate-200 text-center">
-                <p className="text-sm text-slate-500">New to HANARA? Are you a teacher or staff member?</p>
-                <button onClick={switchToRegister}
-                  className="mt-2 inline-flex items-center space-x-1.5 text-emerald-700 font-bold text-sm hover:text-emerald-900 transition cursor-pointer">
-                  <UserPlus size={15} />
-                  <span>Register your staff account</span>
-                </button>
+              <div className="pt-4 border-t border-slate-200 text-center space-y-3">
+                <p className="text-sm font-semibold text-slate-600">New to HANARA Schools?</p>
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm">
+                  <button
+                    onClick={switchToRegisterParent}
+                    className="inline-flex items-center space-x-1.5 text-emerald-800 font-bold hover:text-emerald-950 transition cursor-pointer"
+                  >
+                    <User size={15} />
+                    <span>Activate / Register Parent Account</span>
+                  </button>
+                  <span className="hidden sm:inline text-slate-300">•</span>
+                  <button
+                    onClick={switchToRegister}
+                    className="inline-flex items-center space-x-1.5 text-slate-600 font-bold hover:text-slate-900 transition cursor-pointer"
+                  >
+                    <UserPlus size={15} />
+                    <span>Register Staff Account</span>
+                  </button>
+                </div>
               </div>
+            </>
+          )}
+
+          {/* ════════ REGISTER PARENT VIEW ════════ */}
+          {view === 'registerParent' && (
+            <>
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={switchToLogin}
+                  className="flex items-center space-x-1.5 py-1.5 px-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 font-semibold text-xs transition cursor-pointer"
+                >
+                  <ChevronLeft size={14} />
+                  <span>Back to Sign In</span>
+                </button>
+                <span className="text-xs text-slate-400 font-bold uppercase tracking-wider">Parent Portal Activation</span>
+              </div>
+
+              <div className="text-center space-y-1">
+                <h2 className="text-2xl font-extrabold tracking-tight text-slate-900">Activate Parent Account</h2>
+                <p className="text-xs text-slate-500">
+                  Enter your phone number or email registered with the school during your child&apos;s enrollment to claim your portal account.
+                </p>
+              </div>
+
+              {parentSuccess ? (
+                <div className="p-5 bg-emerald-50 border border-emerald-200 rounded-2xl space-y-3 text-center">
+                  <CheckCircle2 size={32} className="mx-auto text-emerald-600" />
+                  <p className="text-sm font-bold text-emerald-900">{parentSuccess}</p>
+                  <button
+                    onClick={switchToLogin}
+                    className="w-full py-2.5 bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-xs rounded-xl transition cursor-pointer shadow-xs"
+                  >
+                    Proceed to Sign In
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleParentRegister} className="space-y-4">
+                  {parentError && (
+                    <div className="flex items-center space-x-2.5 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs font-semibold">
+                      <AlertCircle size={16} className="flex-shrink-0" />
+                      <span>{parentError}</span>
+                    </div>
+                  )}
+
+                  <Field label="Registered Phone Number or Email *">
+                    <input
+                      type="text"
+                      required
+                      value={parentInput}
+                      onChange={(e) => setParentInput(e.target.value)}
+                      placeholder="e.g. 0244123456 or parent@gmail.com"
+                      className={inputCls}
+                    />
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Must match the phone number or email provided during student enrollment.
+                    </p>
+                  </Field>
+
+                  <Field label="Create Password *">
+                    <input
+                      type="password"
+                      required
+                      value={parentPwd}
+                      onChange={(e) => setParentPwd(e.target.value)}
+                      placeholder="At least 6 characters"
+                      className={inputCls}
+                    />
+                  </Field>
+
+                  <Field label="Confirm Password *">
+                    <input
+                      type="password"
+                      required
+                      value={parentConfirmPwd}
+                      onChange={(e) => setParentConfirmPwd(e.target.value)}
+                      placeholder="Re-enter password"
+                      className={inputCls}
+                    />
+                  </Field>
+
+                  <button
+                    type="submit"
+                    disabled={parentSubmitting}
+                    className="w-full flex items-center justify-center space-x-2 py-3 px-4 rounded-xl text-white font-bold bg-emerald-800 hover:bg-emerald-900 disabled:opacity-50 transition cursor-pointer text-sm shadow-md"
+                  >
+                    {parentSubmitting ? (
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    ) : (
+                      <>
+                        <CheckCircle2 size={18} />
+                        <span>Activate Parent Account</span>
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
             </>
           )}
 

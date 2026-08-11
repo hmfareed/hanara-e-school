@@ -139,6 +139,7 @@ const getTeacherProfile = async (req, res, next) => {
       employeeId: staff ? (staff.employeeId || `EMP-${staff._id.toString().slice(-6).toUpperCase()}`) : `EMP-${userId.toString().slice(-6).toUpperCase()}`,
       phone: staff?.phone || user?.phone || 'N/A',
       qualification: staff?.qualification || 'Certified Educator',
+      baseSalary: staff?.baseSalary > 0 ? staff.baseSalary : 1800,
       currentAcademicYear: currentYear ? currentYear.name : '2025/2026 Academic Year',
       currentTerm: currentYear ? `Term ${currentYear.currentTerm || 1}` : 'Term 1',
       currentDate: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
@@ -150,7 +151,6 @@ const getTeacherProfile = async (req, res, next) => {
   }
 };
 
-// GET /api/teacher/dashboard-summary
 // GET /api/teacher/dashboard-summary
 const getTeacherDashboardSummary = async (req, res, next) => {
   try {
@@ -181,6 +181,7 @@ const getTeacherDashboardSummary = async (req, res, next) => {
       photoUrl: staff?.photoUrl || null,
       employeeId: staff ? (staff.employeeId || `EMP-${staff._id.toString().slice(-6).toUpperCase()}`) : `EMP-${userId.toString().slice(-6).toUpperCase()}`,
       role: staff?.role ? (staff.role.charAt(0).toUpperCase() + staff.role.slice(1)) : 'Form & Subject Teacher',
+      baseSalary: staff?.baseSalary > 0 ? staff.baseSalary : 1800,
       academicYear: currentYear ? currentYear.name : '2026/2027',
       currentTerm: currentYear ? `Term ${currentYear.currentTerm || 1}` : 'Term 1',
       currentDate: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),

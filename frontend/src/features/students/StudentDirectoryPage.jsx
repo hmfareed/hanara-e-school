@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
-import { Search, Filter, UserPlus, Eye, ChevronLeft, ChevronRight, FileSpreadsheet } from 'lucide-react';
+import { Search, Filter, UserPlus, Eye, ChevronLeft, ChevronRight, FileSpreadsheet, Award } from 'lucide-react';
 import BulkImportModal from './BulkImportModal';
+import BatchPromotionModal from './BatchPromotionModal';
 
 const StudentDirectoryPage = () => {
   const { user } = useAuth();
@@ -13,6 +14,7 @@ const StudentDirectoryPage = () => {
   const [genderFilter, setGenderFilter] = useState('');
   const [page, setPage] = useState(1);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isPromotionModalOpen, setIsPromotionModalOpen] = useState(false);
   const limit = 10;
 
   const { data: classesData } = useQuery({
@@ -52,6 +54,13 @@ const StudentDirectoryPage = () => {
         </div>
         {['superadmin', 'admin'].includes(user?.role) && (
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsPromotionModalOpen(true)}
+              className="flex items-center justify-center space-x-1.5 py-2.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-sm shadow-sm transition-colors border border-emerald-200 cursor-pointer"
+            >
+              <Award size={16} />
+              <span>Batch Promotion</span>
+            </button>
             <button
               onClick={() => setIsImportModalOpen(true)}
               className="flex items-center justify-center space-x-1.5 py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-sm shadow-sm transition-colors border border-slate-200 cursor-pointer"
@@ -244,6 +253,12 @@ const StudentDirectoryPage = () => {
           onImportSuccess={refetch}
         />
       )}
+      <BatchPromotionModal
+        isOpen={isPromotionModalOpen}
+        onClose={() => setIsPromotionModalOpen(false)}
+        classes={classesData || []}
+        onSuccess={refetch}
+      />
     </div>
   );
 };

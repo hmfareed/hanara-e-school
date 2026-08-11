@@ -4,11 +4,16 @@ const logger = require('../utils/logger');
  * Centralized error handler.
  * Translates Mongoose validation errors, JWT errors, and Zod errors
  * to consistent JSON responses.
+ *
+ * IMPORTANT: Internal error messages (MongoDB, DNS, etc.) are NEVER
+ * sent to the client for 5xx responses. Only safe, generic messages are used.
  */
 // eslint-disable-next-line no-unused-vars
 const errorHandler = (err, req, res, next) => {
   let statusCode = err.statusCode || 500;
-  let message = err.message || 'Internal Server Error';
+  // Default: use err.message only for client errors (4xx).
+  // Server errors (5xx) get a safe generic message — never expose internals.
+  let message = statusCode < 500 ? (err.message || 'Request failed') : 'Internal Server Error';
   let errors = null;
 
   // Mongoose validation error
@@ -44,6 +49,20 @@ const errorHandler = (err, req, res, next) => {
     message = 'Token has expired';
   }
 
+  // MongoDB connection / DNS errors — return 503 with safe message
+  if (
+    err.name === 'MongoNetworkError' ||
+    err.code === 'ENOTFOUND' ||
+    err.code === 'ECONNREFUSED' ||
+    err.code === 'ETIMEDOUT' ||
+    err.message?.includes('ENOTFOUND') ||
+    err.message?.includes('MongoServerSelectionError') ||
+    err.message?.includes('getaddrinfo')
+  ) {
+    statusCode = 503;
+    message = 'Service temporarily unavailable. Please try again later.';
+  }
+
   if (statusCode >= 500) {
     logger.error(`${req.method} ${req.path} → ${statusCode}`, {
       message: err.message,
@@ -55,8 +74,9 @@ const errorHandler = (err, req, res, next) => {
     success: false,
     message,
     ...(errors && { errors }),
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
+    // Never expose stack traces — not even in development via API
   });
 };
 
 module.exports = errorHandler;
+

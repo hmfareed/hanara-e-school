@@ -338,21 +338,21 @@ const TeacherStudentDetailModal = ({ studentId, onClose }) => {
                            student?.dailyFeeConfig?.planType === 'feeding_weekly_only' ? 'Feeding Fee Weekly Only (20 GHS)' :
                            student?.dailyFeeConfig?.planType === 'both_weekly' ? 'Both Feeding & Bus (Weekly)' :
                            student?.dailyFeeConfig?.planType === 'exempt' ? 'Fee Exempt' :
-                           'Both Feeding & Bus Fare (Daily 9.00 GHS)'}
+                           'Both Feeding & Bus Fee (Daily 9.00 GHS)'}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-400 font-semibold text-[10px] uppercase tracking-wider block">Feeding Fee Plan</span>
+                        <span className="text-slate-400 font-semibold text-[10px] uppercase tracking-wider block">Feeding Fee</span>
                         <p className="font-bold text-slate-800 text-xs mt-0.5 capitalize">
                           {student?.dailyFeeConfig?.feedingPlan === 'weekly' ? `Weekly (${student?.dailyFeeConfig?.feedingWeeklyAmount || 20} GHS/wk)` :
                            student?.dailyFeeConfig?.feedingPlan === 'exempt' ? 'Exempt' : 'Daily (Standard 4.00 GHS)'}
                         </p>
                       </div>
                       <div>
-                        <span className="text-slate-400 font-semibold text-[10px] uppercase tracking-wider block">Transport Bus Pass</span>
+                        <span className="text-slate-400 font-semibold text-[10px] uppercase tracking-wider block">Transport Bus Fee</span>
                         <p className="font-bold text-slate-800 text-xs mt-0.5 capitalize">
                           {student?.dailyFeeConfig?.busPlan === 'weekly' ? `Weekly (${student?.dailyFeeConfig?.busWeeklyAmount || 25} GHS/wk)` :
-                           student?.dailyFeeConfig?.busPlan === 'none' ? 'None (Walks)' : 'Daily (Standard 5.00 GHS)'}
+                           student?.dailyFeeConfig?.busPlan === 'none' ? 'None (Walks)' : 'Daily Fee (Standard 5.00 GHS)'}
                         </p>
                       </div>
                       <div>

@@ -125,7 +125,7 @@ const DailyFeeConfigModal = ({ student, onClose, onSaved }) => {
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
               >
                 <option value="daily">Daily (Standard 4.00 GHS/day)</option>
-                <option value="weekly">Weekly Subscription (20.00 GHS/wk)</option>
+                <option value="weekly">Weekly Fee (20.00 GHS/wk)</option>
                 <option value="exempt">Exempt (0.00 GHS)</option>
               </select>
 
@@ -152,14 +152,14 @@ const DailyFeeConfigModal = ({ student, onClose, onSaved }) => {
                 onChange={(e) => setBusPlan(e.target.value)}
                 className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
               >
-                <option value="daily">Daily Fare (Standard 5.00 GHS/day)</option>
-                <option value="weekly">Weekly Pass (25.00 GHS/wk)</option>
+                <option value="daily">Daily Fee (Standard 5.00 GHS/day)</option>
+                <option value="weekly">Weekly Fee (25.00 GHS/wk)</option>
                 <option value="none">None (Walks / No Bus)</option>
               </select>
 
               {busPlan === 'weekly' && (
                 <div className="pt-1">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase">Weekly Bus Pass (GHS)</label>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase">Weekly Bus Fee (GHS)</label>
                   <input
                     type="number"
                     value={busWeeklyAmount}

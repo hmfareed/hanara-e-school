@@ -7,6 +7,7 @@ import {
   ArrowLeft, User, Phone, CheckCircle, AlertCircle, Ban, Bus, X, Save, MapPin, Pencil, FileDown, Loader2, Receipt, Coins,
 } from 'lucide-react';
 import DailyFeeConfigModal from './DailyFeeConfigModal';
+import EditGuardianModal from './EditGuardianModal';
 
 // ─── Transport Info Modal ──────────────────────────────────────────────────────
 const TransportModal = ({ student, onClose, onSaved }) => {
@@ -291,6 +292,7 @@ const StudentProfilePage = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showFeeConfigModal, setShowFeeConfigModal] = useState(false);
   const [downloadingReportCard, setDownloadingReportCard] = useState(false);
+  const [selectedGuardianToEdit, setSelectedGuardianToEdit] = useState(null);
 
   const handleDownloadReportCard = async () => {
     setDownloadingReportCard(true);
@@ -573,25 +575,25 @@ const StudentProfilePage = () => {
                 <span className="text-slate-900 font-extrabold capitalize text-xs">
                   {student?.dailyFeeConfig?.planType === 'feeding_weekly_bus_daily' ? 'Feeding Weekly (20 GHS/wk) + Bus Daily (5 GHS/day)' :
                    student?.dailyFeeConfig?.planType === 'feeding_only_daily' ? 'Feeding Fee Only (Daily)' :
-                   student?.dailyFeeConfig?.planType === 'bus_only_daily' ? 'Transport Bus Fare Only (Daily)' :
+                   student?.dailyFeeConfig?.planType === 'bus_only_daily' ? 'Transport Bus Fee Only (Daily)' :
                    student?.dailyFeeConfig?.planType === 'feeding_weekly_only' ? 'Feeding Fee Weekly Only (20 GHS/wk)' :
                    student?.dailyFeeConfig?.planType === 'both_weekly' ? 'Both Feeding & Bus (Weekly)' :
                    student?.dailyFeeConfig?.planType === 'exempt' ? 'Fee Exempt' :
-                   'Both Feeding & Bus Fare (Daily)'}
+                   'Both Feeding & Bus Fee (Daily)'}
                 </span>
               </div>
               <div>
-                <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Feeding Subscription</span>
+                <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Feeding Fee</span>
                 <span className="text-slate-800 font-bold text-xs capitalize">
                   {student?.dailyFeeConfig?.feedingPlan === 'weekly' ? `Weekly (${student?.dailyFeeConfig?.feedingWeeklyAmount || 20} GHS/week)` :
                    student?.dailyFeeConfig?.feedingPlan === 'exempt' ? 'Exempt' : 'Daily (Standard 4.00 GHS)'}
                 </span>
               </div>
               <div>
-                <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Transport Bus Pass</span>
+                <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Transport Bus Fee</span>
                 <span className="text-slate-800 font-bold text-xs capitalize">
                   {student?.dailyFeeConfig?.busPlan === 'weekly' ? `Weekly (${student?.dailyFeeConfig?.busWeeklyAmount || 25} GHS/week)` :
-                   student?.dailyFeeConfig?.busPlan === 'none' ? 'None (Walks)' : 'Daily Fare (Standard 5.00 GHS)'}
+                   student?.dailyFeeConfig?.busPlan === 'none' ? 'None (Walks)' : 'Daily Fee (Standard 5.00 GHS)'}
                 </span>
               </div>
               <div>
@@ -647,13 +649,27 @@ const StudentProfilePage = () => {
           )}
 
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-            <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider pb-3 border-b border-slate-100">
-              Guardian &amp; Contact Details
-            </h4>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h4 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+                Guardian &amp; Contact Details
+              </h4>
+            </div>
             {guardians && guardians.length > 0 ? (
               guardians.map((guardian, i) => (
                 <div key={guardian._id} className="space-y-4">
                   {i > 0 && <div className="border-t border-slate-100 pt-4"></div>}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Guardian #{i + 1}</span>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setSelectedGuardianToEdit(guardian)}
+                        className="inline-flex items-center space-x-1 text-xs font-bold text-emerald-800 hover:text-emerald-950 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded-lg border border-emerald-200 transition-colors cursor-pointer"
+                      >
+                        <Pencil size={12} />
+                        <span>Edit Guardian Profile</span>
+                      </button>
+                    )}
+                  </div>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Name</span>
@@ -707,13 +723,12 @@ const StudentProfilePage = () => {
             {attendanceSummary ? (
               <div className="space-y-4 text-center">
                 <div className="inline-flex items-center justify-center h-24 w-24 rounded-full border-4 border-emerald-100 bg-emerald-50">
-                  <span className="text-2xl font-black text-emerald-850">
-                    {attendanceSummary.attendanceRate !== null && attendanceSummary.attendanceRate !== undefined
-                      ? `${attendanceSummary.attendanceRate}%`
-                      : 'N/A'}
-                  </span>
+                  <div>
+                    <span className="text-2xl font-black text-emerald-800">{attendanceSummary.rate}%</span>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase">Rate</p>
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 text-xs font-medium">
+                <div className="grid grid-cols-2 gap-2 text-center text-xs">
                   <div className="bg-emerald-50 text-emerald-800 p-2.5 rounded-lg border border-emerald-100">
                     <p className="text-slate-400 font-semibold uppercase tracking-wide text-[9px]">Present</p>
                     <p className="text-sm font-bold mt-0.5">{attendanceSummary.present ?? 0}</p>
@@ -730,6 +745,13 @@ const StudentProfilePage = () => {
           </div>
         </div>
       </div>
+
+      <EditGuardianModal
+        isOpen={!!selectedGuardianToEdit}
+        guardian={selectedGuardianToEdit}
+        studentId={id}
+        onClose={() => setSelectedGuardianToEdit(null)}
+      />
     </div>
   );
 };

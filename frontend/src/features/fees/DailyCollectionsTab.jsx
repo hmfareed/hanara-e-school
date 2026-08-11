@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { 
   DollarSign, Bus, Award, AlertCircle, Calendar, Filter, Loader2, 
   ArrowRight, Check, ShieldAlert, RefreshCw, ChevronRight, HelpCircle,
-  BarChart2, Settings, ListCollapse, BookOpen, Clock, FileText, Send
+  BarChart2, Settings, ListCollapse, BookOpen, Clock, FileText, Send,
+  UserX, Users, ExternalLink, UserCheck, MessageSquare, X
 } from 'lucide-react';
 import { subscribeToEvent, unsubscribeFromEvent, getSocket } from '../../services/socket';
 
@@ -13,12 +15,84 @@ const DailyCollectionsTab = () => {
   const { user } = useAuth();
   const isAdmin = ['superadmin', 'admin', 'system_admin'].includes(user?.role);
   
-  const [activeSubTab, setActiveTab] = useState('queue'); // 'queue', 'reports', 'settings'
+  const [activeSubTab, setActiveTab] = useState('queue'); // 'queue', 'defaulters', 'reports', 'settings'
   
   // Queue Filters
   const [queueDate, setQueueDate] = useState(new Date().toISOString().split('T')[0]);
   const [queueClass, setQueueDateClass] = useState('');
   const [queueStatus, setQueueStatus] = useState('');
+
+  // Defaulters / Unpaid Students Filters
+  const [defaulterDate, setDefaulterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [defaulterClass, setDefaulterClass] = useState('');
+
+  // SMS Modal State
+  const [smsModalOpen, setSmsModalOpen] = useState(false);
+  const [smsTargetStudents, setSmsTargetStudents] = useState([]);
+  const [customSmsMessage, setCustomSmsMessage] = useState('');
+  const [smsFeedback, setSmsFeedback] = useState(null);
+
+  // ─── Query Unpaid Defaulters List ─────────────────────────────────────────
+  const { data: defaultersList = [], isLoading: defaultersLoading, refetch: refetchDefaulters } = useQuery({
+    queryKey: ['dailyDefaultersList', defaulterDate, defaulterClass],
+    queryFn: async () => {
+      const params = {};
+      if (defaulterDate) params.date = defaulterDate;
+      if (defaulterClass) params.classId = defaulterClass;
+      const res = await api.get('/fees/daily-register/unpaid', { params });
+      return res.data?.data || [];
+    },
+    enabled: activeSubTab === 'defaulters',
+  });
+
+  // ─── SMS Defaulters Mutation ──────────────────────────────────────────────
+  const sendSmsMutation = useMutation({
+    mutationFn: async (payload) => {
+      return await api.post('/fees/daily-register/unpaid/send-sms', payload);
+    },
+    onSuccess: (res) => {
+      const data = res.data?.data || {};
+      setSmsFeedback({
+        type: 'success',
+        message: `✓ ${data.sentCount || 0} SMS Alerts Sent Successfully (${data.failedCount || 0} failed / no phone).`,
+      });
+      setTimeout(() => {
+        setSmsModalOpen(false);
+        setSmsFeedback(null);
+      }, 2500);
+    },
+    onError: (err) => {
+      setSmsFeedback({
+        type: 'error',
+        message: err.response?.data?.message || 'Failed to dispatch SMS alerts.',
+      });
+    },
+  });
+
+  const handleOpenSingleSms = (student) => {
+    setSmsTargetStudents([student]);
+    setCustomSmsMessage('');
+    setSmsFeedback(null);
+    setSmsModalOpen(true);
+  };
+
+  const handleOpenBulkSms = () => {
+    if (defaultersList.length === 0) return;
+    setSmsTargetStudents(defaultersList);
+    setCustomSmsMessage('');
+    setSmsFeedback(null);
+    setSmsModalOpen(true);
+  };
+
+  const handleDispatchSms = () => {
+    if (smsTargetStudents.length === 0) return;
+    const studentIds = smsTargetStudents.map((s) => s.studentId);
+    sendSmsMutation.mutate({
+      studentIds,
+      customMessage: customSmsMessage.trim() || undefined,
+      date: defaulterDate,
+    });
+  };
 
   // Submissions State (initialized from REST, updated by Socket.io)
   const [submissions, setSubmissions] = useState([]);
@@ -318,21 +392,49 @@ const DailyCollectionsTab = () => {
 
   return (
     <div className="space-y-6">
+      {/* Top Header Action Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
+        <div>
+          <h2 className="text-base font-extrabold text-slate-800">Daily Collections Monitoring &amp; Audit</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Monitor class-by-class feeding &amp; bus collections, audit cash reconciliation, and view unpaid students.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Link
+            to="/fees/daily-register"
+            className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+          >
+            <UserCheck size={14} /> Open Daily Class Register
+          </Link>
+        </div>
+      </div>
+
       {/* Sub tabs navigation */}
-      <div className="flex border-b border-slate-200">
+      <div className="flex border-b border-slate-200 overflow-x-auto">
         <button
           onClick={() => setActiveTab('queue')}
-          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
             activeSubTab === 'queue'
               ? 'border-emerald-600 text-emerald-700 bg-emerald-50/20'
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50/50'
           }`}
         >
-          <Clock size={16} /> Submissions Queue
+          <Clock size={16} /> Submissions &amp; Class Collections
+        </button>
+        <button
+          onClick={() => setActiveTab('defaulters')}
+          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            activeSubTab === 'defaulters'
+              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/20'
+              : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50/50'
+          }`}
+        >
+          <AlertCircle size={16} /> Unpaid Students (Defaulters)
         </button>
         <button
           onClick={() => setActiveTab('reports')}
-          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
             activeSubTab === 'reports'
               ? 'border-emerald-600 text-emerald-700 bg-emerald-50/20'
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50/50'
@@ -342,7 +444,7 @@ const DailyCollectionsTab = () => {
         </button>
         <button
           onClick={() => setActiveTab('settings')}
-          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 ${
+          className={`px-5 py-3 text-sm font-bold border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
             activeSubTab === 'settings'
               ? 'border-emerald-600 text-emerald-700 bg-emerald-50/20'
               : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50/50'
@@ -725,7 +827,197 @@ const DailyCollectionsTab = () => {
       )}
 
       {/* ──────────────────────────────────────────────────────────────────────── */}
-      {/* SUB-TAB 2: ANALYTICS REPORTS                                            */}
+      {/* SUB-TAB 2: UNPAID STUDENTS (DEFAULTERS)                                */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'defaulters' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Controls Filters */}
+          <div className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm flex flex-wrap gap-4 items-end justify-between">
+            <div className="flex flex-wrap gap-4 items-end">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1 tracking-wider">Date</label>
+                <input
+                  type="date"
+                  value={defaulterDate}
+                  onChange={(e) => setDefaulterDate(e.target.value)}
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-1 tracking-wider">Class</label>
+                <select
+                  value={defaulterClass}
+                  onChange={(e) => setDefaulterClass(e.target.value)}
+                  className="px-3 py-2 text-sm border border-slate-200 rounded-xl bg-slate-50 focus:outline-none focus:ring-2 focus:ring-emerald-500 min-w-[140px]"
+                >
+                  <option value="">All Classes</option>
+                  {classes?.map((c) => (
+                    <option key={c._id} value={c._id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={() => { setDefaulterDate(new Date().toISOString().split('T')[0]); setDefaulterClass(''); }}
+                className="text-xs font-bold text-slate-400 hover:text-slate-600 py-2.5 px-3 transition-colors"
+              >
+                Reset Date to Today
+              </button>
+            </div>
+            <button
+              onClick={() => refetchDefaulters()}
+              className="px-3.5 py-2 text-xs font-bold text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 flex items-center gap-1.5 transition-colors"
+            >
+              <RefreshCw size={12} /> Refresh List
+            </button>
+          </div>
+
+          {/* Defaulters KPI Overview */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+              <span className="text-slate-400 font-extrabold text-[10px] uppercase tracking-wider block">Unpaid Students Count</span>
+              <div className="text-3xl font-black text-rose-600 mt-1">{defaultersList.length}</div>
+              <span className="text-[10px] text-slate-400 font-semibold block mt-1">Students present with unpaid fees</span>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs">
+              <span className="text-slate-400 font-extrabold text-[10px] uppercase tracking-wider block">Outstanding Feeding Unpaid</span>
+              <div className="text-3xl font-black text-amber-600 mt-1">
+                {defaultersList.reduce((acc, d) => acc + (d.feedingStatus === 'unpaid' ? d.feedingAmount : 0), 0).toFixed(2)} <span className="text-xs text-slate-400">GHS</span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-semibold block mt-1">Uncollected feeding cash</span>
+            </div>
+            <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs border-l-4 border-l-rose-500">
+              <span className="text-slate-400 font-extrabold text-[10px] uppercase tracking-wider block">Outstanding Bus Fee Unpaid</span>
+              <div className="text-3xl font-black text-rose-600 mt-1">
+                {defaultersList.reduce((acc, d) => acc + (d.busStatus === 'unpaid' ? d.busAmount : 0), 0).toFixed(2)} <span className="text-xs text-slate-400">GHS</span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-semibold block mt-1">Uncollected transport fare</span>
+            </div>
+          </div>
+
+          {/* Defaulters List Table */}
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+            <div className="p-4 border-b border-slate-200 bg-slate-50/50 flex flex-wrap justify-between items-center gap-3">
+              <span className="text-xs font-black uppercase tracking-widest text-slate-700 flex items-center gap-2">
+                <UserX size={16} className="text-rose-600" /> Defaulter Roster for {new Date(defaulterDate).toLocaleDateString('en-GH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-bold text-slate-400">
+                  {defaultersList.length} Student{defaultersList.length === 1 ? '' : 's'} Listed
+                </span>
+                {defaultersList.length > 0 && (
+                  <button
+                    onClick={handleOpenBulkSms}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-extrabold shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <MessageSquare size={13} /> Send SMS Alerts to All ({defaultersList.length})
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {defaultersLoading ? (
+              <div className="p-16 text-center flex flex-col items-center justify-center space-y-2">
+                <Loader2 className="animate-spin text-emerald-600 h-6 w-6" />
+                <span className="text-xs font-semibold text-slate-400">Scanning attendance &amp; fee registers...</span>
+              </div>
+            ) : defaultersList.length === 0 ? (
+              <div className="p-16 text-center text-slate-400 space-y-2">
+                <Check size={32} className="mx-auto text-emerald-500 bg-emerald-50 p-1.5 rounded-full" />
+                <p className="font-extrabold text-slate-700 text-sm">No Unpaid Students Recorded!</p>
+                <p className="text-xs text-slate-400">All present students for this date have paid their daily feeding and bus fees.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-200">
+                      <th className="py-3 px-4">Student</th>
+                      <th className="py-3 px-4">Class</th>
+                      <th className="py-3 px-4">Feeding Status</th>
+                      <th className="py-3 px-4">Bus Fee Status</th>
+                      <th className="py-3 px-4 text-right">Outstanding Amount</th>
+                      <th className="py-3 px-4 text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 text-xs">
+                    {defaultersList.map((d, index) => {
+                      const totalOwed = (d.feedingStatus === 'unpaid' ? d.feedingAmount : 0) + (d.busStatus === 'unpaid' ? d.busAmount : 0);
+                      return (
+                        <tr key={d.studentId || index} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 overflow-hidden flex items-center justify-center shrink-0">
+                                {d.photoUrl ? (
+                                  <img src={d.photoUrl} alt="" className="h-full w-full object-cover" />
+                                ) : (
+                                  <span className="text-xs font-bold text-slate-400">{d.firstName[0]}</span>
+                                )}
+                              </div>
+                              <div>
+                                <span className="font-bold text-slate-900 block">{d.firstName} {d.lastName}</span>
+                                <span className="text-[10px] font-semibold text-slate-400 font-mono">Adm: {d.admissionNumber}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="font-bold text-slate-700">{d.className}</span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                              d.feedingStatus === 'unpaid'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : d.feedingStatus === 'paid'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {d.feedingStatus === 'unpaid' ? `Unpaid (${d.feedingAmount.toFixed(2)} GHS)` : d.feedingStatus}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                              d.busStatus === 'unpaid'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : d.busStatus === 'paid'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {d.busStatus === 'unpaid' ? `Unpaid (${d.busAmount.toFixed(2)} GHS)` : d.busStatus}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right font-black text-rose-600 text-sm">
+                            {totalOwed.toFixed(2)} GHS
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenSingleSms(d)}
+                                title="Send SMS Reminder to Parent"
+                                className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
+                              >
+                                <MessageSquare size={11} /> Send SMS
+                              </button>
+                              <Link
+                                to={`/students/${d.studentId}`}
+                                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold text-slate-600 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 rounded-lg transition-colors"
+                              >
+                                <ExternalLink size={11} />
+                              </Link>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* SUB-TAB 3: ANALYTICS REPORTS                                            */}
       {/* ──────────────────────────────────────────────────────────────────────── */}
       {activeSubTab === 'reports' && (
         <div className="space-y-6 animate-fade-in">
@@ -1049,6 +1341,89 @@ const DailyCollectionsTab = () => {
 
           </div>
           
+        </div>
+      )}
+
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {/* SMS ALERT DISPATCH MODAL                                                */}
+      {/* ──────────────────────────────────────────────────────────────────────── */}
+      {smsModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-5 animate-scale-up border border-slate-100 relative">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-slate-800">
+                <MessageSquare className="text-rose-600" size={20} />
+                <h3 className="font-extrabold text-base">Send SMS Fee Reminder</h3>
+              </div>
+              <button
+                onClick={() => setSmsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {smsFeedback && (
+              <div className={`p-3.5 rounded-xl text-xs font-bold ${
+                smsFeedback.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+              }`}>
+                {smsFeedback.message}
+              </div>
+            )}
+
+            <div className="space-y-4 text-xs">
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-1">
+                <span className="font-extrabold text-slate-400 text-[10px] uppercase tracking-wider block">Recipients</span>
+                <p className="font-bold text-slate-800">
+                  {smsTargetStudents.length === 1
+                    ? `1 Student: ${smsTargetStudents[0].firstName} ${smsTargetStudents[0].lastName} (${smsTargetStudents[0].className})`
+                    : `${smsTargetStudents.length} Unpaid Defaulter Students (Bulk Alert)`}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                  Custom SMS Message (Optional)
+                </label>
+                <textarea
+                  rows={4}
+                  value={customSmsMessage}
+                  onChange={(e) => setCustomSmsMessage(e.target.value)}
+                  placeholder={`Default message: Dear {guardianName}, please note that your child {studentName} has an unpaid daily fee balance for ${new Date(defaulterDate).toLocaleDateString('en-GB')}. Kindly ensure payment is made. Thank you - HANARA SCHOOLS`}
+                  className="w-full border border-slate-200 rounded-2xl p-3 text-xs font-medium text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Placeholders <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-bold">{`{studentName}`}</code> and <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-bold">{`{guardianName}`}</code> will be automatically replaced per recipient.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setSmsModalOpen(false)}
+                className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDispatchSms}
+                disabled={sendSmsMutation.isPending}
+                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-extrabold shadow-sm transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {sendSmsMutation.isPending ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Dispatching SMS...
+                  </>
+                ) : (
+                  <>
+                    <Send size={14} /> Send {smsTargetStudents.length} SMS Alert{smsTargetStudents.length === 1 ? '' : 's'}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

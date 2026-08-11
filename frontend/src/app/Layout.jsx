@@ -31,7 +31,15 @@ import {
   Bell,
   ChevronDown,
   Shield,
+  Send,
+  CreditCard,
+  ShoppingBag,
+  Megaphone,
+  Mail,
+  Fingerprint,
 } from 'lucide-react';
+import OfflineBanner, { ConnectivityDot } from '../components/OfflineBanner';
+import SyncManagerModal from '../components/SyncManagerModal';
 
 /* ── Dynamic header badge showing current academic year ── */
 const ActiveYearBadge = () => {
@@ -197,6 +205,12 @@ const Layout = () => {
       roles: ['superadmin', 'admin'],
     },
     {
+      name: 'Students',
+      path: '/students',
+      icon: GraduationCap,
+      roles: ['superadmin', 'admin', 'teacher', 'accountant', 'system_admin'],
+    },
+    {
       name: 'BECE Candidates',
       path: '/bece',
       icon: Award,
@@ -221,10 +235,46 @@ const Layout = () => {
       roles: ['superadmin', 'admin'],
     },
     {
+      name: 'Staff Attendance',
+      path: '/staff/attendance',
+      icon: Fingerprint,
+      roles: ['superadmin', 'admin', 'system_admin'],
+    },
+    {
       name: 'Fees & Finance',
       path: '/fees',
       icon: Receipt,
       roles: ['superadmin', 'admin', 'accountant'],
+    },
+    {
+      name: 'Staff Payroll',
+      path: '/payroll',
+      icon: CreditCard,
+      roles: ['superadmin', 'admin', 'accountant', 'system_admin'],
+    },
+    {
+      name: 'Notice Board',
+      path: '/notices',
+      icon: Megaphone,
+      roles: ['superadmin', 'admin', 'teacher', 'parent', 'accountant', 'system_admin'],
+    },
+    {
+      name: 'Executive Analytics',
+      path: '/analytics',
+      icon: BarChart3,
+      roles: ['superadmin', 'admin', 'accountant'],
+    },
+    {
+      name: 'Parent Messages',
+      path: '/messages',
+      icon: Mail,
+      roles: ['superadmin', 'admin', 'teacher', 'parent', 'accountant', 'system_admin'],
+    },
+    {
+      name: 'School Store',
+      path: '/store',
+      icon: ShoppingBag,
+      roles: ['superadmin', 'admin', 'accountant', 'system_admin'],
     },
     {
       name: 'Transport',
@@ -269,17 +319,17 @@ const Layout = () => {
       roles: ['teacher'],
     },
     {
-      name: 'Students',
-      path: '/students',
-      icon: GraduationCap,
-      roles: ['teacher', 'accountant'],
-    },
-    {
       name: 'Attendance',
       path: '/attendance',
       icon: UserCheck,
       roles: ['teacher'],
       requireFormTeacher: true,
+    },
+    {
+      name: 'My Attendance',
+      path: '/staff/check-in',
+      icon: Fingerprint,
+      roles: ['teacher', 'accountant', 'superadmin', 'admin', 'system_admin'],
     },
     {
       name: 'Enter Results',
@@ -307,7 +357,7 @@ const Layout = () => {
     },
     {
       name: 'Daily Fee Collection',
-      path: '/fees/daily-register',
+      path: user?.role === 'teacher' ? '/fees/daily-register' : '/fees?tab=daily',
       icon: ClipboardList,
       roles: ['teacher', 'superadmin', 'admin', 'accountant', 'system_admin'],
     },
@@ -359,6 +409,9 @@ const Layout = () => {
 
   return (
     <div className="h-screen bg-[#f4f6f8] flex overflow-hidden font-sans">
+      {/* Global Offline Banner & Sync Manager Modal */}
+      <OfflineBanner />
+      <SyncManagerModal />
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div
@@ -619,6 +672,9 @@ const Layout = () => {
                 </span>
               )}
             </div>
+
+            {/* Connectivity Dot */}
+            <ConnectivityDot />
 
             {/* Notification Bell */}
             <div 

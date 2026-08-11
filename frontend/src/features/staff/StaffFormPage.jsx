@@ -25,6 +25,7 @@ const StaffFormPage = () => {
     employmentDate: '',
     employmentStatus: 'active',
     role: 'teacher',
+    baseSalary: 1800,
     createUserAccount: true,
     password: '',
   });
@@ -41,6 +42,7 @@ const StaffFormPage = () => {
           ...data,
           title: data.title || '',
           photoUrl: data.photoUrl || null,
+          baseSalary: data.baseSalary || 1800,
           dob: data.dob ? data.dob.split('T')[0] : '',
           employmentDate: data.employmentDate ? data.employmentDate.split('T')[0] : '',
           createUserAccount: false,
@@ -69,7 +71,15 @@ const StaffFormPage = () => {
       navigate('/staff');
     },
     onError: (err) => {
-      setErrorMsg(err.response?.data?.message || 'Failed to save staff member.');
+      const resp = err.response?.data;
+      if (resp?.errors) {
+        const fieldDetails = Object.entries(resp.errors)
+          .map(([field, msgs]) => `${field}: ${Array.isArray(msgs) ? msgs.join(', ') : msgs}`)
+          .join(' | ');
+        setErrorMsg(`Validation failed - ${fieldDetails}`);
+      } else {
+        setErrorMsg(resp?.message || 'Failed to save staff member.');
+      }
     },
   });
 
@@ -107,11 +117,33 @@ const StaffFormPage = () => {
     e.preventDefault();
     setErrorMsg('');
 
+    const cleanClasses = (formData.classesAssigned || []).map((c) =>
+      typeof c === 'object' && c?._id ? c._id : String(c)
+    );
+
     const payload = {
-      ...formData,
+      title: formData.title || '',
+      photoUrl: formData.photoUrl || null,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      otherNames: formData.otherNames || '',
+      gender: formData.gender,
+      phone: formData.phone,
+      email: formData.email ? formData.email : null,
+      address: formData.address || '',
+      qualification: formData.qualification || '',
+      employmentStatus: formData.employmentStatus || 'active',
+      role: formData.role || 'teacher',
+      baseSalary: Number(formData.baseSalary) || 0,
+      classesAssigned: cleanClasses,
       dob: formData.dob ? new Date(formData.dob).toISOString() : null,
       employmentDate: formData.employmentDate ? new Date(formData.employmentDate).toISOString() : null,
     };
+
+    if (!isEdit && formData.createUserAccount) {
+      payload.createUserAccount = true;
+      if (formData.password) payload.password = formData.password;
+    }
 
     saveMutation.mutate(payload);
   };
@@ -301,7 +333,7 @@ const StaffFormPage = () => {
           <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider pb-3 border-b border-slate-100">
             Employment & System Role
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div>
               <label className="block text-sm font-semibold text-slate-700">Employment Date</label>
               <input
@@ -338,6 +370,18 @@ const StaffFormPage = () => {
                 <option value="support">Support Staff</option>
                 <option value="cleaner">School Cleaner / Cook</option>
               </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700">Base Salary (GHS)</label>
+              <input
+                type="number"
+                min="0"
+                step="50"
+                placeholder="e.g. 1800"
+                value={formData.baseSalary}
+                onChange={(e) => setFormData({ ...formData, baseSalary: e.target.value })}
+                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm font-bold text-emerald-800"
+              />
             </div>
           </div>
 

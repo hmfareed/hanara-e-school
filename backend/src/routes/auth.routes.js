@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { login, refresh, logout, getMe, registerTeacher, updateMe, changePassword, getPublicStats } = require('../controllers/auth.controller');
+const { login, refresh, logout, getMe, registerTeacher, registerParent, updateMe, changePassword, getPublicStats } = require('../controllers/auth.controller');
 const { protect } = require('../middleware/auth');
 const { validate } = require('../middleware/validate');
 const { loginSchema, refreshSchema } = require('../validators/auth.validators');
@@ -13,6 +13,7 @@ router.get('/me', protect, getMe);
 router.patch('/me', protect, updateMe);
 router.post('/change-password', protect, changePassword);
 router.post('/register-teacher', authLimiter, registerTeacher);
+router.post('/register-parent', authLimiter, registerParent);
 router.get('/public-stats', getPublicStats);
 
 module.exports = router;

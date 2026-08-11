@@ -13,6 +13,7 @@ import {
   Loader2,
   ShieldCheck,
   KeyRound,
+  DollarSign,
 } from 'lucide-react';
 
 const TeacherProfileSettingsPage = () => {
@@ -304,6 +305,29 @@ const TeacherProfileSettingsPage = () => {
               <p className="text-[11px] text-slate-400 mt-1">
                 This email address is used for portal logins and system notifications.
               </p>
+            </div>
+          </div>
+
+          {/* ── SECTION 3: Salary & Compensation (Admin Configured) ── */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+            <h3 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3 flex items-center gap-2">
+              <DollarSign className="w-4 h-4 text-emerald-600" />
+              Salary &amp; Official Compensation Structure
+            </h3>
+
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl bg-emerald-50/60 border border-emerald-100 gap-4">
+              <div>
+                <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider block">Configured Monthly Base Salary</span>
+                <div className="text-2xl font-black text-emerald-950 mt-0.5">
+                  {(profileData?.baseSalary || 1800).toFixed(2)} <span className="text-xs font-bold text-emerald-700">GHS</span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Your monthly base salary is configured by school administration and used during automated monthly payroll runs.
+                </p>
+              </div>
+              <span className="inline-flex px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-800 border border-emerald-200 flex-shrink-0">
+                Official Staff Salary
+              </span>
             </div>
           </div>
 

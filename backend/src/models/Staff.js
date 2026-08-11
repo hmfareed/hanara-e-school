@@ -67,6 +67,10 @@ const staffSchema = new mongoose.Schema(
       enum: ['teacher', 'accountant', 'admin', 'driver', 'support', 'cleaner'],
       required: [true, 'Staff role is required'],
     },
+    baseSalary: {
+      type: Number,
+      default: 0,
+    },
     // Classes this staff member is assigned to (as class teacher or subject teacher)
     classesAssigned: [
       {

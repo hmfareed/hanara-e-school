@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
+import { saveUserSession, loadUserSession, clearUserSession } from '../services/db';
 
 const AuthContext = createContext(null);
 
@@ -27,10 +28,25 @@ export const AuthProvider = ({ children }) => {
           const res = await api.get('/auth/me');
           if (res.data?.success) {
             setUser(res.data.data);
+            // Persist session in IndexedDB for offline access
+            await saveUserSession(res.data.data);
           } else {
             localStorage.removeItem('accessToken');
           }
         } catch (error) {
+          // Fall back to cached session when:
+          //  a) pure network error (no response at all) — navigator.onLine = false
+          //  b) server returns 5xx — e.g. MongoDB Atlas DNS failure when offline
+          const isOfflineError = !error.response || error.response.status >= 500;
+          if (isOfflineError) {
+            const cachedUser = await loadUserSession();
+            if (cachedUser) {
+              console.info('[Auth] Offline — restored session from IndexedDB cache');
+              setUser(cachedUser);
+              setLoading(false);
+              return;
+            }
+          }
           console.error('Initial authentication check failed:', error);
           localStorage.removeItem('accessToken');
         }
@@ -41,9 +57,22 @@ export const AuthProvider = ({ children }) => {
           if (res.data?.success && res.data?.data?.accessToken) {
             localStorage.setItem('accessToken', res.data.data.accessToken);
             setUser(res.data.data.user);
+            await saveUserSession(res.data.data.user);
           }
-        } catch {
-          // Silent refresh failed / no active cookie, ignore
+        } catch (err) {
+          // Silent refresh failed — check IndexedDB for cached session (offline mode)
+          // Also catches 5xx errors (e.g. MongoDB Atlas unreachable when offline)
+          const isOfflineError = !err.response || err.response.status >= 500;
+          if (isOfflineError) {
+            const cachedUser = await loadUserSession();
+            if (cachedUser) {
+              console.info('[Auth] Offline — using cached session (no refresh token needed)');
+              setUser(cachedUser);
+              setLoading(false);
+              return;
+            }
+          }
+          // No cached session / no cookie, ignore
         }
       }
       setLoading(false);
@@ -54,6 +83,7 @@ export const AuthProvider = ({ children }) => {
     const handleLogoutEvent = () => {
       setUser(null);
       localStorage.removeItem('accessToken');
+      clearUserSession();
     };
     window.addEventListener('auth-logout', handleLogoutEvent);
 
@@ -71,20 +101,40 @@ export const AuthProvider = ({ children }) => {
     }
   }, [user]);
 
-  const login = async (email, password) => {
+  const login = async (emailOrPhone, password) => {
     setLoading(true);
     try {
-      const res = await api.post('/auth/login', { email, password });
+      const res = await api.post('/auth/login', {
+        email: emailOrPhone,
+        phone: emailOrPhone,
+        identifier: emailOrPhone,
+        password,
+      });
       if (res.data?.success && res.data?.data?.accessToken) {
         localStorage.setItem('accessToken', res.data.data.accessToken);
         setUser(res.data.data.user);
+        // Persist session in IndexedDB for offline access
+        await saveUserSession(res.data.data.user);
         return { success: true };
       }
       return { success: false, message: res.data?.message || 'Login failed' };
     } catch (error) {
+      // If server is unreachable (offline or 5xx), try cached session
+      const isOfflineError = !error.response || error.response.status >= 500;
+      if (isOfflineError) {
+        const cachedUser = await loadUserSession();
+        if (cachedUser) {
+          setUser(cachedUser);
+          return { success: true, _fromCache: true };
+        }
+        return {
+          success: false,
+          message: 'You\'re offline. Please connect to the internet to sign in for the first time.',
+        };
+      }
       return {
         success: false,
-        message: error.response?.data?.message || 'Invalid email or password',
+        message: error.response?.data?.message || 'Invalid login details or password',
       };
     } finally {
       setLoading(false);
@@ -99,6 +149,8 @@ export const AuthProvider = ({ children }) => {
     } finally {
       setUser(null);
       localStorage.removeItem('accessToken');
+      // Clear the IndexedDB session cache on logout
+      await clearUserSession();
     }
   };
 
@@ -119,6 +171,7 @@ export const AuthProvider = ({ children }) => {
       const res = await api.get('/auth/me');
       if (res.data?.success) {
         setUser(res.data.data);
+        await saveUserSession(res.data.data);
       }
     } catch (error) {
       console.error('Failed to refresh user profile:', error);

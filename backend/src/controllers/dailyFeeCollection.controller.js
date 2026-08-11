@@ -5,6 +5,7 @@ const Student = require('../models/Student');
 const Class = require('../models/Class');
 const AttendanceRecord = require('../models/AttendanceRecord');
 const socketService = require('../services/socket.service');
+const { sendSms } = require('../services/sms.service');
 const logger = require('../utils/logger');
 
 // Utility to normalize date to midnight UTC
@@ -756,6 +757,129 @@ const getDiscrepancies = async (req, res, next) => {
   }
 };
 
+// GET /api/fees/daily-register/unpaid (Fetch unpaid students for date/class)
+const getUnpaidStudents = async (req, res, next) => {
+  try {
+    const { date, classId } = req.query;
+    const searchDate = date ? normalizeDate(date) : normalizeDate(new Date());
+
+    const filter = { date: searchDate };
+    if (classId) filter.class = classId;
+
+    const submissions = await FeeCollectionSubmission.find(filter)
+      .populate('class', 'name')
+      .populate('lineItems.student', 'firstName lastName admissionNumber photoUrl currentClass');
+
+    const defaulters = [];
+
+    for (const sub of submissions) {
+      const reconciled = await computeReconciledSubmission(sub._id);
+      const items = reconciled?.reconciledLineItems || sub.lineItems || [];
+
+      for (const item of items) {
+        const isFeedingUnpaid = item.feedingStatus === 'unpaid';
+        const isBusUnpaid = item.busStatus === 'unpaid';
+
+        if (isFeedingUnpaid || isBusUnpaid) {
+          const studentObj = item.student || {};
+          defaulters.push({
+            studentId: studentObj._id || item.student,
+            firstName: studentObj.firstName || 'Unknown',
+            lastName: studentObj.lastName || 'Student',
+            admissionNumber: studentObj.admissionNumber || 'N/A',
+            photoUrl: studentObj.photoUrl,
+            className: sub.class?.name || 'Class',
+            classId: sub.class?._id,
+            feedingStatus: item.feedingStatus,
+            busStatus: item.busStatus,
+            feedingAmount: item.feedingAmount || 0,
+            busAmount: item.busAmount || 0,
+            submissionDate: sub.date,
+          });
+        }
+      }
+    }
+
+    res.json({ success: true, data: defaulters });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// POST /api/fees/daily-register/unpaid/send-sms (Send SMS Alerts to Defaulters' Guardians)
+const sendDefaulterSmsAlert = async (req, res, next) => {
+  try {
+    const { studentIds, customMessage, date } = req.body;
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one student ID is required.' });
+    }
+
+    const searchDate = date ? normalizeDate(date) : normalizeDate(new Date());
+
+    const students = await Student.find({ _id: { $in: studentIds } })
+      .populate('guardians', 'firstName lastName phone')
+      .populate('currentClass', 'name');
+
+    let sentCount = 0;
+    let failedCount = 0;
+    const results = [];
+
+    for (const student of students) {
+      const guardian = student.guardians?.[0];
+      if (!guardian || !guardian.phone) {
+        failedCount++;
+        results.push({
+          studentId: student._id,
+          studentName: `${student.firstName} ${student.lastName}`,
+          status: 'failed',
+          reason: 'No guardian phone number on record',
+        });
+        continue;
+      }
+
+      const formattedDate = searchDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const defaultMsg = `Dear ${guardian.firstName} ${guardian.lastName}, please note that your child ${student.firstName} (${student.currentClass?.name || 'School'}) has an unpaid daily fee balance for ${formattedDate}. Kindly ensure payment is made. Thank you - HANARA SCHOOLS`;
+
+      let messageToSend = customMessage
+        ? customMessage.replace('{studentName}', student.firstName).replace('{guardianName}', guardian.firstName)
+        : defaultMsg;
+
+      const smsResult = await sendSms({
+        recipient: guardian.phone,
+        message: messageToSend,
+        type: 'fee_defaulter_alert',
+        sentBy: req.user.id,
+      });
+
+      if (smsResult.success) {
+        sentCount++;
+        results.push({
+          studentId: student._id,
+          studentName: `${student.firstName} ${student.lastName}`,
+          status: 'sent',
+          recipient: guardian.phone,
+        });
+      } else {
+        failedCount++;
+        results.push({
+          studentId: student._id,
+          studentName: `${student.firstName} ${student.lastName}`,
+          status: 'failed',
+          reason: smsResult.error || 'SMS Gateway error',
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `SMS Alerts Processed: ${sentCount} sent, ${failedCount} failed.`,
+      data: { sentCount, failedCount, results },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDailyRegister,
   submitDailyRegister,
@@ -769,4 +893,6 @@ module.exports = {
   createDailyFeeStructure,
   getAccountantDashboardStats,
   getDiscrepancies,
+  getUnpaidStudents,
+  sendDefaulterSmsAlert,
 };

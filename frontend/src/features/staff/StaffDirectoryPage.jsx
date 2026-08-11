@@ -385,6 +385,7 @@ const StaffDirectoryPage = () => {
                       <tr className="bg-slate-50/50 border-b border-slate-200 text-slate-400 text-xs font-semibold uppercase tracking-wider">
                         <th className="py-4 px-6">Name</th>
                         <th className="py-4 px-6">Role</th>
+                        <th className="py-4 px-6">Base Salary</th>
                         <th className="py-4 px-6">Contact Info</th>
                         <th className="py-4 px-6">Status</th>
                         <th className="py-4 px-6 text-right">Actions</th>
@@ -412,6 +413,9 @@ const StaffDirectoryPage = () => {
                               <span className={`inline-block px-2.5 py-0.5 rounded border text-xs font-medium ${getRoleBadge(member.role)}`}>
                                 {member.role === 'superadmin' ? 'headteacher' : member.role}
                               </span>
+                            </td>
+                            <td className="py-4 px-6 font-bold text-emerald-800 text-xs">
+                              {(member.baseSalary || 0) > 0 ? `${(member.baseSalary).toFixed(2)} GHS` : 'Not Set (1,800)'}
                             </td>
                             <td className="py-4 px-6">
                               <p className="text-slate-800 font-mono text-xs">{member.phone}</p>

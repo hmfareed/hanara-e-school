@@ -381,6 +381,52 @@ const createStudentsBulk = async (req, res, next) => {
   }
 };
 
+// POST /api/students/promote-batch (Batch Student Promotion & Graduation)
+const promoteBatchStudents = async (req, res, next) => {
+  try {
+    const { studentIds, action, targetClassId } = req.body;
+
+    if (!studentIds || !Array.isArray(studentIds) || studentIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'studentIds array is required' });
+    }
+
+    if (!action || !['promote', 'repeat', 'graduate'].includes(action)) {
+      return res.status(400).json({ success: false, message: 'Valid action (promote, repeat, graduate) is required' });
+    }
+
+    if (action === 'promote' && !targetClassId) {
+      return res.status(400).json({ success: false, message: 'targetClassId is required when action is promote' });
+    }
+
+    let updatePayload = {};
+    if (action === 'promote') {
+      updatePayload = { currentClass: targetClassId, status: 'active' };
+    } else if (action === 'graduate') {
+      updatePayload = { status: 'graduated' };
+    } else if (action === 'repeat') {
+      updatePayload = { status: 'active' };
+    }
+
+    const updateResult = await Student.updateMany(
+      { _id: { $in: studentIds } },
+      { $set: updatePayload }
+    );
+
+    logger.info(`Batch student action [${action}] executed on ${updateResult.modifiedCount || updateResult.nModified || 0} students.`);
+
+    res.json({
+      success: true,
+      message: `Batch transition [${action}] executed successfully. Updated ${updateResult.modifiedCount || updateResult.nModified || 0} students.`,
+      data: {
+        modifiedCount: updateResult.modifiedCount || updateResult.nModified || 0,
+        action,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getStudents,
   createStudent,
@@ -389,4 +435,5 @@ module.exports = {
   updateStudent,
   withdrawStudent,
   promoteStudent,
+  promoteBatchStudents,
 };

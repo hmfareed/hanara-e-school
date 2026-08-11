@@ -1,0 +1,23 @@
+/**
+ * sync.routes.js
+ *
+ * GET  /api/sync/pull   — Pull updated documents since a timestamp
+ * POST /api/sync/push   — Accept a batch of mutations (future use)
+ *
+ * Both endpoints require authentication.
+ */
+const express = require('express');
+const router = express.Router();
+const { protect } = require('../middleware/auth');
+const syncController = require('../controllers/sync.controller');
+
+// All sync routes require a valid JWT
+router.use(protect);
+
+// Pull delta documents from any store since a given timestamp
+router.get('/pull', syncController.pull);
+
+// Accept a batch push of mutations (server-side fan-out)
+router.post('/push', syncController.push);
+
+module.exports = router;

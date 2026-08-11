@@ -32,12 +32,27 @@ const REFRESH_COOKIE_OPTIONS = {
 
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, phone, identifier, password } = req.body;
+    const loginInput = (email || phone || identifier || '').trim();
 
-    // Find user with password hash
-    const user = await User.findOne({ email: email.toLowerCase() }).select('+passwordHash');
+    if (!loginInput) {
+      return res.status(400).json({ success: false, message: 'Email address or phone number is required' });
+    }
+
+    const cleanInput = loginInput.toLowerCase();
+    const cleanPhone = loginInput.replace(/\s+/g, '');
+
+    // Find user with password hash matching email or phone
+    const user = await User.findOne({
+      $or: [
+        { email: cleanInput },
+        { phone: loginInput },
+        { phone: cleanPhone },
+      ],
+    }).select('+passwordHash');
+
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      return res.status(401).json({ success: false, message: 'Invalid email/phone or password' });
     }
 
     // Block pending users from logging in
@@ -453,4 +468,73 @@ const getPublicStats = async (req, res, next) => {
   }
 };
 
-module.exports = { login, refresh, logout, getMe, registerTeacher, updateMe, changePassword, getPublicStats };
+// POST /api/auth/register-parent (Public Parent Account Activation/Registration)
+const registerParent = async (req, res, next) => {
+  try {
+    const Guardian = require('../models/Guardian');
+    const bcrypt = require('bcryptjs');
+    const { phoneOrEmail, password } = req.body;
+
+    if (!phoneOrEmail || !password) {
+      return res.status(400).json({ success: false, message: 'Phone number/email and password are required.' });
+    }
+
+    const cleanedInput = phoneOrEmail.trim().toLowerCase();
+
+    // Find Guardian matching registered phone or email
+    const guardian = await Guardian.findOne({
+      $or: [
+        { phone: phoneOrEmail.trim() },
+        { altPhone: phoneOrEmail.trim() },
+        { email: cleanedInput },
+      ],
+    });
+
+    if (!guardian) {
+      return res.status(404).json({
+        success: false,
+        message: `No registered guardian record found matching "${phoneOrEmail}". Please contact HANARA Schools administration to verify your registered contact number.`,
+      });
+    }
+
+    const userEmail = guardian.email ? guardian.email.toLowerCase() : `${guardian.phone}@parent.hanaraschools.edu.gh`;
+
+    let user = await User.findOne({
+      $or: [
+        { email: userEmail },
+        { phone: guardian.phone },
+        { refGuardian: guardian._id },
+      ],
+    }).select('+passwordHash');
+
+    if (user) {
+      user.passwordHash = password;
+      user.isActive = true;
+      user.approvalStatus = 'approved';
+      if (!user.refGuardian) user.refGuardian = guardian._id;
+      await user.save();
+    } else {
+      user = new User({
+        email: userEmail,
+        phone: guardian.phone,
+        passwordHash: password,
+        role: 'parent',
+        refGuardian: guardian._id,
+        isActive: true,
+        approvalStatus: 'approved',
+      });
+      await user.save();
+    }
+
+    logger.info(`Parent portal account activated for guardian: ${guardian.firstName} ${guardian.lastName} (${user.email})`);
+
+    res.status(201).json({
+      success: true,
+      message: `Account activated successfully for ${guardian.firstName} ${guardian.lastName}! You can now sign in with your email/phone and password.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+module.exports = { login, refresh, logout, getMe, registerTeacher, registerParent, updateMe, changePassword, getPublicStats };

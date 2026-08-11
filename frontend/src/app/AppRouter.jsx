@@ -11,6 +11,8 @@ import AdmissionFormPage from '../features/students/AdmissionFormPage';
 import StudentProfilePage from '../features/students/StudentProfilePage';
 import StaffDirectoryPage from '../features/staff/StaffDirectoryPage';
 import StaffFormPage from '../features/staff/StaffFormPage';
+import StaffCheckInPage from '../features/staff/StaffCheckInPage';
+import StaffAttendancePage from '../features/staff/StaffAttendancePage';
 import ClassesPage from '../features/classes/ClassesPage';
 import MyClassesPage from '../features/classes/MyClassesPage';
 import TeacherTimetablePage from '../features/classes/TeacherTimetablePage';
@@ -25,6 +27,8 @@ import TeacherProfileSettingsPage from '../features/settings/TeacherProfileSetti
 import AttendanceRegisterPage from '../features/attendance/AttendanceRegisterPage';
 import FeesPage from '../features/fees/FeesPage';
 import AcademicYearPage from '../features/academicYear/AcademicYearPage';
+import PayrollManagementPage from '../features/accountant/PayrollManagementPage';
+import SchoolStorePage from '../features/accountant/SchoolStorePage';
 
 // Phase 3 Pages
 import ParentChildDetailsPage from '../features/parent/ParentChildDetailsPage';
@@ -32,6 +36,9 @@ import MomoSandboxPage from '../features/parent/MomoSandboxPage';
 import MomoCallbackPage from '../features/parent/MomoCallbackPage';
 import SmsDashboardPage from '../features/sms/SmsDashboardPage';
 import SettingsPage from '../features/settings/SettingsPage';
+import NoticeBoardPage from '../features/notices/NoticeBoardPage';
+import ExecutiveAnalyticsPage from '../features/analytics/ExecutiveAnalyticsPage';
+import ParentTeacherMessagingPage from '../features/messaging/ParentTeacherMessagingPage';
 
 // Phase 5 Pages
 import TransportPage from '../features/transport/TransportPage';
@@ -165,6 +172,22 @@ const AppRouter = () => {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="attendance"
+              element={
+                <ProtectedRoute allowedRoles={['superadmin', 'admin', 'system_admin']}>
+                  <StaffAttendancePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="check-in"
+              element={
+                <ProtectedRoute allowedRoles={['superadmin', 'admin', 'system_admin', 'teacher', 'accountant']}>
+                  <StaffCheckInPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
 
           <Route
@@ -280,6 +303,51 @@ const AppRouter = () => {
             element={
               <ProtectedRoute allowedRoles={['superadmin', 'admin', 'accountant']}>
                 <FeesPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="payroll"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'accountant', 'system_admin']}>
+                <PayrollManagementPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="store"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'accountant', 'system_admin']}>
+                <SchoolStorePage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="notices"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'parent', 'accountant', 'system_admin']}>
+                <NoticeBoardPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="analytics"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'accountant']}>
+                <ExecutiveAnalyticsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="messages"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'parent', 'accountant', 'system_admin']}>
+                <ParentTeacherMessagingPage />
               </ProtectedRoute>
             }
           />
