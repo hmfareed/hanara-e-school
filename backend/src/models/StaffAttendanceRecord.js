@@ -1,5 +1,18 @@
 const mongoose = require('mongoose');
 
+const correctionSchema = new mongoose.Schema(
+  {
+    fieldChanged: { type: String, required: true }, // e.g. "checkInTime", "status"
+    oldValue: { type: String, default: null },
+    newValue: { type: String, default: null },
+    reason: { type: String, required: true },
+    correctedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    correctedByName: { type: String, default: 'Admin' },
+    correctedAt: { type: Date, default: Date.now },
+  },
+  { _id: true }
+);
+
 const staffAttendanceRecordSchema = new mongoose.Schema(
   {
     staff: {
@@ -11,18 +24,42 @@ const staffAttendanceRecordSchema = new mongoose.Schema(
       type: Date,
       required: [true, 'Date is required'],
     },
+    session: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AttendanceSession',
+      default: null,
+    },
+    device: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AttendanceDevice',
+      default: null,
+    },
     status: {
       type: String,
       enum: ['present', 'absent', 'late', 'on_leave', 'half_day'],
       required: [true, 'Status is required'],
     },
     checkInTime: {
-      type: String, // e.g. "07:45"  (HH:mm 24h)
+      type: String, // "HH:mm" (24h)
       default: null,
     },
     checkOutTime: {
-      type: String, // e.g. "15:30"
+      type: String, // "HH:mm" (24h)
       default: null,
+    },
+    checkInStatus: {
+      type: String,
+      enum: ['PRESENT', 'LATE', 'NONE'],
+      default: 'NONE',
+    },
+    checkOutStatus: {
+      type: String,
+      enum: ['CHECKED_OUT', 'NONE'],
+      default: 'NONE',
+    },
+    totalMinutes: {
+      type: Number,
+      default: 0,
     },
     // GPS coordinates captured at check-in
     checkInLocation: {
@@ -34,21 +71,26 @@ const staffAttendanceRecordSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
-    // Whether the check-in passed geofence validation
-    geofenceVerified: {
-      type: Boolean,
-      default: false,
+    // Branch at check-in (Zogbeli or Vittin)
+    branch: {
+      type: String,
+      enum: ['Zogbeli', 'Vittin'],
+      default: 'Zogbeli',
     },
-    // Who recorded this: 'self' = staff themselves, 'admin' = admin override
+    branchLocation: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+    },
+    // Who recorded this: 'kiosk' = scanned at scanner, 'self' = staff self check-in, 'admin' = admin override
     markedByRole: {
       type: String,
-      enum: ['self', 'admin'],
-      default: 'self',
+      enum: ['kiosk', 'self', 'admin'],
+      default: 'kiosk',
     },
     markedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: [true, 'markedBy is required'],
+      default: null,
     },
     term: {
       type: mongoose.Schema.Types.ObjectId,
@@ -59,11 +101,12 @@ const staffAttendanceRecordSchema = new mongoose.Schema(
       trim: true,
       default: '',
     },
-    // Tracks whether a late-arrival notification was sent to admin
     lateNotificationSent: {
       type: Boolean,
       default: false,
     },
+    // Immutable correction history array
+    corrections: [correctionSchema],
   },
   {
     timestamps: true,

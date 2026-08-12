@@ -60,6 +60,7 @@ import IdCardGeneratorPage from '../features/idCards/IdCardGeneratorPage';
 import GateScannerPage from '../features/gateScanner/GateScannerPage';
 import PublicReportVerifyPage from '../features/reports/PublicReportVerifyPage';
 import PublicCardVerifyPage from '../features/idCards/PublicCardVerifyPage';
+import AttendanceKioskPage from '../features/attendance/AttendanceKioskPage';
 
 // Accountant Module
 import AccountantLayout from '../features/accountant/AccountantLayout';
@@ -77,6 +78,9 @@ const AppRouter = () => {
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+
+        {/* Dedicated Attendance Kiosk Scanner View */}
+        <Route path="/attendance/kiosk" element={<AttendanceKioskPage />} />
 
         {/* Standalone payment gateway views */}
         <Route

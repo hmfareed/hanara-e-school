@@ -6,8 +6,9 @@ import { useAuth } from '../../context/AuthContext';
 import {
   Search, Plus, Edit, ChevronLeft, ChevronRight,
   KeyRound, RefreshCw, CheckCircle2, XCircle, Clock,
-  Copy, Check, Users, UserCheck, AlertTriangle, Trash2,
+  Copy, Check, Users, UserCheck, AlertTriangle, Trash2, QrCode,
 } from 'lucide-react';
+import StaffQrModal from '../attendance/StaffQrModal';
 
 /* ─── small helper: copy to clipboard ─── */
 const useCopy = () => {
@@ -108,141 +109,7 @@ const RegistrationCodePanel = () => {
   );
 };
 
-/* ─── Waitlist Panel ─── */
-const WaitlistPanel = () => {
-  const queryClient = useQueryClient();
-
-  const { data: waitlistData, isLoading } = useQuery({
-    queryKey: ['staffWaitlist'],
-    queryFn: async () => {
-      const res = await api.get('/staff/waitlist');
-      return res.data?.data || [];
-    },
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: (userId) => api.post(`/staff/waitlist/${userId}/approve`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staffWaitlist'] });
-      queryClient.invalidateQueries({ queryKey: ['staffList'] });
-    },
-  });
-
-  const rejectMutation = useMutation({
-    mutationFn: (userId) => api.post(`/staff/waitlist/${userId}/reject`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staffWaitlist'] }),
-  });
-
-  const pending = waitlistData || [];
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-      <div className="px-6 py-4 border-b border-slate-100 flex items-center space-x-3">
-        <div className="h-8 w-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center">
-          <Clock size={15} className="text-amber-600" />
-        </div>
-        <div>
-          <h3 className="text-sm font-bold text-slate-800">Registration Waitlist</h3>
-          <p className="text-xs text-slate-500">Staff who have registered and are awaiting your approval</p>
-        </div>
-        {pending.length > 0 && (
-          <span className="ml-auto bg-amber-500 text-white text-xs font-bold px-2.5 py-0.5 rounded-full">
-            {pending.length}
-          </span>
-        )}
-      </div>
-
-      {isLoading ? (
-        <div className="p-10 flex flex-col items-center justify-center space-y-3">
-          <div className="h-6 w-6 animate-spin rounded-full border-4 border-emerald-800 border-t-transparent" />
-          <p className="text-xs text-slate-400">Loading waitlist…</p>
-        </div>
-      ) : pending.length === 0 ? (
-        <div className="p-10 text-center">
-          <UserCheck size={32} className="mx-auto text-slate-300 mb-3" />
-          <p className="text-sm font-semibold text-slate-400">No pending registrations</p>
-          <p className="text-xs text-slate-300 mt-1">All caught up! No staff are waiting for approval.</p>
-        </div>
-      ) : (
-        <div className="divide-y divide-slate-100">
-          {pending.map((user) => {
-            const staff = user.refStaff || {};
-            const isApproving = approveMutation.isPending && approveMutation.variables === user._id;
-            const isRejecting = rejectMutation.isPending && rejectMutation.variables === user._id;
-
-            return (
-              <div key={user._id} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 hover:bg-slate-50/60 transition-colors">
-                <div className="flex items-center space-x-4">
-                  <div className="h-10 w-10 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0 overflow-hidden border border-slate-200">
-                    {staff.photoUrl ? (
-                      <img src={staff.photoUrl} alt="Avatar" className="h-full w-full object-cover" />
-                    ) : (
-                      (staff.firstName?.[0] || '?').toUpperCase()
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">
-                      {staff.firstName} {staff.lastName}
-                    </p>
-                    <p className="text-xs text-slate-500 font-mono">{user.email}</p>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <span className="inline-block px-2 py-0.5 rounded border text-[10px] font-semibold capitalize bg-amber-50 text-amber-700 border-amber-200">
-                        {(staff.role || user.role) === 'superadmin' ? 'headteacher' : (staff.role || user.role)}
-                      </span>
-                      {staff.qualification && (
-                        <span className="text-[10px] text-slate-400">{staff.qualification}</span>
-                      )}
-                    </div>
-                    {staff.role === 'teacher' && staff.classesAssigned && staff.classesAssigned.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1 items-center">
-                        <span className="text-[10px] text-slate-500 font-semibold mr-1">Requested Classes:</span>
-                        {staff.classesAssigned.map((c) => (
-                          <span key={c._id || c} className="px-1.5 py-0.5 bg-emerald-50 border border-emerald-200 text-emerald-750 rounded text-[10px] font-medium">
-                            {c.name || c}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2 sm:flex-shrink-0">
-                  <button
-                    onClick={() => approveMutation.mutate(user._id)}
-                    disabled={isApproving || isRejecting}
-                    className="flex items-center space-x-1.5 py-2 px-3.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold text-xs shadow-sm transition-colors cursor-pointer"
-                  >
-                    {isApproving
-                      ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                      : <CheckCircle2 size={13} />}
-                    <span>Approve</span>
-                  </button>
-                  <button
-                    onClick={() => rejectMutation.mutate(user._id)}
-                    disabled={isApproving || isRejecting}
-                    className="flex items-center space-x-1.5 py-2 px-3.5 rounded-lg bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-50 text-red-700 font-bold text-xs transition-colors cursor-pointer"
-                  >
-                    {isRejecting
-                      ? <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-red-400 border-t-transparent" />
-                      : <XCircle size={13} />}
-                    <span>Reject</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
-
 /* ═══════════════════════════════════════════════════════════════ */
-
-const TABS = [
-  { id: 'directory', label: 'Staff Directory', Icon: Users },
-  { id: 'waitlist',  label: 'Waitlist',         Icon: Clock  },
-];
 
 const StaffDirectoryPage = () => {
   const { user } = useAuth();
@@ -250,11 +117,11 @@ const StaffDirectoryPage = () => {
 
   const [search, setSearch] = useState('');
   const [page, setPage]     = useState(1);
-  const [activeTab, setActiveTab] = useState('directory');
   const limit = 10;
 
   const queryClient = useQueryClient();
   const [staffToFire, setStaffToFire] = useState(null);
+  const [selectedStaffForQr, setSelectedStaffForQr] = useState(null);
 
   const fireMutation = useMutation({
     mutationFn: (id) => api.delete(`/staff/${id}`),
@@ -272,19 +139,7 @@ const StaffDirectoryPage = () => {
       const res = await api.get('/staff', { params });
       return res.data;
     },
-    enabled: activeTab === 'directory',
   });
-
-  // Live waitlist count badge in tab
-  const { data: waitlistData } = useQuery({
-    queryKey: ['staffWaitlist'],
-    queryFn: async () => {
-      const res = await api.get('/staff/waitlist');
-      return res.data?.data || [];
-    },
-    enabled: isSuperAdmin,
-  });
-  const waitlistCount = waitlistData?.length || 0;
 
   const staffList = staffData?.data || [];
   const meta = staffData?.meta || {};
@@ -322,38 +177,8 @@ const StaffDirectoryPage = () => {
       {/* ── Registration Code Panel (superadmin only) ── */}
       {isSuperAdmin && <RegistrationCodePanel />}
 
-      {/* ── Tabs (superadmin only sees waitlist tab) ── */}
-      {isSuperAdmin && (
-        <div className="flex items-center space-x-1 bg-slate-100 rounded-xl p-1 w-fit">
-          {TABS.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => setActiveTab(id)}
-              className={`flex items-center space-x-2 py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
-                activeTab === id
-                  ? 'bg-white text-slate-800 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              <Icon size={14} />
-              <span>{label}</span>
-              {id === 'waitlist' && waitlistCount > 0 && (
-                <span className="bg-amber-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                  {waitlistCount}
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* ── Waitlist Tab ── */}
-      {activeTab === 'waitlist' && isSuperAdmin && <WaitlistPanel />}
-
-      {/* ── Directory Tab ── */}
-      {activeTab === 'directory' && (
-        <>
-          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+      {/* ── Directory ── */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
             <div className="relative max-w-md">
               <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
@@ -432,6 +257,14 @@ const StaffDirectoryPage = () => {
                             </td>
                             <td className="py-4 px-6 text-right">
                               <div className="flex items-center justify-end space-x-2">
+                                <button
+                                  onClick={() => setSelectedStaffForQr(member)}
+                                  className="inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 font-semibold text-xs text-emerald-800 transition-colors cursor-pointer"
+                                  title="Staff QR Code Credential"
+                                >
+                                  <QrCode size={12} />
+                                  <span>QR Pass</span>
+                                </button>
                                 <Link
                                   to={`/staff/edit/${member._id}`}
                                   className="inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-semibold text-xs text-slate-600 transition-colors"
@@ -501,8 +334,6 @@ const StaffDirectoryPage = () => {
               </>
             )}
           </div>
-        </>
-      )}
 
       {/* ── Confirmation Modal ── */}
       {staffToFire && (
@@ -555,6 +386,14 @@ const StaffDirectoryPage = () => {
             </div>
           </div>
         </div>
+      )}
+      {/* Staff QR Modal */}
+      {selectedStaffForQr && (
+        <StaffQrModal
+          staff={selectedStaffForQr}
+          isOpen={!!selectedStaffForQr}
+          onClose={() => setSelectedStaffForQr(null)}
+        />
       )}
     </div>
   );

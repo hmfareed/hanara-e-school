@@ -8,6 +8,7 @@ import {
   saveCheckInLocal,
   saveCheckOutLocal,
 } from '../../services/staffAttendanceOffline';
+import { getStaffBranch, ZOGBELI_CLASSES, VITTIN_CLASSES } from '../../utils/branchUtils';
 import {
   Fingerprint,
   Clock,
@@ -24,6 +25,8 @@ import {
   AlertTriangle,
   History,
   RotateCcw,
+  Building2,
+  Navigation,
 } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -94,7 +97,6 @@ function getDeviceLocation() {
           navigator.geolocation.clearWatch(watchId);
           resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: Math.round(acc) });
         }
-        // else keep waiting for a better fix
       },
       (err) => {
         clearTimeout(deadline);
@@ -136,8 +138,9 @@ const StaffCheckInPage = () => {
   const [gpsStatus, setGpsStatus] = useState('idle'); // idle | requesting | ok | error
   const [gpsError, setGpsError] = useState('');
   const [localStatus, setLocalStatus] = useState(null); // offline fallback
+  const [selectedBranch, setSelectedBranch] = useState('Zogbeli');
 
-  const showMessage = (text, type = 'success', duration = 5000) => {
+  const showMessage = (text, type = 'success', duration = 6000) => {
     setMessage({ text, type });
     if (duration) setTimeout(() => setMessage({ text: '', type: '' }), duration);
   };
@@ -151,7 +154,6 @@ const StaffCheckInPage = () => {
     },
     retry: 0,
     onError: async () => {
-      // Offline fallback: read from IndexedDB
       const staffId = user?.refStaff?._id || user?.refStaff;
       if (staffId) {
         const cached = await getMyTodayStatusLocal(String(staffId));
@@ -170,6 +172,14 @@ const StaffCheckInPage = () => {
     retry: 0,
     enabled: isOnline,
   });
+
+  // Set default branch based on user staff profile
+  useEffect(() => {
+    if (user?.refStaff) {
+      const inferredBranch = getStaffBranch(user.refStaff);
+      setSelectedBranch(inferredBranch);
+    }
+  }, [user]);
 
   // Offline: also try loading local status on mount
   useEffect(() => {
@@ -193,7 +203,7 @@ const StaffCheckInPage = () => {
       setGpsError('');
       let lat = null, lng = null;
 
-      // Always try GPS if enabled
+      // Request GPS location
       if (geofence?.enabled !== false) {
         try {
           const pos = await getDeviceLocation();
@@ -203,29 +213,26 @@ const StaffCheckInPage = () => {
         } catch (err) {
           setGpsStatus('error');
           setGpsError(err.message);
-          if (geofence?.enabled) {
-            throw new Error('Could not get your GPS location. Please enable location access on your device.');
-          }
+          throw new Error('GPS location required. Please enable device location services and ensure clear GPS signal.');
         }
       } else {
         setGpsStatus('idle');
       }
 
       if (!isOnline) {
-        // Offline: save locally and enqueue sync
         const staffId = user?.refStaff?._id || user?.refStaff;
         const now = getCurrentTime();
-        const record = await saveCheckInLocal({ staffId: String(staffId), status: 'present', checkInTime: now, lat, lng });
+        const record = await saveCheckInLocal({ staffId: String(staffId), status: 'present', checkInTime: now, lat, lng, branch: selectedBranch });
         setLocalStatus(record);
         return { offline: true, record };
       }
 
-      const res = await api.post('/staff-attendance/check-in', { lat, lng });
+      const res = await api.post('/staff-attendance/check-in', { lat, lng, branch: selectedBranch });
       return res.data;
     },
     onSuccess: (data) => {
       if (data.offline) {
-        showMessage('Checked in locally. Will sync when you are back online.', 'warning');
+        showMessage('Checked in locally. Will sync when online.', 'warning');
       } else {
         showMessage(data.message || 'Checked in successfully!', 'success');
       }
@@ -233,7 +240,8 @@ const StaffCheckInPage = () => {
     },
     onError: (err) => {
       setGpsStatus('idle');
-      showMessage(err.response?.data?.message || err.message || 'Check-in failed.', 'error');
+      const apiMsg = err.response?.data?.message;
+      showMessage(apiMsg || err.message || 'Check-in failed.', 'error');
     },
   });
 
@@ -319,9 +327,79 @@ const StaffCheckInPage = () => {
         </div>
       )}
 
+      {/* ── Branch Information & Selector ── */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Building2 className="w-5 h-5 text-[#78282E]" />
+            <h2 className="text-sm font-black text-slate-800 uppercase tracking-wider">Attendance Branch Campus</h2>
+          </div>
+          <span className="text-[11px] font-bold text-slate-400 bg-slate-100 px-2.5 py-1 rounded-full">
+            GPS Radius: 150 Meters
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <button
+            type="button"
+            onClick={() => setSelectedBranch('Zogbeli')}
+            disabled={hasCheckedIn}
+            className={`p-3.5 rounded-2xl border text-left transition-all relative ${
+              selectedBranch === 'Zogbeli'
+                ? 'bg-red-950/5 border-[#78282E] ring-2 ring-[#78282E]/20 text-slate-900'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-black text-xs uppercase tracking-wide flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-[#78282E]" />
+                Zogbeli Branch
+              </span>
+              {selectedBranch === 'Zogbeli' && (
+                <span className="w-2 h-2 rounded-full bg-[#78282E]" />
+              )}
+            </div>
+            <p className="text-[11px] font-medium text-slate-500">
+              Nursery 1 – Primary 4 Classes
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setSelectedBranch('Vittin')}
+            disabled={hasCheckedIn}
+            className={`p-3.5 rounded-2xl border text-left transition-all relative ${
+              selectedBranch === 'Vittin'
+                ? 'bg-amber-950/5 border-amber-800 ring-2 ring-amber-800/20 text-slate-900'
+                : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-black text-xs uppercase tracking-wide flex items-center gap-1.5">
+                <MapPin className="w-3.5 h-3.5 text-amber-800" />
+                Vittin Branch
+              </span>
+              {selectedBranch === 'Vittin' && (
+                <span className="w-2 h-2 rounded-full bg-amber-800" />
+              )}
+            </div>
+            <p className="text-[11px] font-medium text-slate-500">
+              Primary 5 – JHS 3 Classes
+            </p>
+          </button>
+        </div>
+      </div>
+
       {/* ── Today's Status Card ── */}
       <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-5">
-        <h2 className="text-sm font-black text-slate-700 uppercase tracking-wider">Today's Status</h2>
+        <h2 className="text-sm font-black text-slate-700 uppercase tracking-wider flex items-center justify-between">
+          <span>Today's Status</span>
+          {todayRecord?.branch && (
+            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-3 py-1 rounded-full normal-case">
+              {todayRecord.branch} Branch
+            </span>
+          )}
+        </h2>
 
         {isLoading ? (
           <div className="h-32 animate-pulse bg-slate-100 rounded-2xl" />
@@ -333,9 +411,10 @@ const StaffCheckInPage = () => {
               <div>
                 <p className={`text-base font-black ${statusCfg.text}`}>{statusCfg.label}</p>
                 {todayRecord?.checkInTime && (
-                  <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
+                  <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1 flex-wrap">
                     <LogIn className="w-3 h-3" />
                     Checked in at <span className="font-bold text-slate-700 ml-0.5">{formatTime(todayRecord.checkInTime)}</span>
+                    {todayRecord?.branch && <span className="font-bold text-slate-800">({todayRecord.branch} Branch)</span>}
                     {todayRecord?.checkOutTime && (
                       <> &nbsp;·&nbsp; <LogOut className="w-3 h-3" />
                         Checked out at <span className="font-bold text-slate-700 ml-0.5">{formatTime(todayRecord.checkOutTime)}</span>
@@ -345,9 +424,13 @@ const StaffCheckInPage = () => {
                 )}
               </div>
               {todayRecord?.geofenceVerified && (
-                <div className="ml-auto flex items-center gap-1 text-emerald-600 text-[11px] font-bold">
-                  <ShieldCheck className="w-4 h-4" />
-                  GPS Verified
+                <div className="ml-auto flex flex-col items-end gap-0.5 text-emerald-600 text-[11px] font-bold">
+                  <span className="flex items-center gap-1"><ShieldCheck className="w-4 h-4" /> GPS Verified</span>
+                  {todayRecord?.distanceFromSchool != null && (
+                    <span className="text-[10px] text-emerald-700 font-medium">
+                      {todayRecord.distanceFromSchool}m from branch
+                    </span>
+                  )}
                 </div>
               )}
               {todayRecord && !todayRecord.geofenceVerified && todayRecord.markedByRole === 'admin' && (
@@ -369,10 +452,10 @@ const StaffCheckInPage = () => {
               <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-3.5 py-3 space-y-1">
                 <div className="flex items-center gap-2 text-xs font-bold text-indigo-700">
                   <MapPin className="w-4 h-4 animate-bounce flex-shrink-0" />
-                  Acquiring GPS signal — waiting for a precise fix…
+                  Acquiring GPS location for {selectedBranch} Branch check-in…
                 </div>
                 <p className="text-[11px] text-indigo-500 pl-6">
-                  This can take up to 20 seconds. If indoors, move near a window or step outside for best results.
+                  Verifying you are within 150 meters of the {selectedBranch} campus location.
                 </p>
               </div>
             )}
@@ -387,7 +470,7 @@ const StaffCheckInPage = () => {
             {geofence?.enabled && (
               <div className="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 border border-slate-100 rounded-xl px-3.5 py-2.5">
                 <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                GPS check-in enabled — you must be within <span className="font-bold text-slate-700 mx-0.5">{geofence.radiusMetres}m</span> of school to check in
+                GPS location scanning active — Check-in allowed within <span className="font-bold text-slate-700 mx-0.5">150 Meters</span> of {selectedBranch} Branch
               </div>
             )}
 
@@ -402,7 +485,7 @@ const StaffCheckInPage = () => {
                 >
                   <div className="absolute inset-0 bg-white/5 group-hover:bg-white/0 transition rounded-2xl" />
                   <LogIn className="w-7 h-7" />
-                  {checkInMutation.isPending ? 'Checking in…' : 'Check In Now'}
+                  {checkInMutation.isPending ? `Scanning GPS (${selectedBranch} Branch)…` : `Check In (${selectedBranch} Branch)`}
                 </button>
               ) : !hasCheckedOut ? (
                 <>

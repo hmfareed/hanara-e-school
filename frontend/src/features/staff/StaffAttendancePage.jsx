@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useOffline } from '../../context/OfflineContext';
-import { cacheAdminDailyData, getAdminDailyCache } from '../../services/staffAttendanceOffline';
+import { subscribeToEvent, unsubscribeFromEvent } from '../../services/socket';
+import StaffQrModal from '../attendance/StaffQrModal';
 import {
   Fingerprint,
   Calendar,
@@ -19,17 +20,20 @@ import {
   ShieldCheck,
   History,
   BarChart3,
-  Download,
   RefreshCw,
   MapPin,
   AlertTriangle,
   Settings,
-  ChevronDown,
-  ChevronUp,
-  ToggleLeft,
-  ToggleRight,
-  Navigation,
+  QrCode,
+  Laptop,
+  Edit3,
+  ExternalLink,
+  ShieldAlert,
+  Sliders,
+  FileSpreadsheet,
+  FileText,
   Loader2,
+  Plus,
 } from 'lucide-react';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -41,7 +45,7 @@ function formatTime(t) {
   return `${hour % 12 === 0 ? 12 : hour % 12}:${m} ${hour >= 12 ? 'PM' : 'AM'}`;
 }
 
-function toDateInputValue(d) {
+function toDateInputValue(d = new Date()) {
   return d.toISOString().split('T')[0];
 }
 
@@ -50,8 +54,6 @@ function offsetDate(dateStr, days) {
   d.setDate(d.getDate() + days);
   return toDateInputValue(d);
 }
-
-const STATUS_OPTIONS = ['present', 'absent', 'late', 'on_leave', 'half_day'];
 
 const STATUS_CONFIG = {
   present: { label: 'Present', bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-200', dot: 'bg-emerald-500' },
@@ -62,8 +64,6 @@ const STATUS_CONFIG = {
   not_marked: { label: 'Not Marked', bg: 'bg-slate-100', text: 'text-slate-500', border: 'border-slate-200', dot: 'bg-slate-400' },
 };
 
-// ─── Summary Card ─────────────────────────────────────────────────────────────
-
 const SummaryCard = ({ label, value, sub, color }) => {
   const colors = {
     emerald: 'bg-emerald-50 border-emerald-100 text-emerald-700',
@@ -73,7 +73,7 @@ const SummaryCard = ({ label, value, sub, color }) => {
     slate: 'bg-slate-50 border-slate-100 text-slate-600',
   };
   return (
-    <div className={`p-4 rounded-2xl border text-center space-y-1 ${colors[color]}`}>
+    <div className={`p-4 rounded-2xl border text-center space-y-1 ${colors[color] || colors.slate}`}>
       <p className="text-2xl font-black">{value}</p>
       <p className="text-xs font-bold uppercase tracking-wider">{label}</p>
       {sub && <p className="text-[11px] font-medium opacity-70">{sub}</p>}
@@ -81,901 +81,1190 @@ const SummaryCard = ({ label, value, sub, color }) => {
   );
 };
 
-// ─── Main Component ───────────────────────────────────────────────────────────
+// ─── MAIN ADMIN STAFF ATTENDANCE PAGE ─────────────────────────────────────────
 
 const StaffAttendancePage = () => {
   const { isOnline } = useOffline();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'history'
-  const [showGpsSettings, setShowGpsSettings] = useState(false);
+  const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'history' | 'devices' | 'sessions' | 'events' | 'settings'
   const [selectedDate, setSelectedDate] = useState(toDateInputValue(new Date()));
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [editMap, setEditMap] = useState({}); // staffId -> status overrides
+  const [branchFilter, setBranchFilter] = useState('all'); // 'all' | 'Zogbeli' | 'Vittin'
   const [message, setMessage] = useState({ text: '', type: '' });
-  const [cachedData, setCachedData] = useState(null);
-  const [cachedAt, setCachedAt] = useState(null);
-  const [gpsLocating, setGpsLocating] = useState(false);
-  const [gpsAccuracy, setGpsAccuracy] = useState(null); // metres
-  const gpsWatchRef = React.useRef(null);
 
-  // GPS Geofence form state
+  // Selected staff for QR Modal
+  const [selectedStaffForQr, setSelectedStaffForQr] = useState(null);
+
+  // Geofence Settings Form State
   const [geofenceForm, setGeofenceForm] = useState({
-    enabled: false,
-    lat: '',
-    lng: '',
+    enabled: true,
     radiusMetres: 150,
-    lateThresholdMinutes: 15,
+    zogbeli: { lat: '', lng: '', radiusMetres: 150 },
+    vittin: { lat: '', lng: '', radiusMetres: 150 },
   });
-  const [geofenceMsg, setGeofenceMsg] = useState({ text: '', type: '' });
 
-  // Stop any running GPS watch on unmount
-  useEffect(() => {
-    return () => {
-      if (gpsWatchRef.current !== null) {
-        navigator.geolocation.clearWatch(gpsWatchRef.current);
-      }
-    };
-  }, []);
+  // Manual Correction Modal State
+  const [correctionTarget, setCorrectionTarget] = useState(null); // record/staff object
+  const [correctionForm, setCorrectionForm] = useState({
+    checkInTime: '',
+    checkOutTime: '',
+    status: 'present',
+    reason: '',
+  });
 
-  // History filters
-  const [historyFrom, setHistoryFrom] = useState(offsetDate(selectedDate, -7));
-  const [historyTo, setHistoryTo] = useState(selectedDate);
-  const [historyStaffId, setHistoryStaffId] = useState('');
-  const [historyStatus, setHistoryStatus] = useState('');
+  // Device Creation Modal State
+  const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const [newDeviceForm, setNewDeviceForm] = useState({
+    deviceName: '',
+    locationName: 'Main Reception',
+    deviceType: 'tablet',
+    antiProxyLevel: 'high_security',
+    allowedRadiusMetres: 150,
+  });
+  const [createdDeviceToken, setCreatedDeviceToken] = useState('');
+
+  // Session Creation Form
+  const [showSessionModal, setShowSessionModal] = useState(false);
+  const [newSessionForm, setNewSessionForm] = useState({
+    name: 'Morning Attendance',
+    startTime: '06:00',
+    endTime: '10:00',
+    lateThresholdTime: '08:00',
+    sessionType: 'single_daily',
+  });
 
   const showMsg = (text, type = 'success') => {
     setMessage({ text, type });
     setTimeout(() => setMessage({ text: '', type: '' }), 5000);
   };
 
-  // ── GPS Geofence Settings Query & Mutation ───────────────────────────────
-  const { data: geofenceData, isLoading: geofenceLoading } = useQuery({
-    queryKey: ['staffGeofenceSettings'],
+  // ── Socket.io Real-Time Subscriptions ─────────────────────────────────────
+  useEffect(() => {
+    const handleLiveScan = (payload) => {
+      queryClient.invalidateQueries(['staffAdminDaily', selectedDate, branchFilter]);
+      queryClient.invalidateQueries(['staffAttendanceEvents']);
+      showMsg(`Live Scan: ${payload.staffName} checked in at ${payload.branch || 'School'} (${payload.status})`, 'success');
+    };
+
+    subscribeToEvent('staff_attendance_scanned', handleLiveScan);
+    subscribeToEvent('staff_attendance_updated', handleLiveScan);
+
+    return () => {
+      unsubscribeFromEvent('staff_attendance_scanned', handleLiveScan);
+      unsubscribeFromEvent('staff_attendance_updated', handleLiveScan);
+    };
+  }, [queryClient, selectedDate, branchFilter]);
+
+  // ── Queries ───────────────────────────────────────────────────────────────
+
+  // Today Overview
+  const { data: dailyData, isLoading: dailyLoading, refetch: refetchDaily } = useQuery({
+    queryKey: ['staffAdminDaily', selectedDate, branchFilter],
     queryFn: async () => {
-      const res = await api.get('/staff-attendance/geofence-settings');
+      const res = await api.get(`/staff-attendance/admin/daily?date=${selectedDate}&branch=${branchFilter}`);
       return res.data?.data;
     },
-    onSuccess: (data) => {
-      if (data) {
+    enabled: isOnline,
+  });
+
+  // Geofence Settings Query
+  const { data: geofenceData, refetch: refetchGeofence } = useQuery({
+    queryKey: ['staffGeofenceSettingsAdmin'],
+    queryFn: async () => {
+      const res = await api.get('/staff-attendance/geofence-settings');
+      const val = res.data?.data;
+      if (val) {
         setGeofenceForm({
-          enabled: data.enabled || false,
-          lat: data.lat ?? '',
-          lng: data.lng ?? '',
-          radiusMetres: data.radiusMetres || 150,
-          lateThresholdMinutes: data.lateThresholdMinutes || 15,
+          enabled: val.enabled !== false,
+          radiusMetres: val.radiusMetres || 150,
+          zogbeli: {
+            lat: val.zogbeli?.lat ?? '',
+            lng: val.zogbeli?.lng ?? '',
+            radiusMetres: val.zogbeli?.radiusMetres || 150,
+          },
+          vittin: {
+            lat: val.vittin?.lat ?? '',
+            lng: val.vittin?.lng ?? '',
+            radiusMetres: val.vittin?.radiusMetres || 150,
+          },
         });
       }
+      return val;
     },
+    enabled: activeTab === 'settings',
   });
 
-  // Sync form when data loads
-  useEffect(() => {
-    if (geofenceData) {
-      setGeofenceForm({
-        enabled: geofenceData.enabled || false,
-        lat: geofenceData.lat ?? '',
-        lng: geofenceData.lng ?? '',
-        radiusMetres: geofenceData.radiusMetres || 150,
-        lateThresholdMinutes: geofenceData.lateThresholdMinutes || 15,
-      });
-    }
-  }, [geofenceData]);
-
-  const geofenceMutation = useMutation({
-    mutationFn: () => api.patch('/staff-attendance/geofence-settings', {
-      enabled: geofenceForm.enabled,
-      lat: geofenceForm.lat !== '' ? Number(geofenceForm.lat) : null,
-      lng: geofenceForm.lng !== '' ? Number(geofenceForm.lng) : null,
-      radiusMetres: Number(geofenceForm.radiusMetres),
-      lateThresholdMinutes: Number(geofenceForm.lateThresholdMinutes),
-    }),
-    onSuccess: () => {
-      setGeofenceMsg({ text: 'GPS settings saved! Geofencing is now active.', type: 'success' });
-      queryClient.invalidateQueries({ queryKey: ['staffGeofenceSettings'] });
-      setTimeout(() => setGeofenceMsg({ text: '', type: '' }), 4000);
+  // History Query
+  const [historyFrom, setHistoryFrom] = useState(offsetDate(selectedDate, -30));
+  const [historyTo, setHistoryTo] = useState(selectedDate);
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey: ['staffAdminHistory', historyFrom, historyTo],
+    queryFn: async () => {
+      const res = await api.get(`/staff-attendance/admin/history?from=${historyFrom}&to=${historyTo}`);
+      return res.data?.data;
     },
-    onError: (err) => setGeofenceMsg({ text: err.response?.data?.message || 'Failed to save GPS settings.', type: 'error' }),
+    enabled: activeTab === 'history',
   });
 
-  // Auto-detect school location — uses watchPosition so it waits for true GPS accuracy
-  const GOOD_ACCURACY_M = 50;  // accept fix once accuracy ≤ 50 metres
-  const MAX_WAIT_MS     = 30000; // give up after 30 seconds
+  // Devices Query
+  const { data: devicesData, refetch: refetchDevices } = useQuery({
+    queryKey: ['staffAttendanceDevices'],
+    queryFn: async () => {
+      const res = await api.get('/staff-attendance/devices');
+      return res.data?.data;
+    },
+    enabled: activeTab === 'devices',
+  });
 
-  const handleDetectLocation = () => {
-    if (!navigator.geolocation) {
-      setGeofenceMsg({ text: 'GPS is not available on this device. Please enter coordinates manually.', type: 'error' });
+  // Sessions Query
+  const { data: sessionsData, refetch: refetchSessions } = useQuery({
+    queryKey: ['staffAttendanceSessions'],
+    queryFn: async () => {
+      const res = await api.get('/staff-attendance/sessions');
+      return res.data?.data;
+    },
+    enabled: activeTab === 'sessions',
+  });
+
+  // Events Audit Log Query
+  const { data: eventsData, refetch: refetchEvents } = useQuery({
+    queryKey: ['staffAttendanceEvents'],
+    queryFn: async () => {
+      const res = await api.get('/staff-attendance/events');
+      return res.data?.data;
+    },
+    enabled: activeTab === 'events',
+  });
+
+  // ── Manual Correction Handler ─────────────────────────────────────────────
+
+  const handleOpenCorrection = (row) => {
+    setCorrectionTarget(row);
+    setCorrectionForm({
+      checkInTime: row.checkInTime || '08:00',
+      checkOutTime: row.checkOutTime || '',
+      status: row.status === 'not_marked' ? 'present' : row.status,
+      reason: '',
+    });
+  };
+
+  const handleSaveCorrection = async (e) => {
+    e.preventDefault();
+    if (!correctionForm.reason.trim()) {
+      showMsg('Correction reason is mandatory for audit trail logging', 'error');
       return;
     }
-    // Stop any existing watch
-    if (gpsWatchRef.current !== null) {
-      navigator.geolocation.clearWatch(gpsWatchRef.current);
-    }
 
-    setGpsLocating(true);
-    setGpsAccuracy(null);
-    setGeofenceMsg({ text: '', type: '' });
-
-    const deadline = setTimeout(() => {
-      // Timed out — stop watching
-      if (gpsWatchRef.current !== null) {
-        navigator.geolocation.clearWatch(gpsWatchRef.current);
-        gpsWatchRef.current = null;
+    try {
+      if (correctionTarget.recordId) {
+        await api.post(`/staff-attendance/records/${correctionTarget.recordId}/correct`, correctionForm);
+      } else {
+        // Bulk single mark if no record ID existed
+        await api.post('/staff-attendance/admin/bulk', {
+          date: selectedDate,
+          records: [{ staffId: correctionTarget.staffId, status: correctionForm.status, notes: correctionForm.reason }],
+        });
       }
-      setGpsLocating(false);
-      setGpsAccuracy(null);
-      setGeofenceMsg({
-        text: 'Could not get a precise GPS fix within 30 seconds. Make sure GPS is enabled on your device and you are outdoors, then try again.',
-        type: 'error',
+      showMsg(`Correction logged for ${correctionTarget.name}`);
+      setCorrectionTarget(null);
+      refetchDaily();
+    } catch (err) {
+      showMsg(err.response?.data?.message || 'Failed to save correction', 'error');
+    }
+  };
+
+  // ── Device Creation Handler ───────────────────────────────────────────────
+
+  const handleCreateDevice = async (e) => {
+    e.preventDefault();
+    try {
+      const res = await api.post('/staff-attendance/devices', newDeviceForm);
+      if (res.data?.success) {
+        setCreatedDeviceToken(res.data.data.rawDeviceToken);
+        refetchDevices();
+        showMsg('New Kiosk Device registered! Copy the secret device token.');
+      }
+    } catch (err) {
+      showMsg(err.response?.data?.message || 'Failed to create device', 'error');
+    }
+  };
+
+  // ── Session Creation Handler ──────────────────────────────────────────────
+
+  const handleCreateSession = async (e) => {
+    e.preventDefault();
+    try {
+      await api.post('/staff-attendance/sessions', {
+        ...newSessionForm,
+        date: selectedDate,
       });
-    }, MAX_WAIT_MS);
+      setShowSessionModal(false);
+      refetchSessions();
+      showMsg('Attendance session configured');
+    } catch (err) {
+      showMsg(err.response?.data?.message || 'Failed to create session', 'error');
+    }
+  };
 
-    gpsWatchRef.current = navigator.geolocation.watchPosition(
+  // ── Geofence Settings Handlers ────────────────────────────────────────────
+
+  const captureBranchGps = (branchKey) => {
+    if (!navigator.geolocation) {
+      showMsg('Geolocation is not supported by your device browser', 'error');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
       (pos) => {
-        const acc = Math.round(pos.coords.accuracy);
-        setGpsAccuracy(acc);
-
-        if (acc <= GOOD_ACCURACY_M) {
-          // We have a good fix — stop watching
-          clearTimeout(deadline);
-          navigator.geolocation.clearWatch(gpsWatchRef.current);
-          gpsWatchRef.current = null;
-          setGpsLocating(false);
-
-          setGeofenceForm((prev) => ({
-            ...prev,
-            lat: pos.coords.latitude.toFixed(7),
-            lng: pos.coords.longitude.toFixed(7),
-          }));
-          setGeofenceMsg({
-            text: `✅ Precise GPS fix: ±${acc}m accuracy. Coordinates set. Verify on Google Maps, then save.`,
-            type: 'success',
-          });
-          setTimeout(() => setGeofenceMsg({ text: '', type: '' }), 8000);
-        }
-        // else: accuracy still too coarse — keep watching and show live feedback
+        const lat = parseFloat(pos.coords.latitude.toFixed(6));
+        const lng = parseFloat(pos.coords.longitude.toFixed(6));
+        setGeofenceForm((prev) => ({
+          ...prev,
+          [branchKey]: { ...prev[branchKey], lat, lng, radiusMetres: 150 },
+        }));
+        showMsg(`Captured GPS location for ${branchKey === 'zogbeli' ? 'Zogbeli' : 'Vittin'} Branch: (${lat}, ${lng})`);
       },
       (err) => {
-        clearTimeout(deadline);
-        if (gpsWatchRef.current !== null) {
-          navigator.geolocation.clearWatch(gpsWatchRef.current);
-          gpsWatchRef.current = null;
-        }
-        setGpsLocating(false);
-        setGpsAccuracy(null);
-        setGeofenceMsg({
-          text: `GPS error: ${err.message}. Make sure location permission is granted in your browser settings.`,
-          type: 'error',
-        });
+        showMsg(`Failed to capture GPS location: ${err.message}`, 'error');
       },
-      {
-        enableHighAccuracy: true, // forces device GPS chip, not IP/cell fallback
-        timeout: MAX_WAIT_MS,
-        maximumAge: 0,            // never use a cached position
-      }
+      { enableHighAccuracy: true }
     );
   };
 
-  // ── Daily Overview Query ─────────────────────────────────────────────────
-  const { data: dailyData, isLoading, refetch: refetchDaily } = useQuery({
-    queryKey: ['staffAttendanceDaily', selectedDate],
-    queryFn: async () => {
-      const res = await api.get(`/staff-attendance/admin/daily?date=${selectedDate}`);
-      const result = res.data?.data;
-      // Cache for offline
-      await cacheAdminDailyData(selectedDate, result);
-      return result;
-    },
-    enabled: isOnline && activeTab === 'daily',
-    retry: 0,
-    onError: async () => {
-      const cached = await getAdminDailyCache(selectedDate);
-      if (cached) {
-        setCachedData(cached.data);
-        setCachedAt(cached.cachedAt);
-      }
-    },
-  });
-
-  // Load offline cache on mount or when going offline
-  useEffect(() => {
-    if (!isOnline && activeTab === 'daily') {
-      getAdminDailyCache(selectedDate).then((cached) => {
-        if (cached) {
-          setCachedData(cached.data);
-          setCachedAt(cached.cachedAt);
-        } else {
-          setCachedData(null);
-        }
-      });
+  const handleSaveGeofenceSettings = async (e) => {
+    e.preventDefault();
+    try {
+      await api.patch('/staff-attendance/geofence-settings', geofenceForm);
+      showMsg('Branch Geofence settings updated successfully!');
+      refetchGeofence();
+    } catch (err) {
+      showMsg(err.response?.data?.message || 'Failed to save geofence settings', 'error');
     }
-  }, [isOnline, selectedDate, activeTab]);
-
-  const overview = (isOnline ? dailyData?.overview : cachedData?.overview) || [];
-  const summary = (isOnline ? dailyData?.summary : cachedData?.summary) || {};
-  const lateAlerts = (isOnline ? dailyData?.lateAlerts : cachedData?.lateAlerts) || [];
-
-  // ── History Query ────────────────────────────────────────────────────────
-  const { data: historyData, isLoading: historyLoading } = useQuery({
-    queryKey: ['staffAttendanceHistory', historyFrom, historyTo, historyStaffId, historyStatus],
-    queryFn: async () => {
-      const params = { from: historyFrom, to: historyTo };
-      if (historyStaffId) params.staffId = historyStaffId;
-      if (historyStatus) params.status = historyStatus;
-      const res = await api.get('/staff-attendance/admin/history', { params });
-      return res.data?.data;
-    },
-    enabled: isOnline && activeTab === 'history',
-  });
-
-  // ── Bulk Save Mutation ───────────────────────────────────────────────────
-  const bulkMutation = useMutation({
-    mutationFn: async () => {
-      const records = Object.entries(editMap).map(([staffId, status]) => ({ staffId, status }));
-      if (records.length === 0) throw new Error('No changes to save');
-      return api.post('/staff-attendance/admin/bulk', { date: selectedDate, records });
-    },
-    onSuccess: () => {
-      showMsg(`Attendance saved for ${Object.keys(editMap).length} staff member${Object.keys(editMap).length > 1 ? 's' : ''}.`, 'success');
-      setEditMap({});
-      queryClient.invalidateQueries({ queryKey: ['staffAttendanceDaily'] });
-    },
-    onError: (err) => showMsg(err.response?.data?.message || err.message || 'Save failed', 'error'),
-  });
-
-  // ── Mark All Handler ─────────────────────────────────────────────────────
-  const handleMarkAll = (status) => {
-    const newMap = {};
-    filteredOverview.forEach((s) => { newMap[s.staffId] = status; });
-    setEditMap((prev) => ({ ...prev, ...newMap }));
   };
 
-  // ── Filter ───────────────────────────────────────────────────────────────
-  const filteredOverview = overview.filter((s) => {
-    const nameMatch = s.name.toLowerCase().includes(search.toLowerCase());
-    const roleMatch = roleFilter === 'all' || s.role === roleFilter;
-    return nameMatch && roleMatch;
+  // Filtered staff overview
+  const filteredOverview = (dailyData?.overview || []).filter((item) => {
+    const matchesSearch =
+      item.name.toLowerCase().includes(search.toLowerCase()) ||
+      (item.department && item.department.toLowerCase().includes(search.toLowerCase()));
+    const matchesRole = roleFilter === 'all' || item.role === roleFilter;
+    return matchesSearch && matchesRole;
   });
 
-  const allRoles = [...new Set(overview.map((s) => s.role))].filter(Boolean);
-
-  // ── Export CSV ───────────────────────────────────────────────────────────
-  const handleExport = () => {
-    const rows = [
-      ['Name', 'Role', 'Status', 'Check In', 'Check Out', 'GPS Verified'],
-      ...filteredOverview.map((s) => [
-        s.name, s.role,
-        editMap[s.staffId] || s.status,
-        formatTime(s.checkInTime),
-        formatTime(s.checkOutTime),
-        s.geofenceVerified ? 'Yes' : 'No',
-      ]),
-    ];
-    const csv = rows.map((r) => r.join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `staff-attendance-${selectedDate}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const pendingChanges = Object.keys(editMap).length;
+  const summary = dailyData?.summary || { present: 0, absent: 0, late: 0, onLeave: 0, notMarked: 0, total: 0 };
 
   return (
-    <div className="space-y-6 pb-12">
-
-      {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs">
+    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+      {/* ── Top Page Header ────────────────────────────────────────────────── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 flex items-center gap-2">
-            <Fingerprint className="w-6 h-6 text-[#78282E]" />
-            Staff Attendance Register
+          <div className="flex items-center space-x-2">
+            <span className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 font-bold text-[11px] uppercase tracking-wider">
+              GES Compliance Ready
+            </span>
+            <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 font-bold text-[11px] uppercase tracking-wider">
+              Staff Attendance Module
+            </span>
+          </div>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-1 flex items-center gap-2">
+            <Fingerprint className="w-7 h-7 text-emerald-600" /> Staff QR & Attendance Hub
           </h1>
-          <p className="text-xs text-slate-500 mt-1">Track and manage attendance for all teaching and non-teaching staff</p>
+          <p className="text-xs text-slate-500 font-medium">
+            Real-time QR scanning, unattended kiosk mode, anti-proxy photo checks, and audit trails
+          </p>
         </div>
-        <div className="flex items-center gap-1 bg-slate-100 p-1.5 rounded-2xl self-start sm:self-center">
-          {[{ key: 'daily', label: 'Daily Register', icon: Calendar }, { key: 'history', label: 'History', icon: History }].map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition ${activeTab === key ? 'bg-[#78282E] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
-            >
-              <Icon className="w-3.5 h-3.5" />
-              {label}
-            </button>
-          ))}
+
+        {/* Header Actions */}
+        <div className="flex items-center space-x-3">
+          <a
+            href="/attendance/kiosk"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center space-x-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-black transition-all shadow-md shadow-slate-950/20"
+          >
+            <Laptop className="w-4 h-4 text-emerald-400" />
+            <span>Launch Kiosk Scanner</span>
+            <ExternalLink className="w-3.5 h-3.5 opacity-60" />
+          </a>
         </div>
       </div>
 
-      {/* ── GPS Geofence Configuration Panel ── */}
-      <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
-        <button
-          id="gps-settings-toggle"
-          onClick={() => setShowGpsSettings((v) => !v)}
-          className="w-full flex items-center justify-between px-6 py-4 hover:bg-slate-50 transition group"
-        >
-          <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${geofenceData?.enabled ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-              <MapPin className="w-4 h-4" />
-            </div>
-            <div className="text-left">
-              <p className="text-sm font-black text-slate-900">GPS Geofence Settings</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {geofenceData?.enabled
-                  ? `Active — staff must be within ${geofenceData.radiusMetres}m of school to check in`
-                  : 'Disabled — click to configure school location for fraud prevention'}
-              </p>
-            </div>
-            {geofenceData?.enabled && (
-              <span className="ml-2 px-2.5 py-1 text-[10px] font-black bg-emerald-100 text-emerald-700 rounded-full uppercase tracking-wider border border-emerald-200 flex items-center gap-1">
-                <ShieldCheck className="w-3 h-3" /> Active
-              </span>
-            )}
-          </div>
-          {showGpsSettings
-            ? <ChevronUp className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition" />
-            : <ChevronDown className="w-4 h-4 text-slate-400 group-hover:text-slate-700 transition" />}
-        </button>
-
-        {showGpsSettings && (
-          <div className="border-t border-slate-100 px-6 pb-6 pt-5 space-y-5">
-
-            {/* Feedback */}
-            {geofenceMsg.text && (
-              <div className={`p-3.5 rounded-2xl text-xs font-bold flex items-start gap-2 ${
-                geofenceMsg.type === 'success' ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-                : 'bg-rose-50 border border-rose-200 text-rose-800'
-              }`}>
-                {geofenceMsg.type === 'success' ? <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600 mt-0.5" /> : <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600 mt-0.5" />}
-                {geofenceMsg.text}
-              </div>
-            )}
-
-            {/* Enable / Disable Toggle */}
-            <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-200">
-              <div>
-                <p className="text-sm font-black text-slate-900">Enable GPS Geofencing</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  When enabled, staff must be physically present at school to check in.
-                  Admin can still override manually.
-                </p>
-              </div>
-              <button
-                id="geofence-toggle-btn"
-                onClick={() => setGeofenceForm((p) => ({ ...p, enabled: !p.enabled }))}
-                className="ml-4 flex-shrink-0"
-              >
-                {geofenceForm.enabled
-                  ? <ToggleRight className="w-10 h-10 text-emerald-600" />
-                  : <ToggleLeft className="w-10 h-10 text-slate-400" />}
-              </button>
-            </div>
-
-            {/* Coordinates */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-black text-slate-700 uppercase tracking-wider">School GPS Coordinates</p>
-                <button
-                  id="detect-location-btn"
-                  type="button"
-                  onClick={handleDetectLocation}
-                  disabled={gpsLocating}
-                  className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-black rounded-xl transition disabled:opacity-60"
-                >
-                  {gpsLocating
-                    ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    : <Navigation className="w-3.5 h-3.5" />}
-                  {gpsLocating ? 'Searching for GPS signal…' : 'Use My Current Location'}
-                </button>
-              </div>
-
-              {/* Live GPS accuracy meter while searching */}
-              {gpsLocating && (
-                <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-2xl space-y-2">
-                  <div className="flex items-center justify-between text-xs font-bold text-indigo-800">
-                    <span className="flex items-center gap-1.5">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Acquiring GPS signal — please wait…
-                    </span>
-                    {gpsAccuracy !== null && (
-                      <span className={`font-black px-2 py-0.5 rounded-md ${
-                        gpsAccuracy <= 50 ? 'bg-emerald-200 text-emerald-900'
-                        : gpsAccuracy <= 200 ? 'bg-amber-200 text-amber-900'
-                        : 'bg-rose-200 text-rose-900'
-                      }`}>
-                        ±{gpsAccuracy}m
-                      </span>
-                    )}
-                  </div>
-                  {/* Accuracy progress bar */}
-                  {gpsAccuracy !== null && (
-                    <div className="w-full h-2.5 bg-indigo-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full transition-all duration-700 ${
-                          gpsAccuracy <= 50 ? 'bg-emerald-500'
-                          : gpsAccuracy <= 200 ? 'bg-amber-400'
-                          : 'bg-rose-400'
-                        }`}
-                        style={{ width: `${Math.min(100, Math.round((1000 - Math.min(gpsAccuracy, 1000)) / 1000 * 100))}%` }}
-                      />
-                    </div>
-                  )}
-                  <p className="text-[11px] text-indigo-600">
-                    {gpsAccuracy === null
-                      ? 'Waiting for first signal… Go near a window or step outside for best results.'
-                      : gpsAccuracy <= 50
-                      ? '✅ Excellent — locking in coordinates now.'
-                      : gpsAccuracy <= 200
-                      ? '⚠️ Fair accuracy — holding on for a better GPS fix…'
-                      : '❌ Very coarse (likely IP/cell tower) — move outdoors and wait for the bar to go green.'}
-                  </p>
-                </div>
-              )}
-
-              <p className="text-[11px] text-slate-400">
-                Click the button <strong>while at school</strong>, step outdoors or near a window, and wait for the accuracy bar to turn <span className="text-emerald-600 font-bold">green (≤50m)</span>. This takes 10–30 seconds on real GPS.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Latitude <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    id="geofence-lat"
-                    type="number"
-                    step="0.0000001"
-                    placeholder="e.g. 9.4075 (Tamale)"
-                    value={geofenceForm.lat}
-                    onChange={(e) => setGeofenceForm((p) => ({ ...p, lat: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-[#78282E]"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Longitude <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    id="geofence-lng"
-                    type="number"
-                    step="0.0000001"
-                    placeholder="e.g. -0.8393 (Tamale)"
-                    value={geofenceForm.lng}
-                    onChange={(e) => setGeofenceForm((p) => ({ ...p, lng: e.target.value }))}
-                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-[#78282E]"
-                  />
-                </div>
-              </div>
-
-              {geofenceForm.lat && geofenceForm.lng && (
-                <a
-                  href={`https://www.google.com/maps?q=${geofenceForm.lat},${geofenceForm.lng}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-indigo-600 hover:text-indigo-800 transition"
-                >
-                  <MapPin className="w-3.5 h-3.5" />
-                  Verify on Google Maps ↗
-                </a>
-              )}
-            </div>
-
-            {/* Radius & Late Threshold */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Allowed Radius (metres)
-                </label>
-                <input
-                  id="geofence-radius"
-                  type="number"
-                  min={50}
-                  max={1000}
-                  step={10}
-                  value={geofenceForm.radiusMetres}
-                  onChange={(e) => setGeofenceForm((p) => ({ ...p, radiusMetres: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78282E]"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">Recommended: 100–200m. Smaller = stricter.</p>
-              </div>
-              <div>
-                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                  Late Threshold (minutes after 7:30 AM)
-                </label>
-                <input
-                  id="geofence-late-threshold"
-                  type="number"
-                  min={0}
-                  max={120}
-                  step={5}
-                  value={geofenceForm.lateThresholdMinutes}
-                  onChange={(e) => setGeofenceForm((p) => ({ ...p, lateThresholdMinutes: e.target.value }))}
-                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78282E]"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  e.g. 15 = marked Late if they check in after 7:45 AM.
-                </p>
-              </div>
-            </div>
-
-            {/* Save Button */}
-            <div className="flex justify-end pt-2">
-              <button
-                id="save-geofence-btn"
-                onClick={() => geofenceMutation.mutate()}
-                disabled={geofenceMutation.isPending || !isOnline}
-                className="px-6 py-2.5 bg-[#78282E] hover:bg-[#6B2228] text-white font-black text-xs rounded-xl shadow-md flex items-center gap-2 transition disabled:opacity-50"
-              >
-                {geofenceMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                {geofenceMutation.isPending ? 'Saving…' : 'Save GPS Settings'}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ── Feedback ── */}
+      {/* Message Alert Banner */}
       {message.text && (
-        <div className={`p-4 rounded-2xl text-xs font-bold flex items-center gap-2 ${
-          message.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-          : 'bg-rose-50 text-rose-800 border border-rose-200'
-        }`}>
-          {message.type === 'success' ? <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" /> : <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0" />}
-          {message.text}
-        </div>
-      )}
-
-      {/* ── Offline Banner ── */}
-      {!isOnline && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-center gap-2 text-xs font-bold text-amber-800">
-          <WifiOff className="w-4 h-4 text-amber-600" />
-          Offline — showing cached data {cachedAt && `(as of ${new Date(cachedAt).toLocaleTimeString()})`}. Changes cannot be saved until you reconnect.
-        </div>
-      )}
-
-      {/* ── Late Alerts Banner ── */}
-      {activeTab === 'daily' && lateAlerts.length > 0 && (
-        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3 text-xs text-amber-800">
-          <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="font-black text-sm">Late Arrival Alerts Today</p>
-            <p className="mt-0.5 font-medium">{lateAlerts.length} staff member{lateAlerts.length > 1 ? 's' : ''} checked in late and the system has flagged it.</p>
+        <div
+          className={`p-4 rounded-2xl text-xs font-bold flex items-center justify-between shadow-sm border ${
+            message.type === 'error'
+              ? 'bg-rose-50 text-rose-800 border-rose-200'
+              : 'bg-emerald-50 text-emerald-800 border-emerald-200'
+          }`}
+        >
+          <div className="flex items-center space-x-2">
+            <ShieldCheck className="w-4 h-4" />
+            <span>{message.text}</span>
           </div>
+          <button onClick={() => setMessage({ text: '', type: '' })} className="font-bold opacity-60 hover:opacity-100">
+            Dismiss
+          </button>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* DAILY REGISTER TAB                                                    */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'daily' && (
-        <div className="space-y-5">
+      {/* ── Summary Cards Grid ────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <SummaryCard label="Present" value={summary.present} color="emerald" sub="On time staff" />
+        <SummaryCard label="Late" value={summary.late} color="amber" sub="Arrived after threshold" />
+        <SummaryCard label="Absent" value={summary.absent} color="rose" sub="Unexcused absence" />
+        <SummaryCard label="On Leave" value={summary.onLeave} color="indigo" sub="Approved leave" />
+        <SummaryCard
+          label="Attendance Rate"
+          value={summary.attendanceRate != null ? `${summary.attendanceRate}%` : '—'}
+          color="slate"
+          sub={`${summary.present + summary.late} / ${summary.total} marked`}
+        />
+      </div>
 
-          {/* Controls */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs flex flex-wrap gap-4 items-end">
-            {/* Date Nav */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Date</label>
-              <div className="flex items-center gap-1">
-                <button onClick={() => setSelectedDate(d => offsetDate(d, -1))} className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 transition">
-                  <ChevronLeft className="w-4 h-4 text-slate-600" />
-                </button>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  max={toDateInputValue(new Date())}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78282E]"
-                />
-                <button
-                  onClick={() => { if (selectedDate < toDateInputValue(new Date())) setSelectedDate(d => offsetDate(d, 1)); }}
-                  disabled={selectedDate >= toDateInputValue(new Date())}
-                  className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 transition disabled:opacity-40"
-                >
-                  <ChevronRight className="w-4 h-4 text-slate-600" />
-                </button>
+      {/* ── Navigation Tabs ───────────────────────────────────────────────── */}
+      <div className="flex items-center space-x-2 border-b border-slate-200 pb-1 overflow-x-auto">
+        {[
+          { id: 'daily', label: "Today's Register", icon: Calendar },
+          { id: 'history', label: 'Attendance History', icon: History },
+          { id: 'devices', label: 'Kiosk Devices', icon: Laptop },
+          { id: 'sessions', label: 'Sessions Setup', icon: Clock },
+          { id: 'events', label: 'Audit Trail Logs', icon: ShieldAlert },
+          { id: 'settings', label: 'Branch GPS Settings', icon: Settings },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                isActive
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── TAB 1: TODAY'S LIVE REGISTER ──────────────────────────────────── */}
+      {activeTab === 'daily' && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
+          {/* Controls Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-center flex-wrap gap-3">
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 bg-slate-50 focus:outline-none focus:border-emerald-500"
+              />
+              <button
+                onClick={() => refetchDaily()}
+                className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors"
+                title="Refresh Register"
+              >
+                <RefreshCw className={`w-4 h-4 ${dailyLoading ? 'animate-spin' : ''}`} />
+              </button>
+
+              {/* Branch Filter Pills */}
+              <div className="flex items-center bg-slate-100 p-1 rounded-xl space-x-1">
+                {[
+                  { id: 'all', label: 'All Branches' },
+                  { id: 'Zogbeli', label: 'Zogbeli Branch' },
+                  { id: 'Vittin', label: 'Vittin Branch' },
+                ].map((b) => (
+                  <button
+                    key={b.id}
+                    onClick={() => setBranchFilter(b.id)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                      branchFilter === b.id
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-900'
+                    }`}
+                  >
+                    {b.label}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Search */}
-            <div className="flex flex-col gap-1.5 flex-1 min-w-[160px]">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Search Staff</label>
+            <div className="flex items-center space-x-3">
               <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Name or role…"
+                  placeholder="Search staff name or dept..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78282E]"
+                  className="pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 bg-slate-50 w-64 focus:outline-none focus:border-emerald-500"
                 />
               </div>
             </div>
-
-            {/* Role Filter */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Filter Role</label>
-              <select
-                value={roleFilter}
-                onChange={(e) => setRoleFilter(e.target.value)}
-                className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78282E]"
-              >
-                <option value="all">All Roles</option>
-                {allRoles.map((r) => <option key={r} value={r}>{r.charAt(0).toUpperCase() + r.slice(1)}</option>)}
-              </select>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2 flex-wrap ml-auto">
-              <button onClick={() => handleMarkAll('present')} className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold text-xs rounded-xl border border-emerald-200 transition">All Present</button>
-              <button onClick={() => handleMarkAll('absent')} className="px-3 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs rounded-xl border border-rose-200 transition">All Absent</button>
-              <button onClick={handleExport} className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition flex items-center gap-1.5">
-                <Download className="w-3.5 h-3.5" />
-                Export CSV
-              </button>
-              <button onClick={() => refetchDaily()} className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl border border-slate-200 transition" title="Refresh">
-                <RefreshCw className="w-4 h-4" />
-              </button>
-            </div>
           </div>
 
-          {/* Summary Cards */}
-          {!isLoading && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <SummaryCard label="Total Staff" value={summary.total || 0} color="slate" />
-              <SummaryCard label="Present" value={summary.present || 0} color="emerald" />
-              <SummaryCard label="Late" value={summary.late || 0} color="amber" />
-              <SummaryCard label="Absent" value={summary.absent || 0} color="rose" />
-              <SummaryCard label="On Leave" value={summary.onLeave || 0} color="indigo" />
-              <SummaryCard label="Not Marked" value={summary.notMarked || 0} color="slate" sub="Need attention" />
-            </div>
-          )}
-
-          {/* Attendance Table */}
-          {isLoading && !cachedData ? (
-            <div className="h-64 bg-white rounded-3xl border border-slate-200 animate-pulse" />
-          ) : filteredOverview.length === 0 ? (
-            <div className="p-12 text-center bg-white rounded-3xl border border-slate-200 text-slate-500 space-y-2">
-              <Users className="w-8 h-8 text-slate-400 mx-auto" />
-              <p className="font-bold text-sm">No staff found.</p>
-            </div>
-          ) : (
-            <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-5">
-              <div className="flex items-center justify-between flex-wrap gap-3">
-                <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5 text-[#78282E]" />
-                  Daily Staff Register — {new Date(selectedDate).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                </h3>
-                {pendingChanges > 0 && (
-                  <button
-                    onClick={() => bulkMutation.mutate()}
-                    disabled={bulkMutation.isPending || !isOnline}
-                    className="px-5 py-2.5 bg-[#78282E] hover:bg-[#6B2228] text-white font-black text-xs rounded-xl shadow-md flex items-center gap-2 transition disabled:opacity-50"
-                  >
-                    <Save className="w-4 h-4" />
-                    {bulkMutation.isPending ? 'Saving…' : `Save ${pendingChanges} Change${pendingChanges > 1 ? 's' : ''}`}
-                  </button>
-                )}
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
-                      <th className="p-3.5 rounded-l-xl">Staff Member</th>
-                      <th className="p-3.5">Role</th>
-                      <th className="p-3.5">Check In</th>
-                      <th className="p-3.5">Check Out</th>
-                      <th className="p-3.5 text-center">GPS</th>
-                      <th className="p-3.5 rounded-r-xl">Status / Override</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {filteredOverview.map((staff) => {
-                      const effectiveStatus = editMap[staff.staffId] || staff.status;
-                      const cfg = STATUS_CONFIG[effectiveStatus] || STATUS_CONFIG.not_marked;
-                      const isEdited = !!editMap[staff.staffId];
-
-                      return (
-                        <tr
-                          key={staff.staffId}
-                          className={`hover:bg-slate-50/80 transition ${isEdited ? 'bg-amber-50/60' : ''}`}
-                        >
-                          <td className="p-3.5">
-                            <div className="flex items-center gap-3">
-                              {staff.photoUrl ? (
-                                <img src={staff.photoUrl} alt={staff.name} className="w-9 h-9 rounded-xl object-cover" />
-                              ) : (
-                                <div className="w-9 h-9 rounded-xl bg-[#78282E]/10 text-[#78282E] font-black flex items-center justify-center text-sm flex-shrink-0">
-                                  {staff.name.charAt(0)}
-                                </div>
+          {/* Table */}
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="p-3.5">Staff</th>
+                  <th className="p-3.5">Branch</th>
+                  <th className="p-3.5">Department / Role</th>
+                  <th className="p-3.5">Check-In</th>
+                  <th className="p-3.5">Check-Out</th>
+                  <th className="p-3.5">Status</th>
+                  <th className="p-3.5">GPS / Audit</th>
+                  <th className="p-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
+                {filteredOverview.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="p-8 text-center text-slate-400 font-semibold">
+                      No staff attendance records found for this date.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredOverview.map((row) => {
+                    const statusConf = STATUS_CONFIG[row.status] || STATUS_CONFIG.not_marked;
+                    return (
+                      <tr key={row.staffId} className="hover:bg-slate-50/80 transition-colors">
+                        <td className="p-3.5 flex items-center space-x-3">
+                          <img
+                            src={
+                              row.photoUrl ||
+                              `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(row.name)}`
+                            }
+                            alt={row.name}
+                            className="w-9 h-9 rounded-xl object-cover border border-slate-200"
+                          />
+                          <div>
+                            <p className="font-bold text-slate-900">{row.name}</p>
+                            <p className="text-[11px] font-mono text-emerald-600">{row.staffCode}</p>
+                          </div>
+                        </td>
+                        <td className="p-3.5">
+                          <span
+                            className={`px-2.5 py-1 rounded-full text-[11px] font-black uppercase ${
+                              row.branch === 'Vittin'
+                                ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                : 'bg-[#78282E]/10 text-[#78282E] border border-[#78282E]/20'
+                            }`}
+                          >
+                            {row.branch || 'Zogbeli'}
+                          </span>
+                        </td>
+                        <td className="p-3.5">
+                          <p className="font-bold text-slate-800">{row.department || 'General'}</p>
+                          <p className="text-[11px] text-slate-400 capitalize">{row.role}</p>
+                        </td>
+                        <td className="p-3.5 font-bold text-slate-900">
+                          {formatTime(row.checkInTime)}
+                        </td>
+                        <td className="p-3.5 font-bold text-slate-900">
+                          {formatTime(row.checkOutTime)}
+                        </td>
+                        <td className="p-3.5">
+                          <span
+                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-black uppercase ${statusConf.bg} ${statusConf.text}`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${statusConf.dot}`} />
+                            {statusConf.label}
+                          </span>
+                        </td>
+                        <td className="p-3.5 text-[11px]">
+                          {row.geofenceVerified ? (
+                            <div className="flex flex-col gap-0.5">
+                              <span className="text-emerald-700 font-bold flex items-center gap-1">
+                                <ShieldCheck className="w-3.5 h-3.5" /> GPS Verified
+                              </span>
+                              {row.distanceFromSchool != null && (
+                                <span className="text-[10px] text-slate-500 font-medium">
+                                  {row.distanceFromSchool}m away
+                                </span>
                               )}
-                              <div>
-                                <p className="font-bold text-slate-900">{staff.name}</p>
-                                {staff.markedByRole === 'self' && (
-                                  <p className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                                    <Fingerprint className="w-2.5 h-2.5" /> Self Check-in
-                                  </p>
-                                )}
-                                {staff.markedByRole === 'admin' && (
-                                  <p className="text-[10px] text-indigo-500 font-bold">Admin Override</p>
-                                )}
-                              </div>
                             </div>
-                          </td>
-                          <td className="p-3.5">
-                            <span className="capitalize font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
-                              {staff.role}
+                          ) : row.corrections && row.corrections.length > 0 ? (
+                            <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded font-bold border border-amber-200">
+                              Corrected ({row.corrections.length})
                             </span>
-                          </td>
-                          <td className="p-3.5 font-bold text-slate-700 tabular-nums">
-                            {formatTime(staff.checkInTime)}
-                          </td>
-                          <td className="p-3.5 font-bold text-slate-700 tabular-nums">
-                            {formatTime(staff.checkOutTime)}
-                          </td>
-                          <td className="p-3.5 text-center">
-                            {staff.geofenceVerified ? (
-                              <ShieldCheck className="w-4 h-4 text-emerald-600 mx-auto" title="GPS verified at school" />
-                            ) : staff.checkInTime ? (
-                              <MapPin className="w-4 h-4 text-amber-500 mx-auto" title="Admin override / No GPS" />
-                            ) : (
-                              <span className="text-slate-300">—</span>
-                            )}
-                          </td>
-                          <td className="p-3.5">
-                            <select
-                              value={effectiveStatus}
-                              onChange={(e) => setEditMap((prev) => ({ ...prev, [staff.staffId]: e.target.value }))}
-                              disabled={!isOnline}
-                              className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg border focus:outline-none focus:ring-2 focus:ring-[#78282E] transition ${cfg.bg} ${cfg.text} ${cfg.border} ${isEdited ? 'ring-2 ring-amber-400' : ''}`}
-                            >
-                              <option value="not_marked" disabled>Not Marked</option>
-                              {STATUS_OPTIONS.map((s) => (
-                                <option key={s} value={s}>
-                                  {STATUS_CONFIG[s].label}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-
-              {pendingChanges > 0 && (
-                <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                  <p className="text-xs text-amber-700 font-bold bg-amber-50 px-3 py-1.5 rounded-xl border border-amber-200">
-                    {pendingChanges} unsaved change{pendingChanges > 1 ? 's' : ''} — click Save to apply
-                  </p>
-                  <button
-                    onClick={() => bulkMutation.mutate()}
-                    disabled={bulkMutation.isPending || !isOnline}
-                    className="px-5 py-2.5 bg-[#78282E] hover:bg-[#6B2228] text-white font-black text-xs rounded-xl shadow-md flex items-center gap-2 transition disabled:opacity-50"
-                  >
-                    <Save className="w-4 h-4" />
-                    {bulkMutation.isPending ? 'Saving…' : `Save Changes`}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+                          ) : row.markedByRole === 'kiosk' ? (
+                            <span className="text-emerald-700 font-semibold">QR Kiosk Scan</span>
+                          ) : (
+                            <span className="text-slate-400">Standard</span>
+                          )}
+                        </td>
+                        <td className="p-3.5 text-right space-x-2">
+                          <button
+                            onClick={() => setSelectedStaffForQr({ _id: row.staffId, firstName: row.name, staffId: row.staffCode })}
+                            className="p-1.5 bg-slate-100 hover:bg-emerald-100 text-slate-700 hover:text-emerald-800 rounded-lg font-bold transition-all"
+                            title="Manage QR Code"
+                          >
+                            <QrCode className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleOpenCorrection(row)}
+                            className="p-1.5 bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-800 rounded-lg font-bold transition-all"
+                            title="Manual Correction"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
-      {/* HISTORY TAB                                                            */}
-      {/* ═══════════════════════════════════════════════════════════════════════ */}
+      {/* ── TAB 2: ATTENDANCE HISTORY ─────────────────────────────────────── */}
       {activeTab === 'history' && (
-        <div className="space-y-5">
-          {/* History Filters */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs grid grid-cols-1 sm:grid-cols-4 gap-4">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">From</label>
-              <input type="date" value={historyFrom} onChange={(e) => setHistoryFrom(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78282E]" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">To</label>
-              <input type="date" value={historyTo} onChange={(e) => setHistoryTo(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78282E]" />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Status</label>
-              <select value={historyStatus} onChange={(e) => setHistoryStatus(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78282E]">
-                <option value="">All Statuses</option>
-                {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s].label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Filter Staff</label>
-              <select value={historyStaffId} onChange={(e) => setHistoryStaffId(e.target.value)}
-                className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#78282E]">
-                <option value="">All Staff</option>
-                {overview.map((s) => <option key={s.staffId} value={s.staffId}>{s.name}</option>)}
-              </select>
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <h3 className="font-black text-slate-900 text-base">Attendance History Logs</h3>
+            <div className="flex items-center space-x-3">
+              <input
+                type="date"
+                value={historyFrom}
+                onChange={(e) => setHistoryFrom(e.target.value)}
+                className="border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <input
+                type="date"
+                value={historyTo}
+                onChange={(e) => setHistoryTo(e.target.value)}
+                className="border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-700"
+              />
             </div>
           </div>
 
-          {/* History Summary */}
-          {!historyLoading && historyData?.summary && (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <SummaryCard label="Total Records" value={historyData.summary.total || 0} color="slate" />
-              <SummaryCard label="Present" value={historyData.summary.present || 0} color="emerald" />
-              <SummaryCard label="Late" value={historyData.summary.late || 0} color="amber" />
-              <SummaryCard label="Absent" value={historyData.summary.absent || 0} color="rose" />
-              <SummaryCard label="On Leave" value={historyData.summary.on_leave || 0} color="indigo" />
-            </div>
-          )}
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 font-bold uppercase border-b border-slate-200">
+                <tr>
+                  <th className="p-3.5">Date</th>
+                  <th className="p-3.5">Staff</th>
+                  <th className="p-3.5">Check-In</th>
+                  <th className="p-3.5">Check-Out</th>
+                  <th className="p-3.5">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                {(historyData?.records || []).map((r) => (
+                  <tr key={r._id}>
+                    <td className="p-3.5 font-bold text-slate-900">
+                      {new Date(r.date).toLocaleDateString('en-GB')}
+                    </td>
+                    <td className="p-3.5 font-bold">
+                      {r.staff?.firstName} {r.staff?.lastName}
+                    </td>
+                    <td className="p-3.5">{formatTime(r.checkInTime)}</td>
+                    <td className="p-3.5">{formatTime(r.checkOutTime)}</td>
+                    <td className="p-3.5 uppercase font-bold text-xs">{r.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
-          {/* History Table */}
-          {historyLoading ? (
-            <div className="h-64 bg-white rounded-3xl border border-slate-200 animate-pulse" />
-          ) : (
-            <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wider text-slate-500 font-bold">
-                      <th className="p-3.5 rounded-l-xl">Date</th>
-                      <th className="p-3.5">Staff Member</th>
-                      <th className="p-3.5">Role</th>
-                      <th className="p-3.5">Check In</th>
-                      <th className="p-3.5">Check Out</th>
-                      <th className="p-3.5 rounded-r-xl">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-xs">
-                    {(historyData?.records || []).map((rec) => {
-                      const cfg = STATUS_CONFIG[rec.status] || STATUS_CONFIG.not_marked;
-                      return (
-                        <tr key={rec._id} className="hover:bg-slate-50/80 transition">
-                          <td className="p-3.5 font-bold text-slate-700">
-                            {new Date(rec.date).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}
-                          </td>
-                          <td className="p-3.5">
-                            <div className="flex items-center gap-2">
-                              {rec.staff?.photoUrl ? (
-                                <img src={rec.staff.photoUrl} alt="" className="w-7 h-7 rounded-lg object-cover" />
-                              ) : (
-                                <div className="w-7 h-7 rounded-lg bg-[#78282E]/10 text-[#78282E] font-black flex items-center justify-center text-xs">
-                                  {rec.staff?.firstName?.charAt(0)}
-                                </div>
-                              )}
-                              <span className="font-bold text-slate-900">
-                                {rec.staff?.title ? `${rec.staff.title} ` : ''}{rec.staff?.firstName} {rec.staff?.lastName}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="p-3.5 capitalize font-medium text-slate-600">{rec.staff?.role}</td>
-                          <td className="p-3.5 font-bold tabular-nums text-slate-700">{formatTime(rec.checkInTime)}</td>
-                          <td className="p-3.5 font-bold tabular-nums text-slate-700">{formatTime(rec.checkOutTime)}</td>
-                          <td className="p-3.5">
-                            <span className={`px-2.5 py-1 text-[11px] font-black rounded-lg uppercase border ${cfg.bg} ${cfg.text} ${cfg.border}`}>
-                              {cfg.label}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {(historyData?.records || []).length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
-                          No records found for the selected filters.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+      {/* ── TAB 3: KIOSK DEVICES MANAGER ──────────────────────────────────── */}
+      {activeTab === 'devices' && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Authorized Kiosk Devices</h3>
+              <p className="text-xs text-slate-500">Hardware scanners registered to capture staff attendance</p>
+            </div>
+            <button
+              onClick={() => setShowDeviceModal(true)}
+              className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-600/20"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Register New Kiosk Device</span>
+            </button>
+          </div>
+
+          {/* Created Token Banner */}
+          {createdDeviceToken && (
+            <div className="bg-slate-900 text-white p-4 rounded-2xl space-y-2 border border-slate-800">
+              <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">
+                IMPORTANT: Save Device Token Now (Shown Once)
+              </p>
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 flex items-center justify-between">
+                <code className="text-xs font-mono text-emerald-400 break-all">{createdDeviceToken}</code>
+                <button
+                  onClick={() => navigator.clipboard.writeText(createdDeviceToken)}
+                  className="ml-3 text-xs text-slate-400 hover:text-white font-bold"
+                >
+                  Copy
+                </button>
               </div>
             </div>
           )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(devicesData || []).map((dev) => (
+              <div key={dev._id} className="p-5 border border-slate-200 rounded-2xl space-y-3 bg-slate-50/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center font-bold">
+                      <Laptop className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-black text-slate-900 text-sm">{dev.deviceName}</h4>
+                      <p className="text-xs text-slate-500 font-medium">{dev.locationName} • {dev.deviceId}</p>
+                    </div>
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase ${
+                      dev.status === 'ACTIVE' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                    }`}
+                  >
+                    {dev.status}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-slate-200/80">
+                  <div>
+                    <span className="text-slate-400 font-medium">Anti-Proxy Level:</span>
+                    <p className="font-bold text-slate-800 uppercase">{dev.antiProxyLevel || 'High Security'}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium">Allowed Radius:</span>
+                    <p className="font-bold text-slate-800">{dev.allowedRadiusMetres} metres</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
+      )}
+
+      {/* ── TAB 4: SESSIONS SETUP ─────────────────────────────────────────── */}
+      {activeTab === 'sessions' && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-black text-slate-900 text-base">Attendance Sessions</h3>
+              <p className="text-xs text-slate-500">Define morning and afternoon attendance windows and late cutoff times</p>
+            </div>
+            <button
+              onClick={() => setShowSessionModal(true)}
+              className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-md shadow-emerald-600/20"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Configure Session</span>
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {(sessionsData || []).map((sess) => (
+              <div key={sess._id} className="p-4 border border-slate-200 rounded-2xl flex items-center justify-between bg-slate-50">
+                <div className="flex items-center space-x-3">
+                  <Clock className="w-5 h-5 text-emerald-600" />
+                  <div>
+                    <h4 className="font-black text-slate-900 text-sm">{sess.name}</h4>
+                    <p className="text-xs text-slate-500">
+                      Window: {formatTime(sess.startTime)} – {formatTime(sess.endTime)} | Late after: {formatTime(sess.lateThresholdTime)}
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-1 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 uppercase">
+                  {sess.status}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 5: AUDIT EVENTS LOG ───────────────────────────────────────── */}
+      {activeTab === 'events' && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
+          <h3 className="font-black text-slate-900 text-base">Immutable Scan & Correction Audit Trail</h3>
+
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 font-bold uppercase border-b border-slate-200">
+                <tr>
+                  <th className="p-3.5">Timestamp</th>
+                  <th className="p-3.5">Staff</th>
+                  <th className="p-3.5">Event Type</th>
+                  <th className="p-3.5">Result</th>
+                  <th className="p-3.5">Scanner / Device</th>
+                  <th className="p-3.5">Details</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                {(eventsData || []).map((e) => (
+                  <tr key={e._id}>
+                    <td className="p-3.5 text-slate-500">
+                      {new Date(e.timestamp).toLocaleString('en-GB')}
+                    </td>
+                    <td className="p-3.5 font-bold">
+                      {e.staff ? `${e.staff.firstName} ${e.staff.lastName}` : 'Unrecognized'}
+                    </td>
+                    <td className="p-3.5 font-bold uppercase">{e.eventType}</td>
+                    <td className="p-3.5">
+                      <span
+                        className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                          e.result === 'SUCCESS'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : e.result === 'LATE'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-rose-100 text-rose-800'
+                        }`}
+                      >
+                        {e.result}
+                      </span>
+                    </td>
+                    <td className="p-3.5">{e.deviceName || 'Kiosk'}</td>
+                    <td className="p-3.5 text-slate-500">
+                      {e.failureReason || (e.correctionDetails?.reason ? `Reason: ${e.correctionDetails.reason}` : 'Normal Scan')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB 6: BRANCH GEOFENCE SETTINGS ──────────────────────────────── */}
+      {activeTab === 'settings' && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="font-black text-slate-900 text-lg flex items-center gap-2">
+                <MapPin className="w-5 h-5 text-[#78282E]" />
+                Dual-Branch GPS Geofence Configuration
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Set campus GPS coordinates and 150m attendance boundaries for Zogbeli and Vittin branches.
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              <label className="text-xs font-bold text-slate-700">Enable GPS Geofencing</label>
+              <input
+                type="checkbox"
+                checked={geofenceForm.enabled}
+                onChange={(e) => setGeofenceForm({ ...geofenceForm, enabled: e.target.checked })}
+                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+              />
+            </div>
+          </div>
+
+          <form onSubmit={handleSaveGeofenceSettings} className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Zogbeli Branch Box */}
+              <div className="p-5 rounded-2xl border-2 border-red-950/20 bg-red-950/5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-[#78282E]" />
+                      Zogbeli Branch
+                    </h4>
+                    <p className="text-[11px] font-bold text-slate-500">
+                      Classes: Nursery 1, Nursery 2, KG 1, KG 2, Primary 1 – Primary 4
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-[#78282E] text-white text-[10px] font-black">
+                    ZOGBELI
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 9.407500"
+                      value={geofenceForm.zogbeli.lat}
+                      onChange={(e) =>
+                        setGeofenceForm({
+                          ...geofenceForm,
+                          zogbeli: { ...geofenceForm.zogbeli, lat: parseFloat(e.target.value) || '' },
+                        })
+                      }
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. -0.839200"
+                      value={geofenceForm.zogbeli.lng}
+                      onChange={(e) =>
+                        setGeofenceForm({
+                          ...geofenceForm,
+                          zogbeli: { ...geofenceForm.zogbeli, lng: parseFloat(e.target.value) || '' },
+                        })
+                      }
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
+                    Allowed Attendance Radius (Metres)
+                  </label>
+                  <input
+                    type="number"
+                    value={geofenceForm.zogbeli.radiusMetres || 150}
+                    onChange={(e) =>
+                      setGeofenceForm({
+                        ...geofenceForm,
+                        zogbeli: { ...geofenceForm.zogbeli, radiusMetres: parseInt(e.target.value, 10) || 150 },
+                      })
+                    }
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Default requirement: 150 Metres</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => captureBranchGps('zogbeli')}
+                  className="w-full flex items-center justify-center space-x-2 py-2.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold transition-all shadow-xs"
+                >
+                  <MapPin className="w-4 h-4 text-[#78282E]" />
+                  <span>Capture Current GPS Location (Zogbeli Campus)</span>
+                </button>
+              </div>
+
+              {/* Vittin Branch Box */}
+              <div className="p-5 rounded-2xl border-2 border-amber-950/20 bg-amber-950/5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-black text-slate-900 text-base flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-amber-800" />
+                      Vittin Branch
+                    </h4>
+                    <p className="text-[11px] font-bold text-slate-500">
+                      Classes: Primary 5, Primary 6, JHS 1 – JHS 3
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded-full bg-amber-800 text-white text-[10px] font-black">
+                    VITTIN
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Latitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 9.385000"
+                      value={geofenceForm.vittin.lat}
+                      onChange={(e) =>
+                        setGeofenceForm({
+                          ...geofenceForm,
+                          vittin: { ...geofenceForm.vittin, lat: parseFloat(e.target.value) || '' },
+                        })
+                      }
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Longitude</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. -0.812000"
+                      value={geofenceForm.vittin.lng}
+                      onChange={(e) =>
+                        setGeofenceForm({
+                          ...geofenceForm,
+                          vittin: { ...geofenceForm.vittin, lng: parseFloat(e.target.value) || '' },
+                        })
+                      }
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
+                    Allowed Attendance Radius (Metres)
+                  </label>
+                  <input
+                    type="number"
+                    value={geofenceForm.vittin.radiusMetres || 150}
+                    onChange={(e) =>
+                      setGeofenceForm({
+                        ...geofenceForm,
+                        vittin: { ...geofenceForm.vittin, radiusMetres: parseInt(e.target.value, 10) || 150 },
+                      })
+                    }
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">Default requirement: 150 Metres</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => captureBranchGps('vittin')}
+                  className="w-full flex items-center justify-center space-x-2 py-2.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold transition-all shadow-xs"
+                >
+                  <MapPin className="w-4 h-4 text-amber-800" />
+                  <span>Capture Current GPS Location (Vittin Campus)</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-2 border-t border-slate-100">
+              <button
+                type="submit"
+                className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3 rounded-xl text-xs transition-all shadow-md shadow-emerald-600/20"
+              >
+                <Save className="w-4 h-4" />
+                <span>Save Branch Geofence Configuration</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ── MANUAL CORRECTION MODAL ───────────────────────────────────────── */}
+      {correctionTarget && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl space-y-5 border border-slate-200">
+            <h3 className="font-black text-slate-900 text-base">Manual Correction Log</h3>
+            <p className="text-xs text-slate-500">
+              Modifying record for <strong className="text-slate-800">{correctionTarget.name}</strong>. Corrections are logged immutably.
+            </p>
+
+            <form onSubmit={handleSaveCorrection} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Check-In Time</label>
+                  <input
+                    type="text"
+                    placeholder="HH:mm (e.g. 08:00)"
+                    value={correctionForm.checkInTime}
+                    onChange={(e) => setCorrectionForm({ ...correctionForm, checkInTime: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Check-Out Time</label>
+                  <input
+                    type="text"
+                    placeholder="HH:mm (e.g. 16:30)"
+                    value={correctionForm.checkOutTime}
+                    onChange={(e) => setCorrectionForm({ ...correctionForm, checkOutTime: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Status</label>
+                <select
+                  value={correctionForm.status}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, status: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 capitalize"
+                >
+                  <option value="present">Present</option>
+                  <option value="late">Late</option>
+                  <option value="absent">Absent</option>
+                  <option value="on_leave">On Leave</option>
+                  <option value="half_day">Half Day</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
+                  Mandatory Correction Reason Rationale
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="e.g. Scanner power outage at reception"
+                  value={correctionForm.reason}
+                  onChange={(e) => setCorrectionForm({ ...correctionForm, reason: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
+                />
+              </div>
+
+              <div className="flex items-center space-x-3 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2.5 rounded-xl text-xs"
+                >
+                  Save & Log Correction
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCorrectionTarget(null)}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── DEVICE CREATION MODAL ─────────────────────────────────────────── */}
+      {showDeviceModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl space-y-4 border border-slate-200">
+            <h3 className="font-black text-slate-900 text-base">Register Kiosk Device</h3>
+
+            <form onSubmit={handleCreateDevice} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Device Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Main Reception Tablet"
+                  value={newDeviceForm.deviceName}
+                  onChange={(e) => setNewDeviceForm({ ...newDeviceForm, deviceName: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Location Name</label>
+                <input
+                  type="text"
+                  placeholder="Administration Block"
+                  value={newDeviceForm.locationName}
+                  onChange={(e) => setNewDeviceForm({ ...newDeviceForm, locationName: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Anti-Proxy Security</label>
+                  <select
+                    value={newDeviceForm.antiProxyLevel}
+                    onChange={(e) => setNewDeviceForm({ ...newDeviceForm, antiProxyLevel: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 capitalize font-bold"
+                  >
+                    <option value="standard">Standard (QR Only)</option>
+                    <option value="secure">Secure (+ GPS Radius)</option>
+                    <option value="high_security">High Security (+ Photo Verification)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">GPS Radius (m)</label>
+                  <input
+                    type="number"
+                    value={newDeviceForm.allowedRadiusMetres}
+                    onChange={(e) => setNewDeviceForm({ ...newDeviceForm, allowedRadiusMetres: parseInt(e.target.value, 10) })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-3">
+                <button type="submit" className="flex-1 bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-xs">
+                  Generate Device Secret
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowDeviceModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── SESSION CREATION MODAL ───────────────────────────────────────── */}
+      {showSessionModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl p-6 shadow-2xl space-y-4 border border-slate-200">
+            <h3 className="font-black text-slate-900 text-base">Configure Session Window</h3>
+
+            <form onSubmit={handleCreateSession} className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Session Name</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Morning Attendance"
+                  value={newSessionForm.name}
+                  onChange={(e) => setNewSessionForm({ ...newSessionForm, name: e.target.value })}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Opens</label>
+                  <input
+                    type="text"
+                    value={newSessionForm.startTime}
+                    onChange={(e) => setNewSessionForm({ ...newSessionForm, startTime: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Late After</label>
+                  <input
+                    type="text"
+                    value={newSessionForm.lateThresholdTime}
+                    onChange={(e) => setNewSessionForm({ ...newSessionForm, lateThresholdTime: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Closes</label>
+                  <input
+                    type="text"
+                    value={newSessionForm.endTime}
+                    onChange={(e) => setNewSessionForm({ ...newSessionForm, endTime: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-3">
+                <button type="submit" className="flex-1 bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-xs">
+                  Save Session Config
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowSessionModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Staff QR Modal */}
+      {selectedStaffForQr && (
+        <StaffQrModal
+          staff={selectedStaffForQr}
+          isOpen={!!selectedStaffForQr}
+          onClose={() => setSelectedStaffForQr(null)}
+        />
       )}
     </div>
   );

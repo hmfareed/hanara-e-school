@@ -12,6 +12,12 @@ const { requireFormTeacherForClass } = require('../middleware/assignmentAuth');
 const { validate } = require('../middleware/validate');
 const { bulkAttendanceSchema } = require('../validators/attendance.validators');
 
+const kioskAuth = require('../middleware/kioskAuth');
+const { scanQr, syncOfflineScans } = require('../controllers/staffAttendance.controller');
+
+router.post('/scan', kioskAuth, scanQr);
+router.post('/sync', kioskAuth, syncOfflineScans);
+
 router.get('/history', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), getAttendanceHistory);
 router.get('/', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), requireFormTeacherForClass, getAttendance);
 router.post('/bulk', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), requireFormTeacherForClass, validate(bulkAttendanceSchema), bulkMarkAttendance);

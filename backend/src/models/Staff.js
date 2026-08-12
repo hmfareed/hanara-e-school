@@ -71,6 +71,12 @@ const staffSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Primary campus branch
+    branch: {
+      type: String,
+      enum: ['Zogbeli', 'Vittin', 'Both'],
+      default: 'Zogbeli',
+    },
     // Classes this staff member is assigned to (as class teacher or subject teacher)
     classesAssigned: [
       {
