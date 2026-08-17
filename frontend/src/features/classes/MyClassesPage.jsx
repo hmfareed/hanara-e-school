@@ -24,6 +24,12 @@ import {
   Calendar,
   Check,
   Plus,
+  AlertTriangle,
+  AlertCircle,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  Edit3,
 } from 'lucide-react';
 
 import TeacherStudentDetailModal from '../students/TeacherStudentDetailModal';
@@ -84,7 +90,7 @@ const MyClassesPage = () => {
   const activeClassObj = myClasses.find((c) => c._id === selectedClassId) || myClasses[0];
 
   // Fetch details for selected class
-  const { data: classWorkspaceData, isLoading: detailsLoading, isFetching: detailsFetching } = useQuery({
+  const { data: classWorkspaceData, isLoading: detailsLoading } = useQuery({
     queryKey: ['myClassDetails', selectedClassId],
     queryFn: async () => {
       if (!selectedClassId) return null;
@@ -92,8 +98,24 @@ const MyClassesPage = () => {
       return res.data?.data;
     },
     enabled: !!selectedClassId,
-    staleTime: 5 * 60 * 1000, // Cache class details for 5 minutes for instant switching
+    staleTime: 5 * 60 * 1000,
   });
+
+  // Pending tasks for selected class
+  const { data: pendingTasksData } = useQuery({
+    queryKey: ['classPendingTasks', selectedClassId],
+    queryFn: async () => {
+      if (!selectedClassId) return null;
+      const res = await api.get(`/teachers/my-classes/${selectedClassId}/pending-tasks`);
+      return res.data?.data;
+    },
+    enabled: !!selectedClassId,
+    refetchInterval: 5 * 60 * 1000, // Refresh every 5 minutes
+  });
+  const [showTaskPanel, setShowTaskPanel] = useState(false);
+  const pendingTasks = pendingTasksData?.tasks || [];
+  const pendingCount = pendingTasksData?.total ?? 0;
+  const urgentCount = pendingTasksData?.urgent ?? 0;
 
   // Fetch timetable slots for selected class
   const { data: classTimetable = [] } = useQuery({
@@ -319,14 +341,24 @@ const MyClassesPage = () => {
         {/* Card 3: Term Score Average */}
         <div className="p-5 bg-[#fff7ed] rounded-2xl border border-orange-100/90 shadow-2xs flex items-center justify-between gap-4">
           <div className="space-y-1">
-            <p className="text-3xl font-black text-slate-900">{isDataMatching ? (classDetails.classAverageScore || 83) : 83}%</p>
+            {isDataMatching && !classDetails.gradesEntered ? (
+              <p className="text-3xl font-black text-slate-400">—</p>
+            ) : (
+              <p className="text-3xl font-black text-slate-900">
+                {isDataMatching ? (classDetails.classAverageScore || 0) : 0}%
+              </p>
+            )}
             <p className="text-xs font-bold text-slate-600">Term Score Average</p>
-            <button
-              onClick={() => setActiveTab('results')}
-              className="text-xs font-bold text-orange-700 hover:text-orange-800 transition flex items-center gap-1 pt-1"
-            >
-              View results &rarr;
-            </button>
+            {isDataMatching && !classDetails.gradesEntered ? (
+              <p className="text-[11px] text-slate-400 font-medium pt-1">No grades entered yet</p>
+            ) : (
+              <button
+                onClick={() => setActiveTab('results')}
+                className="text-xs font-bold text-orange-700 hover:text-orange-800 transition flex items-center gap-1 pt-1"
+              >
+                View results &rarr;
+              </button>
+            )}
           </div>
           <div className="w-12 h-12 rounded-2xl bg-orange-100/80 text-orange-600 flex items-center justify-center flex-shrink-0">
             <Trophy className="w-6 h-6" />
@@ -334,22 +366,94 @@ const MyClassesPage = () => {
         </div>
 
         {/* Card 4: Pending Tasks */}
-        <div className="p-5 bg-[#eff6ff] rounded-2xl border border-blue-100/90 shadow-2xs flex items-center justify-between gap-4">
+        <div
+          className={`p-5 rounded-2xl border shadow-2xs flex items-center justify-between gap-4 cursor-pointer transition-all ${
+            urgentCount > 0
+              ? 'bg-[#fff1f2] border-rose-200/90 hover:border-rose-300'
+              : 'bg-[#eff6ff] border-blue-100/90 hover:border-blue-200'
+          }`}
+          onClick={() => setShowTaskPanel((v) => !v)}
+        >
           <div className="space-y-1">
-            <p className="text-3xl font-black text-slate-900">5</p>
+            <p className={`text-3xl font-black ${urgentCount > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
+              {pendingCount}
+            </p>
             <p className="text-xs font-bold text-slate-600">Pending Tasks</p>
-            <button
-              onClick={() => setActiveTab('assignments')}
-              className="text-xs font-bold text-blue-700 hover:text-blue-800 transition flex items-center gap-1 pt-1"
-            >
-              View tasks &rarr;
-            </button>
+            <p className={`text-xs font-bold pt-1 flex items-center gap-1 ${
+              urgentCount > 0 ? 'text-rose-600' : 'text-blue-700'
+            }`}>
+              {urgentCount > 0 ? <AlertTriangle className="w-3 h-3" /> : null}
+              {urgentCount > 0 ? `${urgentCount} urgent` : 'View tasks'}
+              {showTaskPanel ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+            </p>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-100/80 text-blue-600 flex items-center justify-center flex-shrink-0">
+          <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${
+            urgentCount > 0 ? 'bg-rose-100/80 text-rose-600' : 'bg-blue-100/80 text-blue-600'
+          }`}>
             <FileText className="w-6 h-6" />
           </div>
         </div>
       </div>
+
+      {/* ── Pending Tasks Panel ─────────────────────────────────── */}
+      {showTaskPanel && pendingTasks.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-500" />
+              Action Required — {pendingCount} Pending Task{pendingCount !== 1 ? 's' : ''}
+            </h3>
+            <button onClick={() => setShowTaskPanel(false)} className="text-xs text-slate-400 hover:text-slate-600 font-bold">Dismiss</button>
+          </div>
+          <div className="divide-y divide-slate-100">
+            {pendingTasks.map((task) => {
+              const isUrgent = task.type === 'urgent';
+              const isWarning = task.type === 'warning';
+              return (
+                <div key={task.id} className={`flex items-start gap-4 px-5 py-4 ${
+                  isUrgent ? 'bg-rose-50/50' : isWarning ? 'bg-amber-50/50' : 'bg-slate-50/30'
+                }`}>
+                  <div className={`mt-0.5 w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                    isUrgent ? 'bg-rose-100 text-rose-600' : isWarning ? 'bg-amber-100 text-amber-600' : 'bg-blue-100 text-blue-600'
+                  }`}>
+                    {task.icon === 'clipboard' ? <ClipboardCheck className="w-4 h-4" /> :
+                     task.icon === 'edit' ? <Edit3 className="w-4 h-4" /> :
+                     <BarChart3 className="w-4 h-4" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      {isUrgent && (
+                        <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-rose-100 text-rose-700">Urgent</span>
+                      )}
+                      {isWarning && (
+                        <span className="text-[10px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">Action Needed</span>
+                      )}
+                      <p className="text-sm font-bold text-slate-900">{task.title}</p>
+                    </div>
+                    <p className="text-xs text-slate-500 mt-0.5">{task.description}</p>
+                  </div>
+                  <button
+                    onClick={() => { setActiveTab(task.tab); setShowTaskPanel(false); }}
+                    className={`text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex-shrink-0 ${
+                      isUrgent ? 'bg-rose-600 text-white hover:bg-rose-700' :
+                      isWarning ? 'bg-amber-500 text-white hover:bg-amber-600' :
+                      'bg-slate-800 text-white hover:bg-slate-900'
+                    }`}
+                  >
+                    {task.action}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {showTaskPanel && pendingTasks.length === 0 && (
+        <div className="bg-emerald-50 border border-emerald-100 rounded-2xl px-5 py-4 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
+          <p className="text-sm font-bold text-emerald-800">All caught up! No pending tasks for this class.</p>
+        </div>
+      )}
 
       {/* ── Navigation Tabs ── */}
       <div className="border-b border-slate-200">

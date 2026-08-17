@@ -480,6 +480,22 @@ const getMyClasses = async (req, res, next) => {
         const totMarked = (attMap['present'] || 0) + (attMap['absent'] || 0) + (attMap['late'] || 0);
         const rate = totMarked > 0 ? Math.round((pCount / totMarked) * 100) : 100;
 
+        // Real term score average from Grade model
+        const Grade = require('../models/Grade');
+        const currentYear = await AcademicYear.findOne({ isCurrent: true });
+        const yearLabel = currentYear?.name || new Date().getFullYear().toString();
+        const currentTerm = currentYear?.currentTerm || '1';
+
+        let classAverageScore = 0;
+        const gradeAgg = await Grade.aggregate([
+          { $match: { class: cls._id, academicYear: yearLabel, term: currentTerm } },
+          { $group: { _id: '$student', avgTotal: { $avg: '$totalScore' } } },
+          { $group: { _id: null, classAvg: { $avg: '$avgTotal' } } },
+        ]);
+        if (gradeAgg.length > 0 && gradeAgg[0].classAvg != null) {
+          classAverageScore = Math.round(gradeAgg[0].classAvg);
+        }
+
         return {
           _id: cls._id,
           name: cls.name,
@@ -488,7 +504,7 @@ const getMyClasses = async (req, res, next) => {
           studentCount,
           capacity: cls.capacity || 40,
           attendanceRate: rate,
-          classAverageScore: 78.5,
+          classAverageScore,
         };
       })
     );
@@ -522,12 +538,25 @@ const getMyClassDetails = async (req, res, next) => {
       .sort({ lastName: 1, firstName: 1 })
       .select('firstName lastName admissionNumber gender dob photoUrl status guardianPhone enrollmentDate');
 
-    // Attach student stats (attendance rate & average score)
+    // Attach real Grade-based average score per student
+    const Grade = require('../models/Grade');
+    const currentYear = await AcademicYear.findOne({ isCurrent: true });
+    const yearLabel = currentYear?.name || new Date().getFullYear().toString();
+    const currentTerm = currentYear?.currentTerm || '1';
+
+    // Build a map: studentId -> avgTotalScore this term
+    const gradeAgg = await Grade.aggregate([
+      { $match: { class: new (require('mongoose').Types.ObjectId)(classId), academicYear: yearLabel, term: currentTerm } },
+      { $group: { _id: '$student', avg: { $avg: '$totalScore' } } },
+    ]);
+    const gradeMap = gradeAgg.reduce((acc, g) => { acc[g._id.toString()] = Math.round(g.avg); return acc; }, {});
+
     const populatedStudents = await Promise.all(
       students.map(async (st) => {
         const totalAtt = await AttendanceRecord.countDocuments({ student: st._id });
         const presentAtt = await AttendanceRecord.countDocuments({ student: st._id, status: 'present' });
         const attRate = totalAtt > 0 ? Math.round((presentAtt / totalAtt) * 100) : 100;
+        const averageScore = gradeMap[st._id.toString()] ?? null; // null = no grades yet
 
         return {
           _id: st._id,
@@ -540,7 +569,7 @@ const getMyClassDetails = async (req, res, next) => {
           photoUrl: st.photoUrl,
           status: st.status,
           attendanceRate: attRate,
-          averageScore: Math.floor(Math.random() * 25) + 70,
+          averageScore,
           guardianPhone: st.guardianPhone || 'N/A',
         };
       })
@@ -555,8 +584,13 @@ const getMyClassDetails = async (req, res, next) => {
     }
 
     const totalStudents = populatedStudents.length;
-    const classAvg = totalStudents > 0 ? Math.round(populatedStudents.reduce((acc, s) => acc + s.averageScore, 0) / totalStudents) : 0;
+    // Class average: only from students who have grades; fall back to 0 if none entered
+    const studentsWithGrades = populatedStudents.filter((s) => s.averageScore != null);
+    const classAvg = studentsWithGrades.length > 0
+      ? Math.round(studentsWithGrades.reduce((acc, s) => acc + s.averageScore, 0) / studentsWithGrades.length)
+      : 0;
     const overallAttRate = totalStudents > 0 ? Math.round(populatedStudents.reduce((acc, s) => acc + s.attendanceRate, 0) / totalStudents) : 100;
+    const gradesEntered = studentsWithGrades.length > 0;
 
     res.json({
       success: true,
@@ -570,6 +604,9 @@ const getMyClassDetails = async (req, res, next) => {
           capacity: classDoc.capacity || 40,
           classAverageScore: classAvg,
           attendanceRate: overallAttRate,
+          gradesEntered,
+          currentTerm,
+          academicYear: yearLabel,
         },
         students: populatedStudents,
         subjects,
@@ -583,6 +620,143 @@ const getMyClassDetails = async (req, res, next) => {
           { time: 'Yesterday', title: 'Continuous Assessment Score Updated', description: 'Class Score 1 entries recorded for Mathematics.' },
           { time: '2 days ago', title: 'Offline Assignment Logged', description: 'Weekly Essay Assignment issued to all students.' },
         ],
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET /api/teachers/my-classes/:classId/pending-tasks
+const getClassPendingTasks = async (req, res, next) => {
+  try {
+    const { classId } = req.params;
+    const userId = req.user.id || req.user._id;
+
+    const Class = require('../models/Class');
+    const Student = require('../models/Student');
+    const AttendanceRecord = require('../models/AttendanceRecord');
+    const OfflineAssignment = require('../models/OfflineAssignment');
+    const Grade = require('../models/Grade');
+    const ClassSubjectAssignment = require('../models/ClassSubjectAssignment');
+
+    const classDoc = await Class.findById(classId).lean();
+    if (!classDoc) return res.status(404).json({ success: false, message: 'Class not found' });
+
+    const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+    const yearLabel = currentYear?.name || new Date().getFullYear().toString();
+    const currentTerm = currentYear?.currentTerm || '1';
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const tasks = [];
+
+    // ── Task 1: Form teacher — attendance not marked today ──────────────────
+    const isFormTeacher =
+      classDoc.classTeacher?.toString() === userId.toString() ||
+      classDoc.formTeacher?.toString() === userId.toString();
+
+    if (isFormTeacher) {
+      const studentCount = await Student.countDocuments({
+        currentClass: classId,
+        status: { $nin: ['withdrawn', 'transferred', 'graduated'] },
+      });
+      const todayMarked = await AttendanceRecord.countDocuments({
+        class: classId,
+        date: { $gte: today, $lt: tomorrow },
+      });
+      if (studentCount > 0 && todayMarked === 0) {
+        tasks.push({
+          id: 'attendance_not_marked',
+          type: 'urgent',
+          icon: 'clipboard',
+          title: 'Attendance Not Marked Today',
+          description: `Daily attendance for ${studentCount} students has not been recorded yet.`,
+          action: 'Mark Attendance',
+          tab: 'attendance',
+        });
+      }
+    }
+
+    // ── Task 2: Offline assignments past due with NO scores at all ──────────
+    const allPastDueAssignments = await OfflineAssignment.find({
+      class: classId,
+      teacher: userId,
+      dueDate: { $lt: today },
+    }).select('title dueDate studentScores').lean();
+
+    allPastDueAssignments.forEach((asgn) => {
+      const hasAnyScore = asgn.studentScores?.some((s) => s.score > 0);
+      const allZero = !asgn.studentScores || asgn.studentScores.every((s) => s.score === 0);
+
+      if (allZero) {
+        // Fully ungraded
+        tasks.push({
+          id: `ungraded_${asgn._id}`,
+          type: 'urgent',
+          icon: 'edit',
+          title: `Grade Pending: ${asgn.title}`,
+          description: `Assignment was due ${new Date(asgn.dueDate).toLocaleDateString('en-GB')}. No scores entered.`,
+          action: 'Enter Grades',
+          tab: 'assignments',
+          meta: { assignmentId: asgn._id },
+        });
+      } else if (hasAnyScore) {
+        // Partially graded
+        const missing = asgn.studentScores.filter((s) => s.score === 0).length;
+        if (missing > 0) {
+          tasks.push({
+            id: `partial_${asgn._id}`,
+            type: 'warning',
+            icon: 'edit',
+            title: `Incomplete Grading: ${asgn.title}`,
+            description: `${missing} student(s) still have no score for this assignment.`,
+            action: 'Complete Grading',
+            tab: 'assignments',
+            meta: { assignmentId: asgn._id },
+          });
+        }
+      }
+    });
+
+    // ── Task 3: Subjects with zero Grade entries this term ──────────────────
+    const subAssignments = await ClassSubjectAssignment.find({ class: classId })
+      .populate('subject', 'name')
+      .lean();
+
+    await Promise.all(
+      subAssignments.map(async (sa) => {
+        if (!sa.subject) return;
+        const gradeCount = await Grade.countDocuments({
+          class: classId,
+          subject: sa.subject._id,
+          academicYear: yearLabel,
+          term: currentTerm,
+        });
+        if (gradeCount === 0) {
+          tasks.push({
+            id: `no_grades_${sa.subject._id}`,
+            type: 'info',
+            icon: 'barChart',
+            title: `No CA Scores: ${sa.subject.name}`,
+            description: `No continuous assessment scores entered for ${sa.subject.name} in Term ${currentTerm}.`,
+            action: 'Enter Results',
+            tab: 'results',
+            meta: { subjectId: sa.subject._id },
+          });
+        }
+      })
+    );
+
+    res.json({
+      success: true,
+      data: {
+        total: tasks.length,
+        urgent: tasks.filter((t) => t.type === 'urgent').length,
+        tasks,
       },
     });
   } catch (error) {
@@ -763,6 +937,7 @@ module.exports = {
   getTeacherDashboardSummary,
   getMyClasses,
   getMyClassDetails,
+  getClassPendingTasks,
   updateTeacherProfile,
   getTeacherTimetable,
   createTimetableEntry,

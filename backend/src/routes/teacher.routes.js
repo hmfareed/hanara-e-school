@@ -8,6 +8,7 @@ const {
   getTeacherDashboardSummary,
   getMyClasses,
   getMyClassDetails,
+  getClassPendingTasks,
   updateTeacherProfile,
   getTeacherTimetable,
   createTimetableEntry,
@@ -30,6 +31,7 @@ router.delete('/timetable/:id', protect, authorize('superadmin', 'admin', 'teach
 
 // Class Workspace endpoints
 router.get('/my-classes', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), getMyClasses);
+router.get('/my-classes/:classId/pending-tasks', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), getClassPendingTasks);
 router.get('/my-classes/:classId', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin'), getMyClassDetails);
 
 // Authenticated users (admin/superadmin or teacher) can load teacher load
