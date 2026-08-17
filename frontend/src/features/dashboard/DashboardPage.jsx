@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import { subscribeToEvent, unsubscribeFromEvent } from '../../services/socket';
 import { useAuth } from '../../context/AuthContext';
 import { getStaffGreeting } from '../../utils/greetingUtils';
 import Skeleton from '../../components/Skeleton';
@@ -35,6 +36,7 @@ const LEADERSHIP_QUOTES = [
 
 const DashboardPage = () => {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [fadeQuote, setFadeQuote] = useState(true);
 
@@ -49,6 +51,21 @@ const DashboardPage = () => {
     }, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  // Real-time socket event subscription for live dashboard updates
+  useEffect(() => {
+    const handleLiveBroadcast = () => {
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
+    };
+
+    subscribeToEvent('sms_broadcast_sent', handleLiveBroadcast);
+    subscribeToEvent('dashboard_summary_updated', handleLiveBroadcast);
+
+    return () => {
+      unsubscribeFromEvent('sms_broadcast_sent', handleLiveBroadcast);
+      unsubscribeFromEvent('dashboard_summary_updated', handleLiveBroadcast);
+    };
+  }, [queryClient]);
 
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ['dashboardSummary'],
@@ -456,23 +473,42 @@ const DashboardPage = () => {
         <div className="bg-white border border-slate-200/80 rounded-3xl p-5 shadow-2xs space-y-4">
           <div className="space-y-2">
             <div className="flex items-center justify-between pb-1.5 border-b border-slate-100">
-              <h3 className="text-xs font-bold text-slate-900 flex items-center space-x-1.5 uppercase tracking-wider">
+              <h3 className="text-xs font-bold text-slate-900 flex items-center space-x-2 uppercase tracking-wider">
                 <Megaphone size={14} className="text-emerald-700" />
                 <span>Recent Broadcasts</span>
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold bg-emerald-50 text-emerald-700">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live
+                </span>
               </h3>
-              <Link to="/sms" className="text-[11px] font-bold text-emerald-700">View All</Link>
+              <Link to="/sms" className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 transition-colors">View All</Link>
             </div>
 
             <div className="space-y-2.5">
               {recentAnnouncements.length > 0 ? (
                 recentAnnouncements.map((ann, idx) => (
-                  <div key={idx} className="bg-slate-50/70 border border-slate-100 rounded-xl p-2.5 space-y-1">
-                    <p className="text-xs font-semibold text-slate-800 line-clamp-2">{ann.message}</p>
-                    <div className="flex items-center justify-between pt-1">
-                      <span className="text-[9px] font-semibold text-slate-400">
-                        {new Date(ann.createdAt).toLocaleDateString('en-GB')}
-                      </span>
-                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 uppercase">
+                  <div key={idx} className="bg-slate-50/70 hover:bg-slate-50 border border-slate-100/90 rounded-xl p-3 space-y-1.5 transition-colors">
+                    <p className="text-xs font-semibold text-slate-800 line-clamp-2 leading-relaxed">{ann.message}</p>
+                    <div className="flex items-center justify-between pt-1 border-t border-slate-100/60">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-medium text-slate-400">
+                          {new Date(ann.createdAt).toLocaleDateString('en-GB', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric'
+                          })}
+                        </span>
+                        {ann.recipientCount > 1 && (
+                          <span className="text-[9px] font-medium px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                            {ann.recipientCount} recipients
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase ${
+                        (ann.status || 'sent').toLowerCase() === 'sent'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                          : 'bg-amber-50 text-amber-700 border border-amber-100'
+                      }`}>
                         {ann.status || 'Sent'}
                       </span>
                     </div>
@@ -480,8 +516,9 @@ const DashboardPage = () => {
                 ))
               ) : (
                 <div className="py-8 text-center text-xs text-slate-400 space-y-1">
-                  <MessageSquare size={18} className="mx-auto text-slate-300 mb-1" />
-                  <p>No recent broadcast messages found.</p>
+                  <MessageSquare size={20} className="mx-auto text-slate-300 mb-1" />
+                  <p className="font-medium text-slate-500">No recent broadcast messages found.</p>
+                  <p className="text-[10px] text-slate-400">Broadcasts sent to parents or staff will appear here live.</p>
                 </div>
               )}
             </div>

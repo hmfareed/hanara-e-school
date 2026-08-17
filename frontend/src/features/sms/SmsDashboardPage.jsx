@@ -66,7 +66,9 @@ const SmsDashboardPage = () => {
       setMessage('');
       setClassId('');
       setTargets('all');
-      queryClient.invalidateQueries(['smsStats']);
+      queryClient.invalidateQueries({ queryKey: ['smsStats'] });
+      queryClient.invalidateQueries({ queryKey: ['smsLogs'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
     },
     onError: (err) => {
       setErrorMsg(err.response?.data?.message || 'Failed to dispatch broadcast');

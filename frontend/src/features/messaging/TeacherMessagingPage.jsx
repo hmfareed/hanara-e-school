@@ -81,6 +81,7 @@ const TeacherMessagingPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['teacherInboxMessages'] });
       queryClient.invalidateQueries({ queryKey: ['teacherSentMessages'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
       setIsComposeModalOpen(false);
       resetForm();
       setNotification({ text: 'Message dispatched successfully!', type: 'success' });

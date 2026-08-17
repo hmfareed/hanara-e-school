@@ -2,6 +2,8 @@ const SmsLog = require('../models/SmsLog');
 const Student = require('../models/Student');
 const Guardian = require('../models/Guardian');
 const { sendSms } = require('../services/sms.service');
+const { getIO } = require('../services/socket.service');
+const { clearDashboardCache } = require('./dashboard.controller');
 const logger = require('../utils/logger');
 
 // POST /api/sms/broadcast
@@ -59,6 +61,30 @@ const broadcastSms = async (req, res, next) => {
         results.failed++;
         logger.error(`Broadcast error to ${guardian.phone}: ${err.message}`);
       }
+    }
+
+    // Clear server in-memory dashboard cache
+    try {
+      clearDashboardCache();
+    } catch (e) {
+      // safe fallback
+    }
+
+    // Emit real-time socket events for live dashboard update
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('sms_broadcast_sent', {
+          message,
+          targets,
+          sent: results.sent,
+          failed: results.failed,
+          createdAt: new Date(),
+        });
+        io.emit('dashboard_summary_updated');
+      }
+    } catch (e) {
+      logger.warn(`Socket.io broadcast notification skipped: ${e.message}`);
     }
 
     res.json({

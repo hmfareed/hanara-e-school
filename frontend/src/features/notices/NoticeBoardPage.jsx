@@ -46,6 +46,7 @@ const NoticeBoardPage = () => {
     onSuccess: (data) => {
       setNotification({ text: data?.message || 'Notice published successfully!', type: 'success' });
       queryClient.invalidateQueries({ queryKey: ['noticesList'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
       setShowAddModal(false);
       setFormData({
         title: '', content: '', category: 'general', targetAudience: 'all',

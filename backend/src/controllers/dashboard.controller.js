@@ -208,11 +208,23 @@ const getSummary = async (req, res, next) => {
         .select('firstName lastName admissionNumber currentClass enrollmentDate createdAt')
         .lean(),
 
-      SmsLog.find({})
-        .sort({ createdAt: -1 })
-        .limit(3)
-        .select('recipient message status createdAt')
-        .lean(),
+      SmsLog.aggregate([
+        { $match: { type: 'broadcast' } },
+        {
+          $group: {
+            _id: '$message',
+            message: { $first: '$message' },
+            status: { $first: '$status' },
+            createdAt: { $max: '$createdAt' },
+            recipientCount: { $sum: 1 },
+            sentCount: {
+              $sum: { $cond: [{ $eq: ['$status', 'sent'] }, 1, 0] }
+            },
+          },
+        },
+        { $sort: { createdAt: -1 } },
+        { $limit: 4 },
+      ]),
 
       MockSubjectEntry.countDocuments({ ...pendingMockQuery, status: { $ne: 'verified' } }),
 
@@ -358,4 +370,8 @@ const getSummary = async (req, res, next) => {
   }
 };
 
-module.exports = { getSummary };
+const clearDashboardCache = () => {
+  dashboardCache.clear();
+};
+
+module.exports = { getSummary, clearDashboardCache };

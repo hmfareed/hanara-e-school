@@ -58,81 +58,58 @@ const getTeacherClasses = async (userId, refStaffId) => {
   const Timetable = require('../models/Timetable');
   const Class = require('../models/Class');
 
-  let classIds = [];
   const teacherIdSet = new Set();
-
   if (userId) teacherIdSet.add(userId.toString());
   if (refStaffId) teacherIdSet.add((refStaffId._id || refStaffId).toString());
 
-  // If refStaff is not provided, look up the user to find refStaff, email, phone
-  let userEmail = null;
-  let userPhone = null;
-  if (userId) {
-    try {
-      const userDoc = await User.findById(userId).select('refStaff email phone').lean();
-      if (userDoc) {
-        userEmail = userDoc.email;
-        userPhone = userDoc.phone;
-        if (userDoc.refStaff) {
-          teacherIdSet.add(userDoc.refStaff.toString());
-        }
-      }
-    } catch (err) {}
+  let classIds = [];
+
+  // Parallel user and staff lookup if needed
+  const userLookups = [];
+  if (userId && !refStaffId) {
+    userLookups.push(
+      User.findById(userId).select('refStaff email phone').lean().then((u) => {
+        if (u?.refStaff) teacherIdSet.add(u.refStaff.toString());
+      }).catch(() => {})
+    );
   }
-
-  // Look up staff by IDs or email/phone if we don't have a staff ID yet
-  try {
-    const staffQuery = [];
-    if (refStaffId) staffQuery.push({ _id: refStaffId._id || refStaffId });
-    if (userEmail) staffQuery.push({ email: userEmail });
-    if (userPhone) staffQuery.push({ phone: userPhone });
-
-    if (staffQuery.length > 0) {
-      const staffDocs = await Staff.find({ $or: staffQuery }).select('_id classesAssigned').lean();
-      for (const s of staffDocs) {
-        teacherIdSet.add(s._id.toString());
-        if (Array.isArray(s.classesAssigned) && s.classesAssigned.length > 0) {
+  if (refStaffId) {
+    userLookups.push(
+      Staff.findById(refStaffId._id || refStaffId).select('_id classesAssigned').lean().then((s) => {
+        if (Array.isArray(s?.classesAssigned)) {
           classIds.push(...s.classesAssigned.map((id) => (id._id || id).toString()));
         }
-      }
-    }
-  } catch (err) {}
+      }).catch(() => {})
+    );
+  }
+
+  if (userLookups.length > 0) {
+    await Promise.all(userLookups);
+  }
 
   const teacherIds = Array.from(teacherIdSet);
+  if (teacherIds.length === 0) return [];
 
-  if (teacherIds.length > 0) {
-    try {
-      // 1. ClassSubjectAssignment
-      const classSubAssignments = await ClassSubjectAssignment.find({ teacher: { $in: teacherIds } }).distinct('class');
-      classIds.push(...classSubAssignments.map((id) => id.toString()));
-    } catch (err) {}
+  // Parallel query across all 4 assignment sources simultaneously
+  const [csaClasses, saClasses, directClasses, ttClasses] = await Promise.all([
+    ClassSubjectAssignment.find({ teacher: { $in: teacherIds } }).distinct('class').catch(() => []),
+    SubjectAssignment.find({ teacher: { $in: teacherIds }, isActive: true }).distinct('class').catch(() => []),
+    Class.find({
+      $or: [{ classTeacher: { $in: teacherIds } }, { formTeacher: { $in: teacherIds } }],
+    }).distinct('_id').catch(() => []),
+    Timetable.find({ teacher: { $in: teacherIds } }).distinct('class').catch(() => []),
+  ]);
 
-    try {
-      // 2. SubjectAssignment
-      const subjectClasses = await SubjectAssignment.find({ teacher: { $in: teacherIds }, isActive: true }).distinct('class');
-      classIds.push(...subjectClasses.map((id) => id.toString()));
-    } catch (err) {}
-
-    try {
-      // 3. Class (as classTeacher or formTeacher)
-      const directClasses = await Class.find({
-        $or: [
-          { classTeacher: { $in: teacherIds } },
-          { formTeacher: { $in: teacherIds } },
-        ],
-      }).distinct('_id');
-      classIds.push(...directClasses.map((id) => id.toString()));
-    } catch (err) {}
-
-    try {
-      // 4. Timetable
-      const timetableClasses = await Timetable.find({ teacher: { $in: teacherIds } }).distinct('class');
-      classIds.push(...timetableClasses.map((id) => id.toString()));
-    } catch (err) {}
-  }
+  classIds.push(
+    ...csaClasses.map((id) => id.toString()),
+    ...saClasses.map((id) => id.toString()),
+    ...directClasses.map((id) => id.toString()),
+    ...ttClasses.map((id) => id.toString())
+  );
 
   return [...new Set(classIds.filter(Boolean).map((id) => id.toString()))];
 };
+
 
 /**
  * isFormTeacherOfAnyClass

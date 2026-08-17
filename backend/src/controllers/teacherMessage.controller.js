@@ -3,6 +3,8 @@ const User = require('../models/User');
 const Student = require('../models/Student');
 const Guardian = require('../models/Guardian');
 const { sendSms } = require('../services/sms.service');
+const { getIO } = require('../services/socket.service');
+const { clearDashboardCache } = require('./dashboard.controller');
 
 // GET /api/teacher-messages/recipients
 const getRecipients = async (req, res, next) => {
@@ -60,10 +62,33 @@ const sendMessage = async (req, res, next) => {
           });
         }
 
+        const smsMsg = `[HANARA SMS NOTICE] ${subject}: ${body.substring(0, 140)}`;
         for (const phone of recipientPhones) {
-          await sendSms(phone, `[HANARA SMS NOTICE] ${subject}: ${body.substring(0, 140)}`);
+          await sendSms({
+            recipient: phone,
+            message: smsMsg,
+            type: 'broadcast',
+            sentBy: senderId,
+          });
         }
         smsStatus = 'sent';
+
+        // Clear dashboard cache & notify clients
+        try {
+          clearDashboardCache();
+        } catch (e) {}
+
+        try {
+          const io = getIO();
+          if (io) {
+            io.emit('sms_broadcast_sent', {
+              message: smsMsg,
+              sent: recipientPhones.length,
+              createdAt: new Date(),
+            });
+            io.emit('dashboard_summary_updated');
+          }
+        } catch (e) {}
       } catch (err) {
         console.error('SMS Alert send error:', err);
         smsStatus = 'failed';

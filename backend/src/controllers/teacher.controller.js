@@ -432,6 +432,8 @@ const getMyClasses = async (req, res, next) => {
     const Class = require('../models/Class');
     const Student = require('../models/Student');
     const AttendanceRecord = require('../models/AttendanceRecord');
+    const Grade = require('../models/Grade');
+    const AcademicYear = require('../models/AcademicYear');
     const { getTeacherClasses } = require('../utils/authHelpers');
     const mongoose = require('mongoose');
 
@@ -440,7 +442,8 @@ const getMyClasses = async (req, res, next) => {
       classes = await Class.find({ status: { $ne: 'archived' } })
         .populate('level', 'displayName category')
         .populate('classTeacher', 'firstName lastName title')
-        .sort({ name: 1 });
+        .sort({ name: 1 })
+        .lean();
     } else {
       const teacherClassIds = await getTeacherClasses(userId, refStaffId);
       const teacherClassObjectIds = teacherClassIds.map((id) => {
@@ -453,8 +456,15 @@ const getMyClasses = async (req, res, next) => {
       classes = await Class.find({ _id: { $in: teacherClassObjectIds } })
         .populate('level', 'displayName category')
         .populate('classTeacher', 'firstName lastName title')
-        .sort({ name: 1 });
+        .sort({ name: 1 })
+        .lean();
     }
+
+    if (classes.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const classIds = classes.map((c) => c._id);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -463,51 +473,69 @@ const getMyClasses = async (req, res, next) => {
 
     const studentStatusFilter = { $nin: ['withdrawn', 'transferred', 'graduated'] };
 
-    const result = await Promise.all(
-      classes.map(async (cls) => {
-        const studentCount = await Student.countDocuments({
-          currentClass: cls._id,
-          status: studentStatusFilter,
-        });
-        
-        // Attendance rate
-        const classAtt = await AttendanceRecord.aggregate([
-          { $match: { class: cls._id, date: { $gte: today, $lt: tomorrow } } },
-          { $group: { _id: '$status', count: { $sum: 1 } } },
-        ]);
-        const attMap = classAtt.reduce((acc, item) => { acc[item._id] = item.count; return acc; }, {});
-        const pCount = attMap['present'] || 0;
-        const totMarked = (attMap['present'] || 0) + (attMap['absent'] || 0) + (attMap['late'] || 0);
-        const rate = totMarked > 0 ? Math.round((pCount / totMarked) * 100) : 100;
+    // Fetch current academic year ONCE
+    const currentYear = await AcademicYear.findOne({ isCurrent: true }).lean();
+    const yearLabel = currentYear?.name || new Date().getFullYear().toString();
+    const currentTerm = currentYear?.currentTerm || '1';
 
-        // Real term score average from Grade model
-        const Grade = require('../models/Grade');
-        const currentYear = await AcademicYear.findOne({ isCurrent: true });
-        const yearLabel = currentYear?.name || new Date().getFullYear().toString();
-        const currentTerm = currentYear?.currentTerm || '1';
+    // Batch parallel aggregations for all classes in single round-trips!
+    const [studentCountsAgg, attendanceAgg, gradeAgg] = await Promise.all([
+      Student.aggregate([
+        { $match: { currentClass: { $in: classIds }, status: studentStatusFilter } },
+        { $group: { _id: '$currentClass', count: { $sum: 1 } } },
+      ]),
+      AttendanceRecord.aggregate([
+        { $match: { class: { $in: classIds }, date: { $gte: today, $lt: tomorrow } } },
+        { $group: { _id: { class: '$class', status: '$status' }, count: { $sum: 1 } } },
+      ]),
+      Grade.aggregate([
+        { $match: { class: { $in: classIds }, academicYear: yearLabel, term: currentTerm } },
+        { $group: { _id: { class: '$class', student: '$student' }, avgTotal: { $avg: '$totalScore' } } },
+        { $group: { _id: '$_id.class', classAvg: { $avg: '$avgTotal' } } },
+      ]),
+    ]);
 
-        let classAverageScore = 0;
-        const gradeAgg = await Grade.aggregate([
-          { $match: { class: cls._id, academicYear: yearLabel, term: currentTerm } },
-          { $group: { _id: '$student', avgTotal: { $avg: '$totalScore' } } },
-          { $group: { _id: null, classAvg: { $avg: '$avgTotal' } } },
-        ]);
-        if (gradeAgg.length > 0 && gradeAgg[0].classAvg != null) {
-          classAverageScore = Math.round(gradeAgg[0].classAvg);
-        }
+    // Build fast lookup maps
+    const studentCountMap = {};
+    studentCountsAgg.forEach((sc) => {
+      if (sc._id) studentCountMap[sc._id.toString()] = sc.count;
+    });
 
-        return {
-          _id: cls._id,
-          name: cls.name,
-          levelName: cls.level?.displayName || 'Basic Education',
-          classTeacherName: cls.classTeacher ? `${cls.classTeacher.title ? cls.classTeacher.title + ' ' : ''}${cls.classTeacher.firstName} ${cls.classTeacher.lastName}` : 'Unassigned',
-          studentCount,
-          capacity: cls.capacity || 40,
-          attendanceRate: rate,
-          classAverageScore,
-        };
-      })
-    );
+    const attMap = {};
+    attendanceAgg.forEach((att) => {
+      const cId = att._id?.class ? att._id.class.toString() : '';
+      if (!cId) return;
+      if (!attMap[cId]) attMap[cId] = { present: 0, total: 0 };
+      if (att._id.status === 'present') attMap[cId].present += att.count;
+      attMap[cId].total += att.count;
+    });
+
+    const gradeMap = {};
+    gradeAgg.forEach((g) => {
+      if (g._id && g.classAvg != null) gradeMap[g._id.toString()] = Math.round(g.classAvg);
+    });
+
+    // Assemble results in memory in microseconds
+    const result = classes.map((cls) => {
+      const cId = cls._id.toString();
+      const studentCount = studentCountMap[cId] || 0;
+      const att = attMap[cId];
+      const rate = att && att.total > 0 ? Math.round((att.present / att.total) * 100) : 100;
+      const classAverageScore = gradeMap[cId] ?? 0;
+
+      return {
+        _id: cls._id,
+        name: cls.name,
+        levelName: cls.level?.displayName || 'Basic Education',
+        classTeacherName: cls.classTeacher
+          ? `${cls.classTeacher.title ? cls.classTeacher.title + ' ' : ''}${cls.classTeacher.firstName} ${cls.classTeacher.lastName}`
+          : 'Unassigned',
+        studentCount,
+        capacity: cls.capacity || 40,
+        attendanceRate: rate,
+        classAverageScore,
+      };
+    });
 
     res.json({ success: true, data: result });
   } catch (error) {
@@ -524,67 +552,95 @@ const getMyClassDetails = async (req, res, next) => {
     const Subject = require('../models/Subject');
     const AttendanceRecord = require('../models/AttendanceRecord');
     const ClassSubjectAssignment = require('../models/ClassSubjectAssignment');
+    const Grade = require('../models/Grade');
+    const AcademicYear = require('../models/AcademicYear');
+    const mongoose = require('mongoose');
 
-    const classDoc = await Class.findById(classId)
-      .populate('level', 'displayName category')
-      .populate('classTeacher', 'firstName lastName title phone email photoUrl')
-      .populate('formTeacher', 'email phone');
+    const classObjId = new mongoose.Types.ObjectId(classId);
+
+    const [classDoc, students, currentYear] = await Promise.all([
+      Class.findById(classId)
+        .populate('level', 'displayName category')
+        .populate('classTeacher', 'firstName lastName title phone email photoUrl')
+        .populate('formTeacher', 'email phone')
+        .lean(),
+      Student.find({ currentClass: classId, status: 'active' })
+        .sort({ lastName: 1, firstName: 1 })
+        .select('firstName lastName admissionNumber gender dob photoUrl status guardianPhone enrollmentDate')
+        .lean(),
+      AcademicYear.findOne({ isCurrent: true }).lean(),
+    ]);
 
     if (!classDoc) {
       return res.status(404).json({ success: false, message: 'Class not found' });
     }
 
-    const students = await Student.find({ currentClass: classId, status: 'active' })
-      .sort({ lastName: 1, firstName: 1 })
-      .select('firstName lastName admissionNumber gender dob photoUrl status guardianPhone enrollmentDate');
-
-    // Attach real Grade-based average score per student
-    const Grade = require('../models/Grade');
-    const currentYear = await AcademicYear.findOne({ isCurrent: true });
     const yearLabel = currentYear?.name || new Date().getFullYear().toString();
     const currentTerm = currentYear?.currentTerm || '1';
+    const studentIds = students.map((s) => s._id);
 
-    // Build a map: studentId -> avgTotalScore this term
-    const gradeAgg = await Grade.aggregate([
-      { $match: { class: new (require('mongoose').Types.ObjectId)(classId), academicYear: yearLabel, term: currentTerm } },
-      { $group: { _id: '$student', avg: { $avg: '$totalScore' } } },
+    // Parallel batch aggregations for all students in class in single queries!
+    const [attAgg, gradeAgg, subAssignments] = await Promise.all([
+      studentIds.length > 0
+        ? AttendanceRecord.aggregate([
+            { $match: { student: { $in: studentIds } } },
+            { $group: { _id: { student: '$student', status: '$status' }, count: { $sum: 1 } } },
+          ])
+        : Promise.resolve([]),
+      studentIds.length > 0
+        ? Grade.aggregate([
+            { $match: { class: classObjId, academicYear: yearLabel, term: currentTerm } },
+            { $group: { _id: '$student', avg: { $avg: '$totalScore' } } },
+          ])
+        : Promise.resolve([]),
+      ClassSubjectAssignment.find({ class: classId }).populate('subject', 'name code type').lean(),
     ]);
-    const gradeMap = gradeAgg.reduce((acc, g) => { acc[g._id.toString()] = Math.round(g.avg); return acc; }, {});
 
-    const populatedStudents = await Promise.all(
-      students.map(async (st) => {
-        const totalAtt = await AttendanceRecord.countDocuments({ student: st._id });
-        const presentAtt = await AttendanceRecord.countDocuments({ student: st._id, status: 'present' });
-        const attRate = totalAtt > 0 ? Math.round((presentAtt / totalAtt) * 100) : 100;
-        const averageScore = gradeMap[st._id.toString()] ?? null; // null = no grades yet
+    // Build attendance lookup: studentId -> { present, total }
+    const studentAttMap = {};
+    attAgg.forEach((a) => {
+      const sId = a._id?.student ? a._id.student.toString() : '';
+      if (!sId) return;
+      if (!studentAttMap[sId]) studentAttMap[sId] = { present: 0, total: 0 };
+      if (a._id.status === 'present') studentAttMap[sId].present += a.count;
+      studentAttMap[sId].total += a.count;
+    });
 
-        return {
-          _id: st._id,
-          admissionNumber: st.admissionNumber,
-          firstName: st.firstName,
-          lastName: st.lastName,
-          fullName: `${st.firstName} ${st.lastName}`,
-          gender: st.gender,
-          dob: st.dob,
-          photoUrl: st.photoUrl,
-          status: st.status,
-          attendanceRate: attRate,
-          averageScore,
-          guardianPhone: st.guardianPhone || 'N/A',
-        };
-      })
-    );
+    // Build grade lookup: studentId -> avgScore
+    const studentGradeMap = {};
+    gradeAgg.forEach((g) => {
+      if (g._id && g.avg != null) studentGradeMap[g._id.toString()] = Math.round(g.avg);
+    });
 
-    // Get subjects for this class
-    const subAssignments = await ClassSubjectAssignment.find({ class: classId }).populate('subject', 'name code type');
+    const populatedStudents = students.map((st) => {
+      const sId = st._id.toString();
+      const att = studentAttMap[sId];
+      const attRate = att && att.total > 0 ? Math.round((att.present / att.total) * 100) : 100;
+      const averageScore = studentGradeMap[sId] ?? null;
+
+      return {
+        _id: st._id,
+        admissionNumber: st.admissionNumber,
+        firstName: st.firstName,
+        lastName: st.lastName,
+        fullName: `${st.firstName} ${st.lastName}`,
+        gender: st.gender,
+        dob: st.dob,
+        photoUrl: st.photoUrl,
+        status: st.status,
+        attendanceRate: attRate,
+        averageScore,
+        guardianPhone: st.guardianPhone || 'N/A',
+      };
+    });
+
     let subjects = subAssignments.map((sa) => sa.subject).filter(Boolean);
-
     if (subjects.length === 0 && classDoc.level) {
-      subjects = await Subject.find({ appliesToLevels: classDoc.level._id }).select('name code type');
+      const lvlId = classDoc.level._id || classDoc.level;
+      subjects = await Subject.find({ appliesToLevels: lvlId }).select('name code type').lean();
     }
 
     const totalStudents = populatedStudents.length;
-    // Class average: only from students who have grades; fall back to 0 if none entered
     const studentsWithGrades = populatedStudents.filter((s) => s.averageScore != null);
     const classAvg = studentsWithGrades.length > 0
       ? Math.round(studentsWithGrades.reduce((acc, s) => acc + s.averageScore, 0) / studentsWithGrades.length)
@@ -626,6 +682,7 @@ const getMyClassDetails = async (req, res, next) => {
     next(error);
   }
 };
+
 
 // GET /api/teachers/my-classes/:classId/pending-tasks
 const getClassPendingTasks = async (req, res, next) => {

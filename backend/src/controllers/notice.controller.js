@@ -2,6 +2,8 @@ const Notice = require('../models/Notice');
 const Guardian = require('../models/Guardian');
 const Staff = require('../models/Staff');
 const { sendSms } = require('../services/sms.service');
+const { getIO } = require('../services/socket.service');
+const { clearDashboardCache } = require('./dashboard.controller');
 const logger = require('../utils/logger');
 
 // GET /api/notices
@@ -69,13 +71,38 @@ const createNotice = async (req, res, next) => {
       const smsText = `HANARA NOTICE [${title.toUpperCase()}]: ${content.slice(0, 140)}`;
       for (const phone of recipients) {
         try {
-          await sendSms({ to: phone, message: smsText });
+          await sendSms({
+            recipient: phone,
+            message: smsText,
+            type: 'broadcast',
+            sentBy: req.user?.id || req.user?._id,
+          });
           smsRecipientCount++;
         } catch (err) {
           logger.error(`Failed SMS notice dispatch to ${phone}: ${err.message}`);
         }
       }
       smsBroadcastSent = true;
+
+      // Invalidate dashboard cache & emit socket event
+      try {
+        clearDashboardCache();
+      } catch (e) {}
+
+      try {
+        const io = getIO();
+        if (io) {
+          io.emit('sms_broadcast_sent', {
+            message: smsText,
+            targets: targetAudience,
+            sent: smsRecipientCount,
+            createdAt: new Date(),
+          });
+          io.emit('dashboard_summary_updated');
+        }
+      } catch (e) {
+        logger.warn(`Notice socket broadcast error: ${e.message}`);
+      }
     }
 
     const notice = await Notice.create({

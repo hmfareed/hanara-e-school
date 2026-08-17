@@ -104,7 +104,8 @@ const TeacherDashboard = () => {
   const hasCheckedIn = !!todayAttendance?.checkInTime;
   const hasCheckedOut = !!todayAttendance?.checkOutTime;
 
-  const isInitialLoading = isLoading || (!dashboardData && isFetching);
+  // Only show full-page skeleton on absolute first load with no data
+  const isInitialLoading = isLoading && !dashboardData;
 
   if (isInitialLoading) {
     return (

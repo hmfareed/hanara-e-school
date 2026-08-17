@@ -14,7 +14,7 @@ const smsLogSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['attendance_absence', 'fee_invoice', 'fee_payment', 'broadcast'],
+      enum: ['attendance_absence', 'fee_invoice', 'fee_payment', 'broadcast', 'fee_defaulter_alert'],
       required: [true, 'SMS type is required'],
     },
     status: {
@@ -48,6 +48,7 @@ const smsLogSchema = new mongoose.Schema(
 
 smsLogSchema.index({ recipient: 1 });
 smsLogSchema.index({ status: 1 });
+smsLogSchema.index({ type: 1, createdAt: -1 });
 smsLogSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('SmsLog', smsLogSchema);

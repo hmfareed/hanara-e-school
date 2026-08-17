@@ -2,24 +2,30 @@ const webpush = require('web-push');
 const PushSubscription = require('../models/PushSubscription');
 const logger = require('../utils/logger');
 
-// VAPID Keys Setup (use env or default fallback)
-const VAPID_PUBLIC_KEY =
-  process.env.VAPID_PUBLIC_KEY ||
-  'BDMxbmh3UUGAI6TKP43tG7qUTUrSby1B3VgjCM6r4aiMYdhUx3YEJ2W6XrmK_Kd1McjLvHkgWU8wx_kBfH1am_Y';
-const VAPID_PRIVATE_KEY =
-  process.env.VAPID_PRIVATE_KEY ||
-  '25Pm-m3ANjnQ8RJrEwObEmISn0ml0xYQVQWbMKTjolw';
-
+// VAPID Keys Setup (loaded strictly from environment variables)
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || '';
 const VAPID_EMAIL = process.env.VAPID_EMAIL || 'mailto:admin@hanaraschools.edu.gh';
 
-try {
-  webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
-} catch (e) {
-  logger.warn('WebPush VAPID configuration notice: ' + e.message);
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  try {
+    webpush.setVapidDetails(VAPID_EMAIL, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+  } catch (e) {
+    logger.warn('WebPush VAPID configuration notice: ' + e.message);
+  }
+} else {
+  logger.warn('WebPush VAPID keys are not configured in environment variables.');
 }
 
 // GET /api/notifications/vapid-public-key
 const getVapidPublicKey = async (req, res) => {
+  if (!VAPID_PUBLIC_KEY) {
+    return res.status(503).json({
+      success: false,
+      message: 'VAPID public key not configured on server.',
+    });
+  }
+
   res.json({
     success: true,
     data: {

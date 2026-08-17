@@ -8,15 +8,27 @@ const MOCK_MODE = !ARKESEL_API_KEY;
 /**
  * Sends a single SMS message. If ARKESEL_API_KEY is not defined, it operates in mock mode.
  */
-async function sendSms({ recipient, message, type, sentBy = null }) {
+async function sendSms(optionsOrRecipient, messageText, typeArg = 'broadcast', sentByArg = null) {
+  let recipient, message, type, sentBy;
+  if (typeof optionsOrRecipient === 'object' && optionsOrRecipient !== null) {
+    recipient = optionsOrRecipient.recipient || optionsOrRecipient.to || optionsOrRecipient.phone || '';
+    message = optionsOrRecipient.message || optionsOrRecipient.text || '';
+    type = optionsOrRecipient.type || 'broadcast';
+    sentBy = optionsOrRecipient.sentBy || null;
+  } else {
+    recipient = optionsOrRecipient || '';
+    message = messageText || '';
+    type = typeArg || 'broadcast';
+    sentBy = sentByArg || null;
+  }
+
   const provider = MOCK_MODE ? 'mock' : 'arkesel';
   
   // Format recipient to look like a standard Ghana E.164 number if it doesn't already
-  // Ghana local phone numbers are 10 digits e.g. 0244123456 or 233244123456. Let's make sure it is normalized.
-  let formattedRecipient = recipient.trim().replace(/[\s-()]/g, '');
+  let formattedRecipient = (recipient || '').toString().trim().replace(/[\s-()]/g, '');
   if (formattedRecipient.startsWith('0')) {
     formattedRecipient = '233' + formattedRecipient.substring(1);
-  } else if (!formattedRecipient.startsWith('+') && !formattedRecipient.startsWith('233')) {
+  } else if (!formattedRecipient.startsWith('+') && !formattedRecipient.startsWith('233') && formattedRecipient.length > 0) {
     formattedRecipient = '233' + formattedRecipient;
   }
   
