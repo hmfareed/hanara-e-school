@@ -71,22 +71,53 @@ function playSound(type = 'success') {
   }
 }
 
+import {
+  processOfflineScan,
+  recordManualAttendanceOffline,
+  searchStaffLocal,
+} from '../../services/staffAttendanceOffline';
+
 const GateScannerPage = () => {
   const queryClient = useQueryClient();
   const [tokenInput, setTokenInput] = useState('');
   const [lastScanResult, setLastScanResult] = useState(null);
   const [scanHistory, setScanHistory] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [scanMode, setScanMode] = useState('upload'); // 'upload' | 'hardware' | 'camera'
+  const [scanMode, setScanMode] = useState('upload'); // 'upload' | 'hardware' | 'camera' | 'manual'
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState('');
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [facingMode, setFacingMode] = useState('environment');
   const [uploadingFile, setUploadingFile] = useState(false);
 
+  // Offline Manual Staff Search State
+  const [manualQuery, setManualQuery] = useState('');
+  const [manualStaffList, setManualStaffList] = useState([]);
+  const [isSearchingStaff, setIsSearchingStaff] = useState(false);
+
   const inputRef = useRef(null);
   const fileInputRef = useRef(null);
   const html5QrCodeRef = useRef(null);
+
+  // Search staff in local IndexedDB
+  useEffect(() => {
+    if (!manualQuery.trim()) {
+      setManualStaffList([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearchingStaff(true);
+      try {
+        const results = await searchStaffLocal(manualQuery);
+        setManualStaffList(results.slice(0, 10));
+      } catch (e) {
+        console.warn('Manual staff search failed', e);
+      } finally {
+        setIsSearchingStaff(false);
+      }
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [manualQuery]);
 
   // Fetch today's terminal stats
   const { data: statsData, refetch: refetchStats } = useQuery({
@@ -114,22 +145,36 @@ const GateScannerPage = () => {
     }
   }, [scanMode, lastScanResult]);
 
-  // Handle Scan Mutation
+  // Handle Scan Mutation (Online or 100% Offline with IndexedDB fallback)
   const scanMutation = useMutation({
     mutationFn: async (qrToken) => {
-      // Handle both full verification URLs and raw tokens
       let tokenToSubmit = qrToken;
       if (qrToken.includes('/verify-card/')) {
         tokenToSubmit = qrToken.split('/verify-card/')[1]?.split('?')[0] || qrToken;
       }
-      const res = await api.post('/gate-scanner/scan', { qrToken: tokenToSubmit });
-      return res.data;
+
+      // If offline, process directly with local cryptographic verification
+      if (!navigator.onLine) {
+        return await processOfflineScan({ credential: tokenToSubmit });
+      }
+
+      try {
+        const res = await api.post('/gate-scanner/scan', { qrToken: tokenToSubmit });
+        return res.data;
+      } catch (err) {
+        const isNetworkOr5xx = !err.response || err.response.status >= 500;
+        if (isNetworkOr5xx) {
+          return await processOfflineScan({ credential: tokenToSubmit });
+        }
+        throw err;
+      }
     },
     onSuccess: (data) => {
       setLastScanResult(data);
       setScanHistory((prev) => [data, ...prev.slice(0, 24)]);
       if (soundEnabled) {
-        if (data.action === 'check_out') playSound('checkout');
+        if (data.action === 'check_out' || data.eventType === 'CHECK_OUT') playSound('checkout');
+        else if (data.eventType === 'REJECTED' || !data.success) playSound('error');
         else playSound('success');
       }
       setTokenInput('');
@@ -146,6 +191,18 @@ const GateScannerPage = () => {
       setTokenInput('');
     },
   });
+
+  // Manual Attendance Logging
+  const handleManualAction = async (staffId, action) => {
+    const result = await recordManualAttendanceOffline(staffId, action);
+    setLastScanResult(result);
+    setScanHistory((prev) => [result, ...prev.slice(0, 24)]);
+    if (soundEnabled) {
+      if (action === 'check_out') playSound('checkout');
+      else playSound('success');
+    }
+    refetchStats();
+  };
 
   // Upload and decode QR Code from image file
   const handleFileUpload = async (e) => {
@@ -318,6 +375,15 @@ const GateScannerPage = () => {
               <Camera size={14} />
               <span>Webcam</span>
             </button>
+            <button
+              onClick={() => setScanMode('manual')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                scanMode === 'manual' ? 'bg-emerald-500 text-slate-950 shadow-md' : 'text-white/80 hover:text-white'
+              }`}
+            >
+              <Users size={14} />
+              <span>Staff Search (Offline)</span>
+            </button>
           </div>
 
           {/* Sound Toggle */}
@@ -451,6 +517,83 @@ const GateScannerPage = () => {
                   {scanMutation.isPending ? 'Processing...' : 'Submit Token'}
                 </button>
               </form>
+            </div>
+          ) : scanMode === 'manual' ? (
+            /* Offline Manual Staff Lookup Mode */
+            <div className="space-y-4 text-left">
+              <div className="text-center space-y-1">
+                <div className="relative w-16 h-16 mx-auto bg-emerald-50 rounded-2xl border border-emerald-200 flex items-center justify-center">
+                  <Users className="w-8 h-8 text-emerald-800" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900">Offline Staff Attendance Directory</h3>
+                <p className="text-xs text-slate-500 max-w-sm mx-auto">
+                  Search staff roster from local device cache when QR camera is unavailable or badge is unreadable.
+                </p>
+              </div>
+
+              <div className="relative max-w-md mx-auto">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Search staff by name, staff ID, or department..."
+                  value={manualQuery}
+                  onChange={(e) => setManualQuery(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                />
+              </div>
+
+              {/* Staff results list */}
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {manualStaffList.length > 0 ? (
+                  manualStaffList.map((st) => (
+                    <div
+                      key={st._id || st.staffId}
+                      className="p-3 bg-white border border-slate-200 rounded-2xl flex items-center justify-between shadow-2xs hover:border-emerald-300 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-emerald-50 border border-emerald-100 flex items-center justify-center font-bold text-emerald-800 text-xs overflow-hidden">
+                          {st.photoUrl ? (
+                            <img src={st.photoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                          ) : (
+                            <span>{st.firstName?.[0]}</span>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">
+                            {st.title ? `${st.title} ` : ''}{st.firstName} {st.lastName}
+                          </p>
+                          <span className="text-[10px] text-slate-400 font-semibold block">
+                            {st.staffId || 'Staff'} • {st.department || st.role || 'Teaching'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleManualAction(st._id, 'check_in')}
+                          className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                        >
+                          <LogIn size={13} /> Check In
+                        </button>
+                        <button
+                          onClick={() => handleManualAction(st._id, 'check_out')}
+                          className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs cursor-pointer"
+                        >
+                          <LogOut size={13} /> Check Out
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ) : manualQuery.trim() ? (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    {isSearchingStaff ? 'Searching local roster...' : 'No staff members matched search.'}
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-slate-400">
+                    Type a name above to search cached staff records offline.
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             /* Webcam Mode */

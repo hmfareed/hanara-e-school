@@ -87,6 +87,9 @@ const DailyFeeRegisterPage = () => {
     };
   }, [selectedClass, registerPayload, refetch]);
 
+  const activeFeedingRate = registerPayload?.data?.rates?.feedingFeeAmount ?? 4;
+  const activeBusRate = registerPayload?.data?.rates?.busFareAmount ?? 5;
+
   // Update line items whenever register data fetches
   useEffect(() => {
     if (registerPayload) {
@@ -95,22 +98,29 @@ const DailyFeeRegisterPage = () => {
         setLineItems(registerPayload.reconciledLineItems || []);
       } else {
         // Form template (attendance synchronized)
+        const rawItems = registerPayload.data?.lineItems || registerPayload.data?.records || [];
         setLineItems(
-          registerPayload.data?.lineItems?.map((item) => ({
-            studentId: item.student?._id || item.student,
-            name: `${item.student.firstName} ${item.student.lastName}`,
-            admissionNumber: item.student?.admissionNumber || '',
-            usesBus: item.student?.transport?.usesBus || false,
-            stop: item.student?.transport?.stop || '',
-            feedingStatus: item.feedingStatus || 'unpaid',
-            feedingAmount: item.feedingAmount || 0,
-            busStatus: item.busStatus || 'unpaid',
-            busAmount: item.busAmount || 0,
-          })) || []
+          rawItems.map((item) => {
+            const student = item.student || {};
+            const isAbsent = item.status === 'absent' || item.feedingStatus === 'absent';
+            const isPaidFeeding = item.status === 'feeding' || item.status === 'both' || item.feedingStatus === 'paid';
+            const isPaidBus = item.status === 'both' || item.busStatus === 'paid';
+            return {
+              studentId: student._id || item.studentId || item.student,
+              name: `${student.firstName || ''} ${student.otherNames ? student.otherNames + ' ' : ''}${student.lastName || ''}`.trim(),
+              admissionNumber: student.admissionNumber || item.admissionNumber || '',
+              usesBus: !!(student.transport?.usesBus || item.usesBus),
+              stop: student.transport?.stop || item.stop || '',
+              feedingStatus: isAbsent ? 'absent' : isPaidFeeding ? 'paid' : 'unpaid',
+              feedingAmount: isPaidFeeding ? (item.feedingAmount || activeFeedingRate) : 0,
+              busStatus: isAbsent ? 'absent' : isPaidBus ? 'paid' : 'unpaid',
+              busAmount: isPaidBus ? (item.busAmount || activeBusRate) : 0,
+            };
+          })
         );
       }
     }
-  }, [registerPayload]);
+  }, [registerPayload, activeFeedingRate, activeBusRate]);
 
   // Handlers for template editing
   const handleFeedingStatusChange = (studentId, status, defaultAmount) => {
@@ -120,7 +130,7 @@ const DailyFeeRegisterPage = () => {
           return {
             ...item,
             feedingStatus: status,
-            feedingAmount: status === 'paid' ? defaultAmount : 0,
+            feedingAmount: status === 'paid' ? (defaultAmount || activeFeedingRate) : 0,
           };
         }
         return item;
@@ -135,7 +145,7 @@ const DailyFeeRegisterPage = () => {
           return {
             ...item,
             busStatus: status,
-            busAmount: status === 'paid' ? defaultAmount : 0,
+            busAmount: status === 'paid' ? (defaultAmount || activeBusRate) : 0,
           };
         }
         return item;
@@ -147,22 +157,13 @@ const DailyFeeRegisterPage = () => {
     setLineItems((prev) =>
       prev.map((item) => {
         if (item.studentId === studentId) {
-          const cfg = item.dailyFeeConfig || {};
-          const fPlan = cfg.feedingPlan || (cfg.planType === 'feeding_only_daily' || cfg.planType === 'both_daily' ? 'daily' : 'weekly');
-          const bPlan = cfg.busPlan || (item.usesBus ? 'daily' : 'none');
-          const fRate = cfg.customFeedingRate ?? activeFeedingRate;
-          const bRate = cfg.customBusRate ?? activeBusRate;
-
           if (status === 'paid') {
-            const isFeedingPaidDaily = fPlan === 'daily';
-            const isBusPaidDaily = bPlan === 'daily' && item.usesBus;
-
             return {
               ...item,
               feedingStatus: 'paid',
-              feedingAmount: isFeedingPaidDaily ? fRate : 0,
+              feedingAmount: activeFeedingRate,
               busStatus: item.usesBus ? 'paid' : 'unpaid',
-              busAmount: isBusPaidDaily ? bRate : 0,
+              busAmount: item.usesBus ? activeBusRate : 0,
             };
           } else if (status === 'absent') {
             return {
@@ -212,9 +213,6 @@ const DailyFeeRegisterPage = () => {
   };
 
   const handlePrefillAllPresent = () => {
-    const feedRate = registerPayload?.data?.rates?.feedingFeeAmount || 4;
-    const busRate = registerPayload?.data?.rates?.busFareAmount || 5;
-
     setLineItems((prev) =>
       prev.map((item) => {
         // Do not alter students who were pre-filled as absent by attendance integration
@@ -224,9 +222,9 @@ const DailyFeeRegisterPage = () => {
         return {
           ...item,
           feedingStatus: 'paid',
-          feedingAmount: feedRate,
+          feedingAmount: activeFeedingRate,
           busStatus: item.usesBus ? 'paid' : 'unpaid',
-          busAmount: item.usesBus ? busRate : 0,
+          busAmount: item.usesBus ? activeBusRate : 0,
         };
       })
     );
@@ -237,9 +235,13 @@ const DailyFeeRegisterPage = () => {
     mutationFn: async (payload) => {
       return await api.post('/fees/daily-register', payload);
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       refetch();
-      setMessage({ text: '🎉 Daily fee register submitted and locked successfully!', type: 'success' });
+      const isQueued = res?.data?._queued || !navigator.onLine;
+      const successText = isQueued
+        ? '📝 Daily fee register saved locally (Pending Verification). Will sync when connection is restored.'
+        : '🎉 Daily fee register submitted and verified successfully!';
+      setMessage({ text: successText, type: 'success' });
       window.scrollTo({ top: 0, behavior: 'smooth' });
       setTimeout(() => setMessage({ text: '', type: '' }), 6000);
     },
@@ -264,6 +266,23 @@ const DailyFeeRegisterPage = () => {
     const payload = {
       classId: selectedClass,
       date: new Date(selectedDate).toISOString(),
+      records: lineItems.map((item) => {
+        let status = 'unpaid';
+        if (item.feedingStatus === 'absent' || item.busStatus === 'absent') {
+          status = 'absent';
+        } else if (item.feedingStatus === 'paid' && item.busStatus === 'paid') {
+          status = 'both';
+        } else if (item.feedingStatus === 'paid') {
+          status = 'feeding';
+        }
+
+        const totalAmount = (item.feedingStatus === 'paid' ? item.feedingAmount : 0) + (item.busStatus === 'paid' ? item.busAmount : 0);
+        return {
+          student: item.studentId,
+          status,
+          amountPaid: totalAmount,
+        };
+      }),
       lineItems: lineItems.map((item) => ({
         student: item.studentId,
         feedingStatus: item.feedingStatus,
@@ -346,8 +365,6 @@ const DailyFeeRegisterPage = () => {
   };
 
   const totals = getTotals();
-  const activeFeedingRate = registerPayload?.data?.rates?.feedingFeeAmount || 4;
-  const activeBusRate = registerPayload?.data?.rates?.busFareAmount || 5;
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -590,17 +607,7 @@ const DailyFeeRegisterPage = () => {
                               })}
                             </div>
                             <span className="text-[10px] font-extrabold text-slate-600 font-sans">
-                              Target Rate: {(() => {
-                                const cfg = item.dailyFeeConfig || {};
-                                const fPlan = cfg.feedingPlan || (cfg.planType === 'feeding_only_daily' || cfg.planType === 'both_daily' ? 'daily' : 'weekly');
-                                const bPlan = cfg.busPlan || (item.usesBus ? 'daily' : 'none');
-                                const fRate = cfg.customFeedingRate ?? activeFeedingRate;
-                                const bRate = cfg.customBusRate ?? activeBusRate;
-                                let total = 0;
-                                if (fPlan === 'daily') total += fRate;
-                                if (bPlan === 'daily' && item.usesBus) total += bRate;
-                                return total.toFixed(2);
-                              })()} GHS
+                              Target Rate: {(activeFeedingRate + (item.usesBus ? activeBusRate : 0)).toFixed(2)} GHS
                             </span>
                           </div>
                         )}

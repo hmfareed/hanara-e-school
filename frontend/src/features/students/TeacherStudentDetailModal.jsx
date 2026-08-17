@@ -55,6 +55,9 @@ const TeacherStudentDetailModal = ({ studentId, onClose }) => {
                   src={student.photoUrl}
                   alt={student.firstName}
                   className="w-14 h-14 rounded-2xl object-cover ring-2 ring-white/20"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
                 />
               ) : (
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 to-emerald-400 font-extrabold text-xl flex items-center justify-center text-white ring-2 ring-white/20">

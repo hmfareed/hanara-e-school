@@ -166,22 +166,27 @@ const TeacherMockEntryView = ({ seriesId }) => {
                 <button
                   onClick={() => saveMutation.mutate()}
                   disabled={saveMutation.isPending}
-                  className="flex items-center space-x-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-sm transition-all"
+                  className="flex items-center space-x-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-sm transition-all cursor-pointer shadow-2xs"
                 >
                   {saveMutation.isPending ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
                   <span>Save Draft</span>
                 </button>
                 <button
                   onClick={() => {
+                    if (!navigator.onLine) {
+                      showToast('🔒 Locking scores requires an active internet connection to compute BECE aggregates and publish rankings. Your draft is saved locally.', 'error');
+                      return;
+                    }
                     if (window.confirm('Are you sure you want to submit? This locks the scores and triggers position ranking.')) {
                       submitMutation.mutate();
                     }
                   }}
                   disabled={!allScoresEntered || submitMutation.isPending}
-                  className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all"
+                  title={!navigator.onLine ? 'Locking requires an active internet connection' : 'Submit and lock scores'}
+                  className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold rounded-xl text-sm transition-all cursor-pointer shadow-2xs"
                 >
                   {submitMutation.isPending ? <Loader2 className="animate-spin" size={14} /> : <Check size={14} />}
-                  <span>Submit Entry</span>
+                  <span>Submit & Lock</span>
                 </button>
               </>
             )}

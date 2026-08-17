@@ -39,6 +39,21 @@ const PayrollManagementPage = () => {
   const payrolls = payrollData?.payrolls || [];
   const summary = payrollData?.summary || {};
 
+  // Delete Single Payroll Item Mutation
+  const deleteSingleMutation = useMutation({
+    mutationFn: async (id) => {
+      return await api.delete(`/payroll/${id}`);
+    },
+    onSuccess: (res) => {
+      setNotification({ text: res.data?.message || 'Staff payroll entry deleted.', type: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['staffPayroll', selectedMonth] });
+      setTimeout(() => setNotification({ text: '', type: '' }), 3000);
+    },
+    onError: (err) => {
+      setNotification({ text: err.response?.data?.message || 'Failed to delete payroll entry.', type: 'error' });
+    },
+  });
+
   // Delete Month Payroll Mutation
   const deleteMonthMutation = useMutation({
     mutationFn: async () => {
@@ -47,7 +62,7 @@ const PayrollManagementPage = () => {
     onSuccess: (res) => {
       setNotification({ text: res.data?.message || `Successfully deleted payroll for ${selectedMonth}!`, type: 'success' });
       setShowDeleteModal(false);
-      queryClient.invalidateQueries(['staffPayroll', selectedMonth]);
+      queryClient.invalidateQueries({ queryKey: ['staffPayroll', selectedMonth] });
       setTimeout(() => setNotification({ text: '', type: '' }), 4000);
     },
     onError: (err) => {
@@ -63,7 +78,7 @@ const PayrollManagementPage = () => {
     },
     onSuccess: (res) => {
       setNotification({ text: res.data?.message || 'Monthly payroll generated!', type: 'success' });
-      queryClient.invalidateQueries(['staffPayroll', selectedMonth]);
+      queryClient.invalidateQueries({ queryKey: ['staffPayroll', selectedMonth] });
       setTimeout(() => setNotification({ text: '', type: '' }), 4000);
     },
     onError: (err) => {
@@ -78,7 +93,7 @@ const PayrollManagementPage = () => {
     },
     onSuccess: (res) => {
       setNotification({ text: res.data?.message || 'Payroll status updated!', type: 'success' });
-      queryClient.invalidateQueries(['staffPayroll', selectedMonth]);
+      queryClient.invalidateQueries({ queryKey: ['staffPayroll', selectedMonth] });
       setTimeout(() => setNotification({ text: '', type: '' }), 4000);
     },
     onError: (err) => {
@@ -94,7 +109,7 @@ const PayrollManagementPage = () => {
     onSuccess: () => {
       setNotification({ text: 'Staff payroll entry saved successfully!', type: 'success' });
       setEditingRowId(null);
-      queryClient.invalidateQueries(['staffPayroll', selectedMonth]);
+      queryClient.invalidateQueries({ queryKey: ['staffPayroll', selectedMonth] });
       setTimeout(() => setNotification({ text: '', type: '' }), 3000);
     },
     onError: (err) => {
@@ -404,6 +419,18 @@ const PayrollManagementPage = () => {
                           >
                             {downloadingPdf[p._id] ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
                             Payslip
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (window.confirm(`Are you sure you want to delete the payroll entry for ${p.staff?.firstName || 'this staff'} ${p.staff?.lastName || ''}?`)) {
+                                deleteSingleMutation.mutate(p._id);
+                              }
+                            }}
+                            disabled={deleteSingleMutation.isPending}
+                            title="Delete staff payroll entry"
+                            className="p-1 bg-rose-50 hover:bg-rose-100 text-rose-600 font-bold text-[11px] rounded-lg border border-rose-200 transition-colors flex items-center justify-center cursor-pointer disabled:opacity-50"
+                          >
+                            <Trash2 size={13} />
                           </button>
                         </div>
                       </td>

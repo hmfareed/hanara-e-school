@@ -4,8 +4,9 @@ import api from '../../services/api';
 import {
   CalendarDays, Plus, Trash2, Star, ChevronRight, CheckCircle2,
   AlertTriangle, BookOpen, Palmtree, CalendarCheck, X, Pencil,
-  GripVertical, ArrowLeft,
+  GripVertical, ArrowLeft, Sparkles, GraduationCap, History,
 } from 'lucide-react';
+import PromotionWizardModal from './PromotionWizardModal';
 
 /* ─── helpers ─────────────────────────────────────────────── */
 const fmt = (d) => d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -457,6 +458,7 @@ const YearCard = ({ year, isSelected, onSelect, onSetCurrent, onDelete, isSettin
 /* ─── Main Page ───────────────────────────────────────────── */
 const AcademicYearPage = () => {
   const queryClient = useQueryClient();
+  const [isPromotionWizardOpen, setIsPromotionWizardOpen] = useState(false);
   const [mode, setMode] = useState('list'); // 'list' | 'create' | 'edit'
   const [selectedYear, setSelectedYear] = useState(null);
   const [toast, setToast] = useState(null);
@@ -525,18 +527,26 @@ const AcademicYearPage = () => {
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-900">Academic Year Management</h2>
-          <p className="text-sm text-slate-500 mt-1">Create academic years, configure terms, and schedule events</p>
+          <p className="text-sm text-slate-500 mt-1">Create academic years, configure terms, schedule events, and roll over student cohorts</p>
         </div>
         {mode === 'list' && (
-          <button
-            onClick={() => { setSelectedYear(null); setMode('create'); }}
-            className="flex items-center gap-2 py-2 px-4 rounded-xl bg-emerald-800 hover:bg-emerald-900 text-white font-bold text-sm shadow-sm transition-colors"
-          >
-            <Plus size={16} /> New Academic Year
-          </button>
+          <div className="flex items-center gap-3 flex-wrap">
+            <button
+              onClick={() => setIsPromotionWizardOpen(true)}
+              className="flex items-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-900 hover:from-emerald-900 hover:to-teal-950 text-white font-bold text-sm shadow-md transition-all hover:shadow-lg"
+            >
+              <Sparkles size={16} /> Promotion & Rollover Wizard
+            </button>
+            <button
+              onClick={() => { setSelectedYear(null); setMode('create'); }}
+              className="flex items-center gap-2 py-2.5 px-4 rounded-xl border border-slate-300 hover:bg-slate-50 text-slate-700 font-bold text-sm shadow-sm transition-colors"
+            >
+              <Plus size={16} /> New Academic Year
+            </button>
+          </div>
         )}
         {mode !== 'list' && (
           <button
@@ -711,6 +721,13 @@ const AcademicYearPage = () => {
           />
         </div>
       )}
+
+      {/* End-of-Year Promotion & Rollover Wizard Modal */}
+      <PromotionWizardModal
+        isOpen={isPromotionWizardOpen}
+        onClose={() => setIsPromotionWizardOpen(false)}
+        years={years}
+      />
     </div>
   );
 };

@@ -6,6 +6,7 @@ const morgan = require('morgan');
 const logger = require('./utils/logger');
 const errorHandler = require('./middleware/errorHandler');
 const { generalLimiter } = require('./middleware/rateLimiter');
+const idempotency = require('./middleware/idempotency');
 
 // Import routes
 const authRoutes = require('./routes/auth.routes');
@@ -41,6 +42,8 @@ const syncRoutes = require('./routes/sync.routes');
 const staffAttendanceRoutes = require('./routes/staffAttendance.routes');
 const idCardsRoutes = require('./routes/idCards.routes');
 const reportCardRoutes = require('./routes/reportCard.routes');
+const timetableRoutes = require('./routes/timetable.routes');
+const notificationRoutes = require('./routes/notification.routes');
 
 const app = express();
 
@@ -73,6 +76,7 @@ app.use(cookieParser());
 
 // Apply general rate limit to all routes
 app.use('/api', generalLimiter);
+app.use('/api', idempotency);
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
@@ -113,6 +117,8 @@ app.use('/api/staff-attendance', staffAttendanceRoutes);
 app.use('/api/id-cards', idCardsRoutes);
 app.use('/api/gate-scanner', idCardsRoutes);
 app.use('/api/reports', reportCardRoutes);
+app.use('/api/timetables', timetableRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 
 

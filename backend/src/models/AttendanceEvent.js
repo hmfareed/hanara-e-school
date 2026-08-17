@@ -2,6 +2,11 @@ const mongoose = require('mongoose');
 
 const attendanceEventSchema = new mongoose.Schema(
   {
+    eventId: {
+      type: String,
+      default: null,
+      index: true,
+    },
     staff: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Staff',

@@ -17,20 +17,27 @@ const getClasses = async (req, res, next) => {
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const [classes, total] = await Promise.all([
+    const [rawClasses, total] = await Promise.all([
       Class.find(filter)
         .populate('level', 'displayName category order levelCode')
         .populate('classTeacher', 'firstName lastName')
-        .populate('academicYear', 'name')
-        .sort({ 'level.order': 1 })
-        .skip(skip)
-        .limit(parseInt(limit)),
+        .populate('formTeacher', 'email role refStaff')
+        .populate('academicYear', 'name'),
       Class.countDocuments(filter),
     ]);
 
+    const sortedClasses = [...rawClasses].sort((a, b) => {
+      const orderA = a.level?.order ?? 999;
+      const orderB = b.level?.order ?? 999;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.name.localeCompare(b.name);
+    });
+
+    const paginatedClasses = sortedClasses.slice(skip, skip + parseInt(limit));
+
     res.json({
       success: true,
-      data: classes,
+      data: paginatedClasses,
       meta: { total, page: parseInt(page), limit: parseInt(limit) },
     });
   } catch (error) {
@@ -42,19 +49,81 @@ const getClasses = async (req, res, next) => {
 const createClass = async (req, res, next) => {
   try {
     const { levelId, name, academicYearId, classTeacherId, capacity } = req.body;
+    let formTeacher = null;
+    if (classTeacherId) {
+      const User = require('../models/User');
+      const userWithStaff = await User.findOne({ refStaff: classTeacherId });
+      if (userWithStaff) formTeacher = userWithStaff._id;
+    }
+
     const newClass = await Class.create({
       level: levelId,
       name,
       academicYear: academicYearId,
       classTeacher: classTeacherId || null,
+      formTeacher,
       capacity: capacity || 40,
     });
 
+    if (classTeacherId) {
+      const Staff = require('../models/Staff');
+      await Staff.findByIdAndUpdate(classTeacherId, {
+        $addToSet: { classesAssigned: newClass._id },
+      });
+    }
+
     const populated = await Class.findById(newClass._id)
-      .populate('level', 'displayName category')
-      .populate('classTeacher', 'firstName lastName');
+      .populate('level', 'displayName category order levelCode')
+      .populate('classTeacher', 'firstName lastName')
+      .populate('formTeacher', 'email role refStaff')
+      .populate('academicYear', 'name');
 
     res.status(201).json({ success: true, data: populated });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// PUT /api/classes/:id
+const updateClass = async (req, res, next) => {
+  try {
+    const { name, levelId, classTeacherId, formTeacherId, capacity } = req.body;
+    const updateData = {};
+    if (name) updateData.name = name;
+    if (levelId) updateData.level = levelId;
+    if (capacity !== undefined) updateData.capacity = capacity;
+
+    const classDoc = await Class.findById(req.params.id);
+    if (!classDoc) return res.status(404).json({ success: false, message: 'Class not found' });
+
+    if (classTeacherId !== undefined) {
+      updateData.classTeacher = classTeacherId || null;
+      if (classTeacherId) {
+        const User = require('../models/User');
+        const Staff = require('../models/Staff');
+        const userWithStaff = await User.findOne({ refStaff: classTeacherId });
+        updateData.formTeacher = userWithStaff ? userWithStaff._id : null;
+
+        // Also sync Staff.classesAssigned
+        await Staff.findByIdAndUpdate(classTeacherId, {
+          $addToSet: { classesAssigned: classDoc._id },
+        });
+      } else {
+        updateData.formTeacher = null;
+      }
+    }
+
+    if (formTeacherId !== undefined) {
+      updateData.formTeacher = formTeacherId || null;
+    }
+
+    const updated = await Class.findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true })
+      .populate('level', 'displayName category order levelCode')
+      .populate('classTeacher', 'firstName lastName')
+      .populate('formTeacher', 'email role refStaff')
+      .populate('academicYear', 'name');
+
+    res.json({ success: true, data: updated });
   } catch (error) {
     next(error);
   }
@@ -141,31 +210,12 @@ const getClassLevels = async (req, res, next) => {
   }
 };
 
-// PUT /api/classes/:id
-const updateClass = async (req, res, next) => {
-  try {
-    const { name, levelId, classTeacherId, capacity } = req.body;
-    const updated = await Class.findByIdAndUpdate(
-      req.params.id,
-      { name, level: levelId, classTeacher: classTeacherId || null, capacity },
-      { new: true, runValidators: true }
-    )
-      .populate('level', 'displayName category')
-      .populate('classTeacher', 'firstName lastName');
-
-    if (!updated) return res.status(404).json({ success: false, message: 'Class not found' });
-    res.json({ success: true, data: updated });
-  } catch (error) {
-    next(error);
-  }
-};
-
 // DELETE /api/classes/:id
 const deleteClass = async (req, res, next) => {
   try {
     const deleted = await Class.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ success: false, message: 'Class not found' });
-    res.json({ success: true, message: 'Class deleted successfully' });
+    res.json({ success: true, message: 'Class deleted successfully', data: { _id: req.params.id } });
   } catch (error) {
     next(error);
   }
@@ -193,7 +243,7 @@ const deleteSubject = async (req, res, next) => {
   try {
     const deleted = await Subject.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ success: false, message: 'Subject not found' });
-    res.json({ success: true, message: 'Subject deleted successfully' });
+    res.json({ success: true, message: 'Subject deleted successfully', data: { _id: req.params.id } });
   } catch (error) {
     next(error);
   }
@@ -224,7 +274,7 @@ const deleteAssignment = async (req, res, next) => {
   try {
     const deleted = await ClassSubjectAssignment.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ success: false, message: 'Assignment not found' });
-    res.json({ success: true, message: 'Assignment deleted successfully' });
+    res.json({ success: true, message: 'Assignment deleted successfully', data: { _id: req.params.id } });
   } catch (error) {
     next(error);
   }

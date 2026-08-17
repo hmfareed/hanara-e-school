@@ -105,8 +105,8 @@ const requireFormTeacherForClass = async (req, res, next) => {
       return next();
     }
 
-    const userId = req.user.id || req.user._id;
-    const refStaffId = req.user.refStaff;
+    const userIdStr = (req.user.id || req.user._id)?.toString();
+    const refStaffIdStr = (req.user.refStaff?._id || req.user.refStaff)?.toString();
     const classId =
       req.params.classId ||
       req.query.classId ||
@@ -126,17 +126,14 @@ const requireFormTeacherForClass = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Class not found' });
     }
 
-    // Check if user is the formTeacher (User ObjectId) of this class
-    const isFormTeacher =
-      classDoc.formTeacher && classDoc.formTeacher.toString() === userId.toString();
+    const formTeacherStr = (classDoc.formTeacher?._id || classDoc.formTeacher)?.toString();
+    const classTeacherStr = (classDoc.classTeacher?._id || classDoc.classTeacher)?.toString();
 
-    // Check if user's staff profile is the classTeacher (Staff ObjectId) of this class
-    const isClassTeacher =
-      refStaffId &&
-      classDoc.classTeacher &&
-      classDoc.classTeacher.toString() === refStaffId.toString();
+    const isAuthorized =
+      (formTeacherStr && (formTeacherStr === userIdStr || (refStaffIdStr && formTeacherStr === refStaffIdStr))) ||
+      (classTeacherStr && ((refStaffIdStr && classTeacherStr === refStaffIdStr) || classTeacherStr === userIdStr));
 
-    if (!isFormTeacher && !isClassTeacher) {
+    if (!isAuthorized) {
       return res.status(403).json({
         success: false,
         message:

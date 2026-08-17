@@ -39,6 +39,12 @@ const staffAttendanceRecordSchema = new mongoose.Schema(
       enum: ['present', 'absent', 'late', 'on_leave', 'half_day'],
       required: [true, 'Status is required'],
     },
+    // Richer overall attendance status separate from simple status
+    attendanceStatus: {
+      type: String,
+      enum: ['PENDING', 'PRESENT', 'LATE', 'ABSENT', 'CHECKED_OUT', 'INCOMPLETE', 'REJECTED'],
+      default: 'PENDING',
+    },
     checkInTime: {
       type: String, // "HH:mm" (24h)
       default: null,
@@ -57,24 +63,60 @@ const staffAttendanceRecordSchema = new mongoose.Schema(
       enum: ['CHECKED_OUT', 'NONE'],
       default: 'NONE',
     },
+    // GPS verification status for check-in and check-out
+    checkInVerification: {
+      type: String,
+      enum: ['GPS_VERIFIED', 'ADMIN_MARKED', 'OFFLINE', 'KIOSK_SCAN', 'PENDING'],
+      default: 'PENDING',
+    },
+    checkOutVerification: {
+      type: String,
+      enum: ['GPS_VERIFIED', 'ADMIN_MARKED', 'KIOSK_SCAN', 'NONE'],
+      default: 'NONE',
+    },
     totalMinutes: {
       type: Number,
       default: 0,
     },
-    // GPS coordinates captured at check-in
+    // ── Check-in GPS evidence ────────────────────────────────────────────────
     checkInLocation: {
       lat: { type: Number, default: null },
       lng: { type: Number, default: null },
+    },
+    // GPS accuracy (meters) reported by device at check-in
+    checkInAccuracy: {
+      type: Number,
+      default: null,
     },
     // Distance from school at check-in (metres) — computed server-side
     distanceFromSchool: {
       type: Number,
       default: null,
     },
+    // ── Check-out GPS evidence ────────────────────────────────────────────────
+    checkOutLocation: {
+      lat: { type: Number, default: null },
+      lng: { type: Number, default: null },
+    },
+    // GPS accuracy (meters) reported by device at check-out
+    checkOutAccuracy: {
+      type: Number,
+      default: null,
+    },
+    // Distance from school at check-out (metres) — computed server-side
+    checkOutDistance: {
+      type: Number,
+      default: null,
+    },
+    // Geofence GPS verification flag (true if device within configured radius of branch campus)
+    geofenceVerified: {
+      type: Boolean,
+      default: false,
+    },
     // Branch at check-in (Zogbeli or Vittin)
     branch: {
       type: String,
-      enum: ['Zogbeli', 'Vittin'],
+      enum: ['Zogbeli', 'Vittin', 'Both'],
       default: 'Zogbeli',
     },
     branchLocation: {

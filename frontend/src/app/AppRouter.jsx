@@ -16,6 +16,7 @@ import StaffAttendancePage from '../features/staff/StaffAttendancePage';
 import ClassesPage from '../features/classes/ClassesPage';
 import MyClassesPage from '../features/classes/MyClassesPage';
 import TeacherTimetablePage from '../features/classes/TeacherTimetablePage';
+import MasterTimetablePage from '../features/classes/MasterTimetablePage';
 import ResultsEntryPage from '../features/classes/ResultsEntryPage';
 import AssignmentsPage from '../features/assignments/AssignmentsPage';
 import LessonPlansPage from '../features/lessonPlans/LessonPlansPage';
@@ -256,6 +257,22 @@ const AppRouter = () => {
             element={
               <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'system_admin']}>
                 <TeacherTimetablePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="timetable/master"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'system_admin']}>
+                <MasterTimetablePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="admin/timetable"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'system_admin']}>
+                <MasterTimetablePage />
               </ProtectedRoute>
             }
           />

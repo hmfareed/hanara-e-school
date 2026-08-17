@@ -151,31 +151,117 @@ const getTeacherProfile = async (req, res, next) => {
   }
 };
 
+// Short-lived in-memory cache for teacher dashboard
+const teacherDashboardCache = new Map();
+const TEACHER_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes — meaningful cache window
+
 // GET /api/teacher/dashboard-summary
 const getTeacherDashboardSummary = async (req, res, next) => {
   try {
     const userId = req.user.id || req.user._id;
     const refStaffId = req.user.refStaff;
+    const cacheKey = `teacher_${userId}`;
+
+    const cached = teacherDashboardCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < TEACHER_CACHE_TTL_MS) {
+      return res.json({ success: true, data: cached.data });
+    }
 
     const User = require('../models/User');
+    const Staff = require('../models/Staff');
     const AcademicYear = require('../models/AcademicYear');
     const Class = require('../models/Class');
+    const ClassLevel = require('../models/ClassLevel');
+    const Subject = require('../models/Subject');
     const Student = require('../models/Student');
     const AttendanceRecord = require('../models/AttendanceRecord');
     const MockSubjectEntry = require('../models/MockSubjectEntry');
     const Timetable = require('../models/Timetable');
+    const OfflineAssignment = require('../models/OfflineAssignment');
+    const Grade = require('../models/Grade');
+    const Notice = require('../models/Notice');
+    const mongoose = require('mongoose');
     const { getTeacherClasses } = require('../utils/authHelpers');
 
     const teacherClassIds = await getTeacherClasses(userId, refStaffId);
+    const teacherClassObjectIds = teacherClassIds.map((id) => {
+      try {
+        return new mongoose.Types.ObjectId(id.toString());
+      } catch (e) {
+        return id;
+      }
+    });
 
-    const currentYear = await AcademicYear.findOne({ isCurrent: true });
-    const user = await User.findById(userId).populate('refStaff');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const currentDayName = dayNames[today.getDay()];
+
+    const classesFilter = teacherClassIds.length > 0 ? { _id: { $in: teacherClassObjectIds } } : { _id: { $in: [] } };
+    let pendingMockQuery = {};
+    if (teacherClassIds.length > 0) {
+      pendingMockQuery.class = { $in: teacherClassObjectIds };
+    }
+
+    const studentStatusFilter = { $nin: ['withdrawn', 'transferred', 'graduated'] };
+
+    // Parallel fetch of all independent pieces!
+    const [
+      currentYear,
+      user,
+      classes,
+      totalStudents,
+      studentCountsByClass,
+      classAttendanceAgg,
+      todaysTimetableRaw,
+      realAssignments,
+      pendingGradingCount,
+      pendingResultsList,
+      pendingMockEntries,
+      studentsWithDob,
+      announcements,
+    ] = await Promise.all([
+      AcademicYear.findOne({ isCurrent: true }).lean(),
+      User.findById(userId).populate('refStaff').lean(),
+      Class.find(classesFilter).populate('level', 'name displayName').lean(),
+      teacherClassIds.length > 0
+        ? Student.countDocuments({ currentClass: { $in: teacherClassObjectIds }, status: studentStatusFilter })
+        : Promise.resolve(0),
+      teacherClassIds.length > 0
+        ? Student.aggregate([
+            { $match: { currentClass: { $in: teacherClassObjectIds }, status: studentStatusFilter } },
+            { $group: { _id: '$currentClass', count: { $sum: 1 } } },
+          ])
+        : Promise.resolve([]),
+      teacherClassIds.length > 0
+        ? AttendanceRecord.aggregate([
+            { $match: { class: { $in: teacherClassObjectIds }, date: { $gte: today, $lt: tomorrow } } },
+            { $group: { _id: { class: '$class', status: '$status' }, count: { $sum: 1 } } },
+          ])
+        : Promise.resolve([]),
+      Timetable.find({ teacher: { $in: [userId, refStaffId].filter(Boolean) }, day: currentDayName }).populate('class', 'name').sort({ startTime: 1 }).lean(),
+      teacherClassIds.length > 0
+        ? OfflineAssignment.find({ class: { $in: teacherClassObjectIds } }).populate('class', 'name').sort({ createdAt: -1 }).limit(3).lean()
+        : Promise.resolve([]),
+      OfflineAssignment.countDocuments({ teacher: userId, status: 'pending' }),
+      teacherClassIds.length > 0
+        ? Grade.find({ class: { $in: teacherClassObjectIds }, isDraft: true }).populate('class', 'name').populate('subject', 'name').limit(3).lean()
+        : Promise.resolve([]),
+      MockSubjectEntry.countDocuments({ ...pendingMockQuery, status: { $ne: 'verified' } }),
+      teacherClassIds.length > 0
+        ? Student.find({ currentClass: { $in: teacherClassObjectIds }, status: studentStatusFilter, dob: { $ne: null } }).select('firstName lastName dob currentClass photoUrl').populate('currentClass', 'name').lean()
+        : Promise.resolve([]),
+      Notice.find({ targetAudience: { $in: ['all', 'teachers'] } }).sort({ createdAt: -1 }).limit(3).lean(),
+    ]);
+
     const staff = user?.refStaff;
-
     const profile = {
       _id: userId,
       email: user?.email,
-      fullName: staff ? staff.fullName : (user?.name || 'Teacher'),
+      fullName: staff ? (staff.fullName || `${staff.firstName || ''} ${staff.lastName || ''}`.trim()) : (user?.name || 'Teacher'),
       firstName: staff?.firstName || user?.name || 'Teacher',
       title: staff?.title || 'Sir/Madam',
       photoUrl: staff?.photoUrl || null,
@@ -187,100 +273,68 @@ const getTeacherDashboardSummary = async (req, res, next) => {
       currentDate: new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
     };
 
-    // Classes & Timetable today
-    const classesFilter = teacherClassIds.length > 0 ? { _id: { $in: teacherClassIds } } : {};
-    const classes = await Class.find(classesFilter).populate('stage', 'name');
+    // Build fast maps
+    const studentCountMap = {};
+    (studentCountsByClass || []).forEach((sc) => {
+      if (sc._id) studentCountMap[sc._id.toString()] = sc.count;
+    });
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
+    const classAttMap = {};
+    (classAttendanceAgg || []).forEach((ca) => {
+      const cId = ca._id?.class ? ca._id.class.toString() : '';
+      if (!cId) return;
+      if (!classAttMap[cId]) {
+        classAttMap[cId] = { present: 0, absent: 0, late: 0, total: 0, hasMarked: true };
+      }
+      if (ca._id.status === 'present') classAttMap[cId].present += ca.count;
+      if (ca._id.status === 'absent') classAttMap[cId].absent += ca.count;
+      if (ca._id.status === 'late') classAttMap[cId].late += ca.count;
+      classAttMap[cId].total += ca.count;
+    });
 
-    // Total active students assigned to teacher
-    const totalStudents = await Student.countDocuments({ currentClass: { $in: teacherClassIds }, status: 'active' });
+    const myClasses = classes.map((cls) => {
+      const cId = cls._id.toString();
+      const sCount = studentCountMap[cId] || 0;
+      const att = classAttMap[cId];
+      const rate = att && att.total > 0 ? Math.round((att.present / att.total) * 100) : 100;
+      return {
+        _id: cls._id,
+        name: cls.name,
+        subjectName: cls.subjectName || 'Core Subject',
+        studentCount: sCount,
+        attendanceRate: rate,
+      };
+    });
 
-    // Fetch real Assigned Classes with Attendance rate & student count
-    const myClasses = await Promise.all(
-      classes.map(async (cls) => {
-        const studentCount = await Student.countDocuments({ currentClass: cls._id, status: 'active' });
-        const attRecords = await AttendanceRecord.find({ class: cls._id, date: { $gte: today, $lt: tomorrow } });
-        const presentCount = attRecords.filter(r => r.status === 'present').length;
-        const totalMarked = attRecords.length;
-        const attendanceRate = totalMarked > 0 ? Math.round((presentCount / totalMarked) * 100) : 100;
+    const todaysClasses = classes.map((cls) => {
+      const cId = cls._id.toString();
+      const sCount = studentCountMap[cId] || 0;
+      const att = classAttMap[cId];
+      return {
+        classId: cls._id,
+        className: cls.name,
+        stage: cls.level?.name || cls.level?.displayName || 'Basic Education',
+        subjectName: cls.subjectName || 'Class Core Subjects',
+        totalStudents: sCount,
+        isAttendanceMarked: Boolean(att && att.total > 0),
+        presentCount: att?.present || 0,
+        absentCount: att?.absent || 0,
+        lateCount: att?.late || 0,
+      };
+    });
 
-        return {
-          _id: cls._id,
-          name: cls.name,
-          subjectName: cls.subjectName || 'Core Subject',
-          studentCount,
-          attendanceRate,
-        };
-      })
-    );
+    // No fake fallback — if no timetable is set, return empty array.
+    // The frontend will show the proper empty state instead of fabricated data.
+    let todaysTimetable = todaysTimetableRaw || [];
 
-    // Fetch real timetable for today's day of week
-    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-    const currentDayName = dayNames[today.getDay()];
-    
-    let todaysTimetable = await Timetable.find({ teacher: userId, day: currentDayName })
-      .populate('class', 'name')
-      .sort({ startTime: 1 });
-
-    // Fallback if teacher hasn't created custom slots yet
-    if (todaysTimetable.length === 0 && classes.length > 0) {
-      const defaultSlots = [
-        { startTime: '08:00 AM', endTime: '09:00 AM', subject: 'English Language' },
-        { startTime: '09:30 AM', endTime: '10:30 AM', subject: 'Mathematics' },
-        { startTime: '10:30 AM', endTime: '11:30 AM', subject: 'Information Technology' },
-        { startTime: '11:30 AM', endTime: '12:30 PM', subject: 'Social Studies' },
-        { startTime: '01:00 PM', endTime: '02:00 PM', subject: 'Integrated Science' },
-      ];
-      todaysTimetable = defaultSlots.map((slot, index) => {
-        const targetClass = classes[index % classes.length];
-        return {
-          _id: `default-${index}`,
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          subject: slot.subject,
-          class: { _id: targetClass._id, name: targetClass.name },
-        };
-      });
-    }
-
-    const todaysClasses = await Promise.all(
-      classes.map(async (cls) => {
-        const studentCount = await Student.countDocuments({ currentClass: cls._id, status: 'active' });
-        
-        // Check attendance today
-        const attRecords = await AttendanceRecord.find({ class: cls._id, date: { $gte: today, $lt: tomorrow } });
-        const isAttendanceMarked = attRecords.length > 0;
-        const presentCount = attRecords.filter(r => r.status === 'present').length;
-        const absentCount = attRecords.filter(r => r.status === 'absent').length;
-        const lateCount = attRecords.filter(r => r.status === 'late').length;
-
-        return {
-          classId: cls._id,
-          className: cls.name,
-          stage: cls.stage?.name || 'Basic Education',
-          subjectName: cls.subjectName || 'Class Core Subjects',
-          totalStudents: studentCount,
-          isAttendanceMarked,
-          presentCount,
-          absentCount,
-          lateCount,
-        };
-      })
-    );
-
-    // Attendance breakdown metrics
     const totalAssignedClasses = todaysClasses.length;
-    const completedAttendanceCount = todaysClasses.filter(c => c.isAttendanceMarked).length;
+    const completedAttendanceCount = todaysClasses.filter((c) => c.isAttendanceMarked).length;
     const pendingAttendanceCount = totalAssignedClasses - completedAttendanceCount;
-    
+
     let totalPresent = 0;
     let totalAbsent = 0;
     let totalLate = 0;
-    todaysClasses.forEach(c => {
+    todaysClasses.forEach((c) => {
       totalPresent += c.presentCount;
       totalAbsent += c.absentCount;
       totalLate += c.lateCount;
@@ -288,125 +342,80 @@ const getTeacherDashboardSummary = async (req, res, next) => {
     const totalMarkedStudents = totalPresent + totalAbsent + totalLate;
     const attendancePercentage = totalMarkedStudents > 0 ? Math.round((totalPresent / totalMarkedStudents) * 100) : 100;
 
-    // Fetch real Offline Assignments for assigned classes
-    const OfflineAssignment = require('../models/OfflineAssignment');
-    let realAssignments = [];
-    let pendingGradingCount = 0;
-    try {
-      if (teacherClassIds.length > 0) {
-        realAssignments = await OfflineAssignment.find({ class: { $in: teacherClassIds } })
-          .populate('class', 'name')
-          .sort({ createdAt: -1 })
-          .limit(3);
-        pendingGradingCount = await OfflineAssignment.countDocuments({ teacher: userId, status: 'pending' });
-      }
-    } catch (e) {
-      realAssignments = [];
-    }
-
     const assignmentsSummary = {
       totalGiven: realAssignments.length,
       pendingGrading: pendingGradingCount,
     };
 
-    // Pending Results Summary
-    let pendingResultsList = [];
-    try {
-      const Grade = require('../models/Grade');
-      if (teacherClassIds.length > 0) {
-        pendingResultsList = await Grade.find({ class: { $in: teacherClassIds }, isDraft: true })
-          .populate('class', 'name')
-          .populate('subject', 'name')
-          .limit(3);
-      }
-    } catch (e) {
-      pendingResultsList = [];
-    }
-
-    const pendingMockEntries = await MockSubjectEntry.countDocuments({ ...pendingMockQuery, status: { $ne: 'verified' } });
     const pendingResultsSummary = {
       pendingClassesCount: pendingResultsList.length,
       subjectsAwaitingCount: pendingMockEntries,
     };
 
-    // Fetch upcoming birthdays for active students in assigned classes
-    let upcomingBirthdays = [];
-    if (teacherClassIds.length > 0) {
-      try {
-        const studentsWithDob = await Student.find({
-          currentClass: { $in: teacherClassIds },
-          status: 'active',
-          dob: { $ne: null }
-        }).select('firstName lastName dob currentClass photoUrl').populate('currentClass', 'name');
+    // Birthdays
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentDay = now.getDate();
 
-        const now = new Date();
-        const currentMonth = now.getMonth();
-        const currentDay = now.getDate();
+    const upcomingBirthdays = (studentsWithDob || [])
+      .map((st) => {
+        const birthDate = new Date(st.dob);
+        const bMonth = birthDate.getMonth();
+        const bDay = birthDate.getDate();
 
-        upcomingBirthdays = studentsWithDob.map(st => {
-          const birthDate = new Date(st.dob);
-          const bMonth = birthDate.getMonth();
-          const bDay = birthDate.getDate();
-          
-          let nextBdayThisYear = new Date(now.getFullYear(), bMonth, bDay);
-          if (nextBdayThisYear < now && !(currentMonth === bMonth && currentDay === bDay)) {
-            nextBdayThisYear = new Date(now.getFullYear() + 1, bMonth, bDay);
-          }
-          const diffDays = Math.ceil((nextBdayThisYear - now) / (1000 * 60 * 60 * 24));
-          
-          return {
-            _id: st._id,
-            fullName: `${st.firstName} ${st.lastName}`,
-            className: st.currentClass?.name || 'Class',
-            photoUrl: st.photoUrl || null,
-            dobDate: birthDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            daysAway: diffDays,
-          };
-        })
-        .filter(b => b.daysAway >= 0 && b.daysAway <= 30)
-        .sort((a, b) => a.daysAway - b.daysAway)
-        .slice(0, 4);
-      } catch (e) {
-        upcomingBirthdays = [];
-      }
-    }
+        let nextBdayThisYear = new Date(now.getFullYear(), bMonth, bDay);
+        if (nextBdayThisYear < now && !(currentMonth === bMonth && currentDay === bDay)) {
+          nextBdayThisYear = new Date(now.getFullYear() + 1, bMonth, bDay);
+        }
+        const diffDays = Math.ceil((nextBdayThisYear - now) / (1000 * 60 * 60 * 24));
 
-    // Fetch real announcements targetting teachers or all
-    let announcements = [];
-    try {
-      const Announcement = require('../models/Announcement');
-      announcements = await Announcement.find({ targetAudience: { $in: ['all', 'teachers'] } })
-        .sort({ createdAt: -1 })
-        .limit(3);
-    } catch (e) {
-      announcements = [];
-    }
+        return {
+          _id: st._id,
+          fullName: `${st.firstName} ${st.lastName}`,
+          className: st.currentClass?.name || 'Class',
+          photoUrl: st.photoUrl || null,
+          dobDate: birthDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+          daysAway: diffDays,
+        };
+      })
+      .filter((b) => b.daysAway >= 0 && b.daysAway <= 30)
+      .sort((a, b) => a.daysAway - b.daysAway)
+      .slice(0, 4);
+
+    const calculatedTotal = (typeof totalStudents === 'number' && totalStudents > 0)
+      ? totalStudents
+      : Object.values(studentCountMap).reduce((a, b) => a + b, 0);
+
+    const resultData = {
+      profile,
+      totalStudents: calculatedTotal,
+      myClasses,
+      todaysClasses,
+      todaysTimetable,
+      attendanceSummary: {
+        classesTodayCount: totalAssignedClasses,
+        completedCount: completedAttendanceCount,
+        pendingCount: pendingAttendanceCount,
+        studentsPresent: totalPresent,
+        studentsAbsent: totalAbsent,
+        studentsLate: totalLate,
+        attendanceRate: attendancePercentage,
+        hasAttendanceData: totalMarkedStudents > 0, // true only when attendance has been marked today
+      },
+      assignmentsSummary,
+      pendingResultsSummary,
+      recentActivities: [],
+      assignmentsList: realAssignments,
+      pendingResultsList,
+      announcements: announcements || [],
+      upcomingBirthdays,
+    };
+
+    teacherDashboardCache.set(cacheKey, { timestamp: Date.now(), data: resultData });
 
     res.json({
       success: true,
-      data: {
-        profile,
-        totalStudents,
-        myClasses,
-        todaysClasses,
-        todaysTimetable,
-        attendanceSummary: {
-          classesTodayCount: totalAssignedClasses,
-          completedCount: completedAttendanceCount,
-          pendingCount: pendingAttendanceCount,
-          studentsPresent: totalPresent,
-          studentsAbsent: totalAbsent,
-          studentsLate: totalLate,
-          attendanceRate: attendancePercentage,
-        },
-        assignmentsSummary,
-        assignmentsList: realAssignments,
-        pendingResultsSummary,
-        pendingResultsList,
-        recentActivities: [], // Empty unless real logs are generated
-        upcomingBirthdays,
-        announcements,
-      }
+      data: resultData,
     });
   } catch (error) {
     next(error);
@@ -418,26 +427,48 @@ const getMyClasses = async (req, res, next) => {
   try {
     const userId = req.user.id || req.user._id;
     const refStaffId = req.user.refStaff;
+    const userRole = req.user.role;
 
     const Class = require('../models/Class');
     const Student = require('../models/Student');
     const AttendanceRecord = require('../models/AttendanceRecord');
     const { getTeacherClasses } = require('../utils/authHelpers');
+    const mongoose = require('mongoose');
 
-    const teacherClassIds = await getTeacherClasses(userId, refStaffId);
-    const classes = await Class.find({ _id: { $in: teacherClassIds } })
-      .populate('level', 'displayName category')
-      .populate('classTeacher', 'firstName lastName title')
-      .sort({ name: 1 });
+    let classes;
+    if (['superadmin', 'admin', 'system_admin'].includes(userRole)) {
+      classes = await Class.find({ status: { $ne: 'archived' } })
+        .populate('level', 'displayName category')
+        .populate('classTeacher', 'firstName lastName title')
+        .sort({ name: 1 });
+    } else {
+      const teacherClassIds = await getTeacherClasses(userId, refStaffId);
+      const teacherClassObjectIds = teacherClassIds.map((id) => {
+        try {
+          return new mongoose.Types.ObjectId(id.toString());
+        } catch (e) {
+          return id;
+        }
+      });
+      classes = await Class.find({ _id: { $in: teacherClassObjectIds } })
+        .populate('level', 'displayName category')
+        .populate('classTeacher', 'firstName lastName title')
+        .sort({ name: 1 });
+    }
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
 
+    const studentStatusFilter = { $nin: ['withdrawn', 'transferred', 'graduated'] };
+
     const result = await Promise.all(
       classes.map(async (cls) => {
-        const studentCount = await Student.countDocuments({ currentClass: cls._id, status: 'active' });
+        const studentCount = await Student.countDocuments({
+          currentClass: cls._id,
+          status: studentStatusFilter,
+        });
         
         // Attendance rate
         const classAtt = await AttendanceRecord.aggregate([

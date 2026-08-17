@@ -40,12 +40,22 @@ const BehaviourRecordsPage = () => {
     actionTaken: '',
   });
 
-  // Fetch Teacher Classes
+  // Fetch Classes for Behaviour logging (all classes for admins/headteacher, or teacher-assigned classes)
+  const isAdmin = ['superadmin', 'admin', 'system_admin'].includes(user?.role);
   const { data: classes = [] } = useQuery({
-    queryKey: ['myTeacherClassesList'],
+    queryKey: ['behaviourClassesList', isAdmin, user?._id],
     queryFn: async () => {
+      if (isAdmin) {
+        const res = await api.get('/classes');
+        return res.data?.data || [];
+      }
       const res = await api.get('/teachers/my-classes');
-      return res.data?.data || [];
+      const list = res.data?.data || [];
+      if (list.length === 0) {
+        const fallbackRes = await api.get('/classes');
+        return fallbackRes.data?.data || [];
+      }
+      return list;
     },
   });
 
@@ -54,7 +64,7 @@ const BehaviourRecordsPage = () => {
     queryKey: ['classStudentsForBehaviour', form.classId],
     queryFn: async () => {
       if (!form.classId) return [];
-      const res = await api.get(`/students?class=${form.classId}&status=active`);
+      const res = await api.get(`/students?class=${form.classId}&status=active&limit=200`);
       return res.data?.data || [];
     },
     enabled: !!form.classId,

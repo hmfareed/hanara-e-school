@@ -975,13 +975,15 @@ const DailyCollectionsTab = () => {
                           </td>
                           <td className="py-3 px-4">
                             <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
-                              d.busStatus === 'unpaid'
+                              !d.usesBus
+                                ? 'bg-slate-100 text-slate-500 border border-slate-200'
+                                : d.busStatus === 'unpaid'
                                 ? 'bg-rose-50 text-rose-700 border border-rose-200'
                                 : d.busStatus === 'paid'
                                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                 : 'bg-slate-100 text-slate-500'
                             }`}>
-                              {d.busStatus === 'unpaid' ? `Unpaid (${d.busAmount.toFixed(2)} GHS)` : d.busStatus}
+                              {!d.usesBus ? 'No Bus' : d.busStatus === 'unpaid' ? `Unpaid (${d.busAmount.toFixed(2)} GHS)` : d.busStatus}
                             </span>
                           </td>
                           <td className="py-3 px-4 text-right font-black text-rose-600 text-sm">

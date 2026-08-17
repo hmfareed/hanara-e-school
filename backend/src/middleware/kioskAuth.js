@@ -1,4 +1,6 @@
 const crypto = require('crypto');
+const { verifyAccessToken } = require('../services/token.service');
+const User = require('../models/User');
 const AttendanceDevice = require('../models/AttendanceDevice');
 
 function hashToken(token) {
@@ -6,18 +8,14 @@ function hashToken(token) {
 }
 
 /**
- * Middleware for validating Kiosk Device authentication.
- * Accepts device token in X-Kiosk-Device-Token or Authorization: Bearer <deviceToken>
+ * Middleware for validating Kiosk Device authentication or logged-in User session.
+ * Accepts device token in X-Kiosk-Device-Token or Authorization: Bearer <token>
  */
 const kioskAuth = async (req, res, next) => {
   try {
     let deviceToken = req.headers['x-kiosk-device-token'];
 
-    if (!deviceToken && req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
-      deviceToken = req.headers.authorization.split(' ')[1];
-    }
-
-    // If request comes from an authenticated user (e.g. admin or staff logged into web app), allow request
+    // If already authenticated by previous middleware
     if (req.user) {
       req.kioskDevice = {
         deviceId: 'WEB_SESSION',
@@ -26,6 +24,36 @@ const kioskAuth = async (req, res, next) => {
         locationName: 'Web Interface',
       };
       return next();
+    }
+
+    // Check if Authorization header contains a valid user JWT
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer ')) {
+      const token = req.headers.authorization.split(' ')[1];
+      try {
+        const decoded = verifyAccessToken(token);
+        const user = await User.findById(decoded.id).select('-passwordHash -refreshTokenHash');
+        if (user && user.isActive) {
+          req.user = {
+            id: user._id.toString(),
+            role: user.role,
+            email: user.email,
+            refStaff: user.refStaff ? user.refStaff.toString() : null,
+            refGuardian: user.refGuardian ? user.refGuardian.toString() : null,
+            secondaryCapacities: user.secondaryCapacities || [],
+            isSuperAdmin: !!user.isSuperAdmin,
+          };
+          req.kioskDevice = {
+            deviceId: 'WEB_SESSION',
+            deviceName: `User: ${user.email}`,
+            antiProxyLevel: 'standard',
+            locationName: 'Web Interface',
+          };
+          return next();
+        }
+      } catch (jwtErr) {
+        // Not a user JWT, proceed to check as device token
+        if (!deviceToken) deviceToken = token;
+      }
     }
 
     if (!deviceToken) {

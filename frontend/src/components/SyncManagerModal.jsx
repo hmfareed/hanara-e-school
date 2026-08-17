@@ -63,6 +63,8 @@ const formatActionName = (method, url) => {
 export default function SyncManagerModal() {
   const {
     isOnline,
+    forceOffline,
+    toggleForceOffline,
     pendingCount,
     isSyncing,
     isSyncManagerOpen,
@@ -73,12 +75,18 @@ export default function SyncManagerModal() {
     clearAll,
     syncNow,
     fetchLogs,
+    isHydrating,
+    hydrationProgress,
+    offlineReadiness,
+    prepareForOffline,
+    fetchStorageStats,
   } = useOffline();
 
-  const [activeTab, setActiveTab] = useState('queue'); // 'queue' | 'conflicts' | 'history'
+  const [activeTab, setActiveTab] = useState('queue'); // 'queue' | 'conflicts' | 'history' | 'storage'
   const [queuedItems, setQueuedItems] = useState([]);
   const [expandedItems, setExpandedItems] = useState({});
   const [logs, setLogs] = useState([]);
+  const [storageStats, setStorageStats] = useState({ stats: {}, lastBootstrap: null });
   const [loading, setLoading] = useState(true);
   const [actionInProgress, setActionInProgress] = useState(null);
 
@@ -100,6 +108,8 @@ export default function SyncManagerModal() {
       setQueuedItems(items || []);
       const historyLogs = await fetchLogs();
       setLogs(historyLogs || []);
+      const statsObj = await fetchStorageStats();
+      setStorageStats(statsObj || { stats: {}, lastBootstrap: null });
     } catch (err) {
       console.error('Failed to load sync manager data:', err);
     } finally {
@@ -147,6 +157,11 @@ export default function SyncManagerModal() {
     await loadData();
   };
 
+  const handlePrepareOffline = async () => {
+    await prepareForOffline();
+    await loadData();
+  };
+
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in select-none">
       <div className="bg-white rounded-3xl shadow-2xl border border-slate-200 w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden">
@@ -159,12 +174,14 @@ export default function SyncManagerModal() {
             <div>
               <div className="flex items-center space-x-2">
                 <h3 className="font-extrabold text-base tracking-tight text-white">Offline Sync Manager</h3>
-                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  {isOnline ? 'Online Mode' : 'Offline Mode'}
+                <span className={`text-[10px] font-extrabold uppercase px-2 py-0.5 rounded border ${
+                  isOnline ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                }`}>
+                  {isOnline ? 'Online Connected' : 'Offline Mode'}
                 </span>
               </div>
               <p className="text-xs text-[#D9B4B8]/80 mt-0.5">
-                Inspect pending changes, resolve data conflicts, and manage sync history
+                Inspect pending changes, prepare offline database, and manage sync history
               </p>
             </div>
           </div>
@@ -222,10 +239,10 @@ export default function SyncManagerModal() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-slate-200 px-6 bg-white">
+        <div className="flex border-b border-slate-200 px-6 bg-white overflow-x-auto">
           <button
             onClick={() => setActiveTab('queue')}
-            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition cursor-pointer ${
+            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition cursor-pointer shrink-0 ${
               activeTab === 'queue'
                 ? 'border-emerald-700 text-emerald-800 bg-emerald-50/50'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -236,8 +253,20 @@ export default function SyncManagerModal() {
           </button>
 
           <button
+            onClick={() => setActiveTab('storage')}
+            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition cursor-pointer shrink-0 ${
+              activeTab === 'storage'
+                ? 'border-emerald-700 text-emerald-800 bg-emerald-50/50'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Database size={15} />
+            <span>Offline Storage & Prep</span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('conflicts')}
-            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition cursor-pointer ${
+            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition cursor-pointer shrink-0 ${
               activeTab === 'conflicts'
                 ? 'border-amber-600 text-amber-800 bg-amber-50/50'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -249,7 +278,7 @@ export default function SyncManagerModal() {
 
           <button
             onClick={() => setActiveTab('history')}
-            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition cursor-pointer ${
+            className={`py-3.5 px-4 text-xs font-bold border-b-2 flex items-center space-x-2 transition cursor-pointer shrink-0 ${
               activeTab === 'history'
                 ? 'border-emerald-700 text-emerald-800 bg-emerald-50/50'
                 : 'border-transparent text-slate-500 hover:text-slate-800'
@@ -347,7 +376,106 @@ export default function SyncManagerModal() {
             </div>
           )}
 
-          {/* ── TAB 2: CONFLICT INSPECTOR ── */}
+          {/* ── TAB 2: OFFLINE STORAGE & PREP ── */}
+          {activeTab === 'storage' && (
+            <div className="space-y-6">
+              {/* Readiness Banner */}
+              <div className={`p-5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                offlineReadiness.isReady
+                  ? 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                  : 'bg-amber-50/80 border-amber-200 text-amber-950'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className={`h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                    offlineReadiness.isReady ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
+                  }`}>
+                    {offlineReadiness.isReady ? <CheckCircle2 size={20} /> : <AlertTriangle size={20} />}
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-sm">
+                      {offlineReadiness.isReady ? 'Device Ready for 100% Offline Use' : 'Offline Preparation Recommended'}
+                    </h4>
+                    <p className="text-xs opacity-80 mt-0.5 max-w-md">
+                      {offlineReadiness.isReady
+                        ? `Local IndexedDB contains ${offlineReadiness.staffCount} staff, ${offlineReadiness.studentCount} students, and all classes.`
+                        : 'Download relevant school rosters so this tablet or device works seamlessly even if internet drops.'}
+                    </p>
+                    {storageStats.lastBootstrap && (
+                      <span className="text-[10px] opacity-70 block mt-1">
+                        Last Full Preparation: {new Date(storageStats.lastBootstrap).toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <button
+                  onClick={handlePrepareOffline}
+                  disabled={!isOnline || isHydrating}
+                  className="px-5 py-2.5 bg-[#4A1C20] hover:bg-[#361114] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                >
+                  <RefreshCw size={14} className={isHydrating ? 'animate-spin' : ''} />
+                  <span>{isHydrating ? 'Downloading Data...' : 'Prepare for Offline Now'}</span>
+                </button>
+              </div>
+
+              {/* Live Hydration Progress Bar */}
+              {isHydrating && (
+                <div className="bg-white border border-emerald-200 rounded-2xl p-4 shadow-sm space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-slate-700">
+                    <span className="flex items-center gap-2">
+                      <RefreshCw size={13} className="animate-spin text-emerald-600" />
+                      {hydrationProgress.message || 'Preparing local offline database...'}
+                    </span>
+                    <span className="text-emerald-700">{hydrationProgress.percent}%</span>
+                  </div>
+                  <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-600 rounded-full transition-all duration-300"
+                      style={{ width: `${hydrationProgress.percent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Local Storage Metrics Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Staff Roster</span>
+                  <p className="text-xl font-extrabold text-slate-900 mt-1">{storageStats.stats?.staff || 0}</p>
+                  <span className="text-[10px] text-emerald-700 font-semibold">Indexed with QR credentials</span>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Students</span>
+                  <p className="text-xl font-extrabold text-slate-900 mt-1">{storageStats.stats?.students || 0}</p>
+                  <span className="text-[10px] text-slate-500 font-semibold">Offline directory profiles</span>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Classes & Years</span>
+                  <p className="text-xl font-extrabold text-slate-900 mt-1">{storageStats.stats?.classes || 0}</p>
+                  <span className="text-[10px] text-slate-500 font-semibold">Class list & subjects</span>
+                </div>
+
+                <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-2xs">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Scan Events Log</span>
+                  <p className="text-xl font-extrabold text-slate-900 mt-1">{storageStats.stats?.attendanceEvents || 0}</p>
+                  <span className="text-[10px] text-emerald-700 font-semibold">Append-only audit store</span>
+                </div>
+              </div>
+
+              {/* Architecture Rule Callout */}
+              <div className="bg-slate-900 text-white rounded-2xl p-4 text-xs space-y-1">
+                <p className="font-bold text-emerald-400">⚡ Tamale Offline-First Architecture</p>
+                <p className="text-slate-300 leading-relaxed">
+                  All gate scans, mock exam scores, and fee entries write directly to IndexedDB on this device.
+                  When school internet fluctuates or drops, operations continue at 100% speed. Reconnection automatically flushes mutations back to MongoDB.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── TAB 3: CONFLICT INSPECTOR ── */}
           {activeTab === 'conflicts' && (
             <div className="space-y-4">
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start space-x-3 text-amber-900">

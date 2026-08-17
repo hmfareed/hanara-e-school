@@ -14,13 +14,15 @@ const MockSeriesManager = ({ seriesList, onRefresh, selectedSeriesId, setSelecte
     mutationFn: async (data) => {
       return await mockExamApi.createSeries(data);
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       setName('');
       setAcademicYear('');
       setOrder('');
-      queryClient.invalidateQueries();
-      onRefresh();
-      alert('Mock series created successfully.');
+      queryClient.invalidateQueries({ queryKey: ['mockSeriesList'] });
+      if (res?.data?._id && setSelectedSeriesId) {
+        setSelectedSeriesId(res.data._id);
+      }
+      if (onRefresh) onRefresh();
     },
     onError: (err) => {
       alert(err.response?.data?.message || 'Error creating series');
@@ -33,9 +35,8 @@ const MockSeriesManager = ({ seriesList, onRefresh, selectedSeriesId, setSelecte
       return await mockExamApi.closeSeries(id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries();
-      onRefresh();
-      alert('Mock series closed successfully.');
+      queryClient.invalidateQueries({ queryKey: ['mockSeriesList'] });
+      if (onRefresh) onRefresh();
     },
     onError: (err) => {
       alert(err.response?.data?.message || 'Error closing series');
@@ -47,10 +48,12 @@ const MockSeriesManager = ({ seriesList, onRefresh, selectedSeriesId, setSelecte
     mutationFn: async (id) => {
       return await mockExamApi.deleteSeries(id);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries(); // Invalidate all mock exam data & matrix
-      onRefresh();
-      alert('Mock series and associated results deleted successfully.');
+    onSuccess: (_, deletedId) => {
+      queryClient.invalidateQueries({ queryKey: ['mockSeriesList'] });
+      if (selectedSeriesId === deletedId && setSelectedSeriesId) {
+        setSelectedSeriesId('');
+      }
+      if (onRefresh) onRefresh();
     },
     onError: (err) => {
       alert(err.response?.data?.message || 'Error deleting series');

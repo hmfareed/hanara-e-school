@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { getStaffGreeting } from '../../utils/greetingUtils';
 import {
   Server,
   Database,
@@ -44,6 +46,7 @@ const SeverityBadge = ({ severity }) => {
 };
 
 const AdminDashboard = () => {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: integrations = [] } = useQuery({
@@ -88,8 +91,8 @@ const AdminDashboard = () => {
           <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded border border-emerald-500/20 uppercase tracking-wider">
             System Administrator Panel
           </span>
-          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-100">
-            Infrastructure Overview
+          <h2 className="text-2xl md:text-3xl font-extrabold tracking-tight text-slate-100 flex items-center gap-2">
+            {getStaffGreeting(user)} 👋
           </h2>
           <p className="text-slate-300 text-sm max-w-xl leading-relaxed">
             Monitor system health, integration status, and recent critical security events across HANARA SMS.

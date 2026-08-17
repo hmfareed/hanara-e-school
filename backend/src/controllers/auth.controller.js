@@ -2,17 +2,17 @@ const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../services/token.service');
 const logger = require('../utils/logger');
-const { isFormTeacherOfAnyClass } = require('../utils/authHelpers');
+const { isFormTeacherOfAnyClass, isJHS3Teacher } = require('../utils/authHelpers');
 
 const ensureSuperAdminStaffProfile = async (user) => {
   if (user.role === 'superadmin' && !user.refStaff) {
     const Staff = require('../models/Staff');
     const headteacherStaff = await Staff.create({
       title: 'Mr',
-      firstName: 'Headteacher',
-      lastName: 'Admin',
+      firstName: 'Gabriel Osei',
+      lastName: 'Safo Kantanka',
       gender: 'male',
-      phone: user.phone || '0244111222',
+      phone: user.phone || '0242628116',
       email: user.email,
       role: 'admin',
       employmentStatus: 'active',
@@ -233,12 +233,16 @@ const getMe = async (req, res, next) => {
       .populate('refGuardian');
 
     // Attach form teacher flag
-    const formTeacherFlag = await isFormTeacherOfAnyClass(
-      req.user.id,
-      populatedUser?.refStaff?._id?.toString() || null
-    );
+    const refStaffId = populatedUser?.refStaff?._id?.toString() || null;
+    const [formTeacherFlag, jhs3TeacherFlag] = await Promise.all([
+      isFormTeacherOfAnyClass(req.user.id, refStaffId),
+      (populatedUser.role === 'teacher' || (populatedUser.role === 'system_admin' && populatedUser.secondaryCapacities?.includes('teacher')))
+        ? isJHS3Teacher(req.user.id, refStaffId)
+        : Promise.resolve(false),
+    ]);
     const userWithFlag = populatedUser.toObject();
     userWithFlag.isFormTeacher = formTeacherFlag;
+    userWithFlag.isJHS3Teacher = jhs3TeacherFlag;
 
     res.json({ success: true, data: userWithFlag });
   } catch (error) {
@@ -268,17 +272,6 @@ const registerTeacher = async (req, res, next) => {
 
     if (!firstName || !lastName || !email || !password || !role) {
       return res.status(400).json({ success: false, message: 'First name, last name, email, password and role are required.' });
-    }
-
-    if (role === 'teacher') {
-      const { classesAssigned, subjectsAssigned } = req.body;
-      if (!classesAssigned || !Array.isArray(classesAssigned) || classesAssigned.length === 0 ||
-          !subjectsAssigned || !Array.isArray(subjectsAssigned) || subjectsAssigned.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Teacher must be assigned to at least one class and one subject.',
-        });
-      }
     }
 
     // Validate the registration code. Since codes are now multi-use, we do not check isUsed: false.
@@ -314,31 +307,26 @@ const registerTeacher = async (req, res, next) => {
       email: email.toLowerCase(),
       role,
       qualification: qualification || '',
-      employmentStatus: 'active',
-      classesAssigned: role === 'teacher' ? req.body.classesAssigned : [],
+      employmentStatus: 'pending',
+      classesAssigned: (role === 'teacher' && Array.isArray(req.body.classesAssigned)) ? req.body.classesAssigned : [],
     });
 
-    // Create ClassSubjectAssignment records for teacher
-    if (role === 'teacher') {
+    // Create ClassSubjectAssignment records for teacher if provided during registration
+    if (role === 'teacher' && Array.isArray(req.body.classesAssigned) && Array.isArray(req.body.subjectsAssigned) && req.body.classesAssigned.length > 0 && req.body.subjectsAssigned.length > 0) {
       const ClassSubjectAssignment = require('../models/ClassSubjectAssignment');
       const AcademicYear = require('../models/AcademicYear');
       const currentYear = await AcademicYear.findOne({ isCurrent: true });
-      if (!currentYear) {
-        return res.status(400).json({
-          success: false,
-          message: 'No current academic year found. Please configure the academic year first.',
-        });
-      }
-
-      const { classesAssigned, subjectsAssigned } = req.body;
-      for (const classId of classesAssigned) {
-        for (const subjectId of subjectsAssigned) {
-          await ClassSubjectAssignment.create({
-            class: classId,
-            subject: subjectId,
-            teacher: staff._id,
-            academicYear: currentYear._id,
-          });
+      if (currentYear) {
+        const { classesAssigned, subjectsAssigned } = req.body;
+        for (const classId of classesAssigned) {
+          for (const subjectId of subjectsAssigned) {
+            await ClassSubjectAssignment.create({
+              class: classId,
+              subject: subjectId,
+              teacher: staff._id,
+              academicYear: currentYear._id,
+            });
+          }
         }
       }
     }

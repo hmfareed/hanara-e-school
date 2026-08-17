@@ -444,7 +444,14 @@ const StudentProfilePage = () => {
         <div className="flex items-center space-x-4">
           <div className="h-16 w-16 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center text-slate-400 overflow-hidden">
             {student?.photoUrl ? (
-              <img src={student.photoUrl} alt="Student" className="h-full w-full object-cover" />
+              <img
+                src={student.photoUrl}
+                alt="Student"
+                className="h-full w-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
             ) : (
               <User size={32} />
             )}

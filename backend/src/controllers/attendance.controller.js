@@ -202,7 +202,7 @@ const getStudentAttendanceSummary = async (req, res, next) => {
 // GET /api/attendance/history
 const getAttendanceHistory = async (req, res, next) => {
   try {
-    const { classId, subjectId, timeframe, from, to, search } = req.query;
+    const { classId, subjectId, timeframe, date, from, to, search } = req.query;
 
     const filter = {};
     if (classId) filter.class = classId;
@@ -211,22 +211,43 @@ const getAttendanceHistory = async (req, res, next) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    if (timeframe === 'yesterday') {
+    if (date || timeframe === 'specific_date') {
+      const targetDate = date ? new Date(date) : new Date();
+      const start = new Date(targetDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(targetDate);
+      end.setHours(23, 59, 59, 999);
+      filter.date = { $gte: start, $lte: end };
+    } else if (timeframe === 'yesterday') {
       const yesterday = new Date(today);
       yesterday.setDate(today.getDate() - 1);
-      filter.date = { $gte: yesterday, $lt: today };
+      const endYesterday = new Date(yesterday);
+      endYesterday.setHours(23, 59, 59, 999);
+      filter.date = { $gte: yesterday, $lte: endYesterday };
     } else if (timeframe === 'last_week') {
       const lastWeek = new Date(today);
       lastWeek.setDate(today.getDate() - 7);
-      filter.date = { $gte: lastWeek, $lte: new Date() };
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      filter.date = { $gte: lastWeek, $lte: endOfToday };
     } else if (timeframe === 'last_month') {
       const lastMonth = new Date(today);
       lastMonth.setDate(today.getDate() - 30);
-      filter.date = { $gte: lastMonth, $lte: new Date() };
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+      filter.date = { $gte: lastMonth, $lte: endOfToday };
     } else if (from || to) {
       filter.date = {};
-      if (from) filter.date.$gte = new Date(from);
-      if (to) filter.date.$lte = new Date(to);
+      if (from) {
+        const f = new Date(from);
+        f.setHours(0, 0, 0, 0);
+        filter.date.$gte = f;
+      }
+      if (to) {
+        const t = new Date(to);
+        t.setHours(23, 59, 59, 999);
+        filter.date.$lte = t;
+      }
     }
 
     const records = await AttendanceRecord.find(filter)

@@ -172,7 +172,11 @@ const deleteSeries = async (req, res, next) => {
     await series.deleteOne();
 
     logger.info(`Mock series "${series.name}" (${seriesId}) deleted by user ${req.user.id}`);
-    res.json({ success: true, message: `Mock series "${series.name}" and all associated results deleted successfully.` });
+    res.json({
+      success: true,
+      message: `Mock series "${series.name}" and all associated results deleted successfully.`,
+      data: { _id: seriesId, name: series.name },
+    });
   } catch (err) {
     next(err);
   }

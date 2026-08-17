@@ -47,6 +47,10 @@ const getDailyRegister = async (req, res, next) => {
         date: searchDate,
         class: classId,
         records,
+        rates: {
+          feedingFeeAmount: 4,
+          busFareAmount: 5,
+        },
       },
       exists: false,
     });
@@ -85,14 +89,25 @@ const submitDailyRegister = async (req, res, next) => {
     }
 
     const processedRecords = records.map((rec) => {
-      let amountPaid = 0;
-      if (rec.status === 'both') amountPaid = 9;
-      else if (rec.status === 'feeding') amountPaid = 4;
+      let amountPaid = rec.amountPaid;
+      if (amountPaid === undefined || amountPaid === null) {
+        if (rec.status === 'both') amountPaid = 9;
+        else if (rec.status === 'feeding') amountPaid = 4;
+        else if (rec.status === 'bus') amountPaid = 5;
+        else amountPaid = 0;
+      }
+
+      let status = rec.status;
+      if (!status) {
+        if (amountPaid >= 9) status = 'both';
+        else if (amountPaid >= 4) status = 'feeding';
+        else status = 'unpaid';
+      }
 
       return {
         student: rec.student,
-        status: rec.status,
-        amountPaid,
+        status,
+        amountPaid: Number(amountPaid),
       };
     });
 

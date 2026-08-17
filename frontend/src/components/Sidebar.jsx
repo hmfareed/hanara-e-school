@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useOffline } from '../context/OfflineContext';
 import {
   LayoutDashboard,
   Users,
@@ -29,6 +30,9 @@ import {
   Megaphone,
   Fingerprint,
   QrCode,
+  Database,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 
 const navCategories = [
@@ -63,6 +67,7 @@ const navCategories = [
         path: '/mock-exams',
         icon: BookOpenCheck,
         roles: ['superadmin', 'admin', 'teacher', 'system_admin'],
+        requiresJHS3: true, // teachers only see this if assigned to JHS 3
       },
       {
         name: 'Classes & Subjects',
@@ -240,7 +245,8 @@ const navCategories = [
 ];
 
 const Sidebar = ({ sidebarOpen, setSidebarOpen, handleAvatarClick, fileInputRef, handleFileChange }) => {
-  const { user, logout, activeMode, isFormTeacher } = useAuth();
+  const { user, logout, activeMode, isFormTeacher, isJHS3Teacher } = useAuth();
+  const { isOnline, pendingCount, openSyncManager } = useOffline();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -407,6 +413,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, handleAvatarClick, fileInputRef,
           const visibleItems = category.items.filter((item) => {
             if (item.roles && !item.roles.includes(role)) return false;
             if (item.requireFormTeacher && !isFormTeacher) return false;
+            // Gate Mock Exams: teachers must be assigned to JHS 3; admins always see it
+            if (item.requiresJHS3 && role === 'teacher' && !isJHS3Teacher) return false;
             return true;
           });
 
@@ -447,10 +455,41 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, handleAvatarClick, fileInputRef,
 
       {/* Sidebar Footer / User Profile Card */}
       <div className="p-3.5 border-t border-[#310F12]/80 bg-[#2D0D10] relative z-10 shrink-0">
+        {/* Offline Status & Sync Manager Widget */}
+        <div
+          onClick={openSyncManager}
+          className={`mb-2.5 p-2 rounded-xl border flex items-center justify-between cursor-pointer transition shadow-2xs group ${
+            isOnline
+              ? 'bg-[#361114] border-[#6B2228]/50 hover:bg-[#3f1418]'
+              : 'bg-red-950/60 border-red-800/80 hover:bg-red-950'
+          }`}
+          title="Click to open Offline Sync Manager"
+        >
+          <div className="flex items-center gap-2">
+            {isOnline ? (
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] shrink-0" />
+            ) : (
+              <span className="relative flex h-2.5 w-2.5 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+              </span>
+            )}
+            <div className="leading-tight">
+              <span className={`text-[10px] font-extrabold block ${isOnline ? 'text-white' : 'text-red-200'}`}>
+                {isOnline ? 'Online Connected' : 'Offline Mode'}
+              </span>
+              <span className={`text-[9px] font-semibold ${isOnline ? 'text-[#D9B4B8]/70' : 'text-red-300 font-bold'}`}>
+                {pendingCount > 0 ? `${pendingCount} pending sync` : isOnline ? 'Cloud Synced' : 'Working Offline'}
+              </span>
+            </div>
+          </div>
+          <Database size={13} className={`${isOnline ? 'text-[#D9B4B8] group-hover:text-white' : 'text-red-300 group-hover:text-white'} transition`} />
+        </div>
+
         <div className="flex items-center space-x-3 mb-3 bg-[#3B1115] p-2.5 rounded-xl border border-[#6B2228]/50">
           <div
             onClick={handleAvatarClick}
-            className="relative h-10 w-10 bg-[#361114] rounded-full flex items-center justify-center text-white border border-[#852C33]/50 overflow-hidden cursor-pointer group transition-all shrink-0"
+            className="relative h-10 w-10 bg-[#361114] rounded-full flex items-center justify-center text-white border border-[#852C33]/50 overflow-hidden cursor-pointer group transition-all shrink-0 font-extrabold text-sm"
             title="Change profile picture"
           >
             {user?.photoUrl || user?.refStaff?.photoUrl ? (
@@ -458,13 +497,12 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, handleAvatarClick, fileInputRef,
                 src={user.photoUrl || user.refStaff.photoUrl}
                 alt="User Avatar"
                 className="h-full w-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
               />
             ) : (
-              <img
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80"
-                alt="Avatar"
-                className="h-full w-full object-cover"
-              />
+              <span>{getUserName()[0]?.toUpperCase() || 'U'}</span>
             )}
           </div>
           {fileInputRef && (

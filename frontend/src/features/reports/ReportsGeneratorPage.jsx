@@ -56,14 +56,20 @@ const ReportsGeneratorPage = () => {
     }
   }, [academicYears, selectedYear]);
 
-  // Fetch Teacher Classes
+  // Fetch Classes
   const { data: classes = [] } = useQuery({
-    queryKey: ['myTeacherClassesList'],
+    queryKey: ['reportsGeneratorClassesList'],
     queryFn: async () => {
       const res = await api.get('/classes');
       return res.data?.data || [];
     },
   });
+
+  useEffect(() => {
+    if (classes.length > 0 && !selectedClass) {
+      setSelectedClass(classes[0]._id);
+    }
+  }, [classes, selectedClass]);
 
   // Fetch Class Student Roster
   const isFilterReady = !!selectedClass && !!selectedYear && !!selectedTerm;
@@ -267,14 +273,13 @@ const ReportsGeneratorPage = () => {
           <div className="flex items-center bg-slate-100 p-1 rounded-2xl">
             <button
               onClick={() => setActiveTab('remarks')}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition ${activeTab === 'remarks' ? 'bg-[#78282E] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'remarks' ? 'bg-[#78282E] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
             >
               Teacher Remarks
             </button>
             <button
               onClick={() => setActiveTab('preview')}
-              disabled={reportCardsData.length === 0}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition disabled:opacity-40 ${activeTab === 'preview' ? 'bg-[#78282E] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${activeTab === 'preview' ? 'bg-[#78282E] text-white shadow-xs' : 'text-slate-600 hover:text-slate-900'}`}
             >
               Report Cards Preview ({reportCardsData.length})
             </button>
@@ -387,12 +392,23 @@ const ReportsGeneratorPage = () => {
 
       {/* ── TAB 2: Official Print-Ready Report Cards ── */}
       {activeTab === 'preview' && (
-        <div id="report-cards-print-area" className="space-y-12">
-          {reportCardsData.map((card, cardIdx) => (
-            <div
-              key={card.reportId || cardIdx}
-              className="report-card-page max-w-4xl mx-auto bg-white border-2 border-slate-900 p-8 shadow-xl rounded-3xl space-y-6 text-slate-900 select-none print:shadow-none print:border-none print:rounded-none print:p-0"
-            >
+        reportCardsData.length === 0 ? (
+          <div className="no-print bg-white rounded-3xl border border-slate-200/80 p-12 text-center shadow-xs space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 text-[#78282E] flex items-center justify-center mx-auto">
+              <FileText className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-bold text-slate-800">No Report Cards Generated Yet</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              Select a class, academic year, and term in the toolbar above, then click <span className="font-bold text-emerald-700">"Generate Class Reports"</span> to compile and preview official terminal report cards with verification QR codes.
+            </p>
+          </div>
+        ) : (
+          <div id="report-cards-print-area" className="space-y-12">
+            {reportCardsData.map((card, cardIdx) => (
+              <div
+                key={card.reportId || cardIdx}
+                className="report-card-page max-w-4xl mx-auto bg-white border-2 border-slate-900 p-8 shadow-xl rounded-3xl space-y-6 text-slate-900 select-none print:shadow-none print:border-none print:rounded-none print:p-0"
+              >
               {/* Header Crest Banner */}
               <div className="border-b-2 border-slate-900 pb-4 flex items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -534,6 +550,7 @@ const ReportsGeneratorPage = () => {
             </div>
           ))}
         </div>
+        )
       )}
     </div>
   );

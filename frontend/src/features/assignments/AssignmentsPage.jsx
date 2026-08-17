@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import Skeleton from '../../components/Skeleton';
 import {
   FileText,
   Plus,
@@ -146,6 +147,36 @@ const AssignmentsPage = () => {
       scores: scoringGrid,
     });
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6 pb-12">
+        <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton.Line width="w-56" height="h-7" />
+            <Skeleton.Line width="w-80" height="h-4" />
+          </div>
+          <Skeleton.Box w="w-44" h="h-10" rounded="rounded-xl" />
+        </div>
+        <div className="flex gap-3">
+          <Skeleton.Box w="w-48" h="h-10" rounded="rounded-xl" />
+          <Skeleton.Box w="w-48" h="h-10" rounded="rounded-xl" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 shadow-xs space-y-3">
+              <Skeleton.Line width="w-48" height="h-5" />
+              <Skeleton.Line width="w-32" height="h-4" />
+              <div className="flex gap-2 pt-2">
+                <Skeleton.Box w="w-24" h="h-8" rounded="rounded-xl" />
+                <Skeleton.Box w="w-24" h="h-8" rounded="rounded-xl" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-12">

@@ -128,40 +128,6 @@ export default function OfflineBanner() {
     );
   }
 
-  // ── Online + pending changes (reconnected but not yet synced) ─────────────
-  if (isOnline && pendingCount > 0) {
-    return (
-      <div className="fixed top-0 left-0 right-0 z-[200]">
-        <div className="bg-indigo-600 text-white text-xs font-semibold px-4 py-2.5 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <CloudUpload size={14} />
-            <span>
-              {pendingCount} offline change{pendingCount !== 1 ? 's' : ''} ready to sync
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={openSyncManager}
-              className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer"
-            >
-              <SlidersHorizontal size={12} />
-              Inspect Queue
-            </button>
-
-            <button
-              onClick={syncNow}
-              className="flex items-center gap-1.5 bg-white text-indigo-900 hover:bg-indigo-50 px-3 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer shadow-2xs"
-            >
-              <RefreshCw size={12} />
-              Sync Now
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return null;
 }
 
@@ -179,27 +145,33 @@ export function ConnectivityDot() {
         isOnline
           ? pendingCount > 0
             ? `Online — ${pendingCount} pending sync. Click to inspect queue.`
-            : 'Online — Click to open Sync Manager'
-          : `Offline — ${pendingCount} pending items. Click to inspect queue.`
+            : 'Online — Cloud Connected. Click to open Sync Manager'
+          : `Offline — ${pendingCount} pending items will sync when reconnected. Click to open Sync Manager.`
       }
-      className="relative flex items-center justify-center w-8 h-8 rounded-xl hover:bg-slate-100 transition cursor-pointer border border-transparent hover:border-slate-200"
+      className={`relative flex items-center justify-center w-8 h-8 rounded-xl transition cursor-pointer ${
+        isOnline
+          ? 'hover:bg-slate-100 border border-transparent hover:border-slate-200'
+          : 'bg-red-50 hover:bg-red-100 border border-red-200 shadow-2xs'
+      }`}
     >
       {isOnline ? (
         <>
-          <Wifi size={16} className="text-emerald-600" />
+          <Wifi size={18} className="text-emerald-600 stroke-[2.2]" />
           {pendingCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 h-4 w-4 bg-amber-500 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-black text-white shadow-2xs">
+            <span className="absolute -top-1 -right-1 h-4 w-4 bg-amber-500 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-black text-white shadow-2xs">
               {pendingCount > 9 ? '9+' : pendingCount}
             </span>
           )}
         </>
       ) : (
         <>
-          <WifiOff size={16} className="text-amber-500 animate-pulse" />
-          {pendingCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 h-4 w-4 bg-amber-600 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-black text-white shadow-2xs">
+          <WifiOff size={18} className="text-red-500 animate-pulse stroke-[2.5]" />
+          {pendingCount > 0 ? (
+            <span className="absolute -top-1 -right-1 h-4 w-4 bg-red-600 rounded-full border-2 border-white flex items-center justify-center text-[8px] font-black text-white shadow-2xs animate-bounce">
               {pendingCount > 9 ? '9+' : pendingCount}
             </span>
+          ) : (
+            <span className="absolute -top-0.5 -right-0.5 h-2 w-2 bg-red-500 rounded-full animate-ping" />
           )}
         </>
       )}

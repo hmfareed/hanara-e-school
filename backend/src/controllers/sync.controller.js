@@ -1,17 +1,13 @@
-/**
- * sync.controller.js — Backend Sync Endpoints
- *
- * GET  /api/sync/pull?store=<storeName>&since=<ISO>
- *   Returns all documents in the given collection updated after `since`.
- *   Used by the frontend to pull fresh data after reconnecting.
- *
- * POST /api/sync/push
- *   Accepts an array of mutation objects { method, url, body }.
- *   Executes them in order and returns per-item results.
- *   This is the server-side companion to the frontend syncQueue flush.
- */
-
 const mongoose = require('mongoose');
+const AttendanceCredential = require('../models/AttendanceCredential');
+const Staff = require('../models/Staff');
+const Student = require('../models/Student');
+const Class = require('../models/Class');
+const AcademicYear = require('../models/AcademicYear');
+const FeeStructure = require('../models/FeeStructure');
+const SystemSetting = require('../models/SystemSetting');
+const MockExamSeries = require('../models/MockExamSeries');
+const BeceCandidate = require('../models/BeceCandidate');
 
 // Map store name → Mongoose model name
 const STORE_MODEL_MAP = {
@@ -29,14 +25,114 @@ const STORE_MODEL_MAP = {
   behaviour: 'BehaviourRecord',
   academicYears: 'AcademicYear',
   settings: 'SystemSetting',
+  mockExams: 'MockExamSeries',
+  bece: 'BeceCandidate',
+  staffAttendance: 'StaffAttendanceRecord',
+};
+
+/**
+ * GET /api/sync/bootstrap
+ * 
+ * Returns a consolidated offline initialization bundle for client cache hydration.
+ * Populates IndexedDB on first-time login or on explicit "Prepare for Offline" action.
+ */
+exports.bootstrap = async (req, res) => {
+  try {
+    const [
+      staffList,
+      credentials,
+      studentsList,
+      classesList,
+      academicYearsList,
+      feeStructuresList,
+      mockSeriesList,
+      settingsList,
+      beceList,
+    ] = await Promise.all([
+      Staff.find({ employmentStatus: { $ne: 'terminated' } })
+        .select('firstName lastName otherNames staffId title role department phone email photoUrl gender employmentStatus')
+        .lean(),
+      AttendanceCredential.find({ status: 'ACTIVE' })
+        .select('staff credentialHash tokenPrefix status')
+        .lean(),
+      Student.find({ status: { $ne: 'withdrawn' } })
+        .select('firstName lastName otherNames admissionNumber currentClass gender dob status photoUrl transport feeCategory scholarshipStatus dailyFeeConfig guardians guardianName guardianPhone')
+        .populate('currentClass', 'name code grade')
+        .lean(),
+      Class.find()
+        .select('name code grade stream stage formTeacher classTeacher roomNumber capacity subjects')
+        .populate('formTeacher', 'firstName lastName staffId')
+        .lean(),
+      AcademicYear.find()
+        .select('name code isCurrent startDate endDate terms')
+        .lean(),
+      FeeStructure.find()
+        .select('academicYear term name category feeItems totalAmount')
+        .lean(),
+      MockExamSeries.find({ status: { $ne: 'archived' } })
+        .select('name academicYear term startDate endDate status')
+        .lean(),
+      SystemSetting.find()
+        .select('key value')
+        .lean(),
+      BeceCandidate.find()
+        .populate('student', 'firstName lastName otherNames admissionNumber currentClass gender photoUrl status dob')
+        .lean(),
+    ]);
+
+    // Map active credential hashes onto staff records for instant offline QR verification
+    const credentialMap = new Map();
+    credentials.forEach((c) => {
+      if (c.staff) {
+        credentialMap.set(c.staff.toString(), {
+          credentialHash: c.credentialHash,
+          tokenPrefix: c.tokenPrefix,
+        });
+      }
+    });
+
+    const enrichedStaff = staffList.map((s) => {
+      const cred = credentialMap.get(s._id.toString());
+      return {
+        ...s,
+        credentialHash: cred?.credentialHash || null,
+        tokenPrefix: cred?.tokenPrefix || null,
+      };
+    });
+
+    return res.json({
+      success: true,
+      timestamp: new Date().toISOString(),
+      counts: {
+        staff: enrichedStaff.length,
+        students: studentsList.length,
+        classes: classesList.length,
+        academicYears: academicYearsList.length,
+        feeStructures: feeStructuresList.length,
+        mockExams: mockSeriesList.length,
+        beceCandidates: beceList.length,
+      },
+      data: {
+        staff: enrichedStaff,
+        students: studentsList,
+        classes: classesList,
+        academicYears: academicYearsList,
+        feeStructures: feeStructuresList,
+        mockExams: mockSeriesList,
+        settings: settingsList,
+        beceCandidates: beceList,
+        serverTimestamp: new Date().toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error('[Sync] Bootstrap error:', err);
+    return res.status(500).json({ success: false, message: 'Sync bootstrap failed' });
+  }
 };
 
 /**
  * GET /api/sync/pull
  * Query: store=<storeName>&since=<ISO timestamp>
- *
- * Returns all documents from the mapped collection that were
- * created or updated after the `since` timestamp.
  */
 exports.pull = async (req, res) => {
   try {
@@ -80,14 +176,6 @@ exports.pull = async (req, res) => {
 /**
  * POST /api/sync/push
  * Body: { mutations: [{ method, url, body }] }
- *
- * Processes an array of mutations from the frontend sync queue.
- * Each mutation is executed against the internal Express router.
- * Returns per-item success/failure results.
- *
- * Note: This is a lightweight implementation.
- * For each mutation we construct a small inline handler.
- * A production refinement would use a proper action dispatcher.
  */
 exports.push = async (req, res) => {
   const { mutations = [] } = req.body;
@@ -99,7 +187,6 @@ exports.push = async (req, res) => {
     });
   }
 
-  // Cap at 200 mutations per push to prevent abuse
   const batch = mutations.slice(0, 200);
   const results = [];
 
@@ -112,12 +199,10 @@ exports.push = async (req, res) => {
     });
   }
 
-  // The primary sync path is the frontend's `flush()` which calls individual
-  // API endpoints directly. This /push endpoint is provided as an alternative
-  // batch entry point and for future webhook-style integrations.
   return res.json({
     success: true,
     processed: results.length,
     results,
   });
 };
+

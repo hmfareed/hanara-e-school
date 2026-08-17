@@ -1,15 +1,25 @@
 import axios from 'axios';
-import { putAll, getAll, putOne, deleteOne, enqueueSync } from './db';
+import { putAll, getAll, putOne, deleteOne, clearStore, enqueueSync, getOne } from './db';
 
 // ── Raw Axios Instance for live network requests ─────────────────────────────
 const rawApi = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
   withCredentials: true,
-  timeout: 10000, // 10 seconds timeout to prevent pending request hangs
+  timeout: 20000, // 20 seconds timeout for remote MongoDB cloud connections & mobile latency
   headers: {
     'Content-Type': 'application/json',
   },
 });
+
+// Track last known network connectivity
+let lastKnownOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+
+export function notifyNetworkStatus(online) {
+  if (lastKnownOnline !== online) {
+    lastKnownOnline = online;
+    window.dispatchEvent(new CustomEvent(online ? 'app-online' : 'app-offline'));
+  }
+}
 
 // Request interceptor to attach JWT access token
 rawApi.interceptors.request.use(
@@ -23,7 +33,7 @@ rawApi.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle silent token refresh
+// Response interceptor to handle silent token refresh and network failure notification
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -39,9 +49,21 @@ const processQueue = (error, token = null) => {
 };
 
 rawApi.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    notifyNetworkStatus(true);
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
+
+    // Detect true network disconnect (only when browser reports offline or host completely unreachable)
+    const isNetworkError =
+      (typeof navigator !== 'undefined' && !navigator.onLine) ||
+      (error.code === 'ERR_NETWORK' && !error.response);
+
+    if (isNetworkError) {
+      notifyNetworkStatus(false);
+    }
 
     // Catch 401 errors except login and refresh endpoints themselves
     if (
@@ -68,7 +90,7 @@ rawApi.interceptors.response.use(
         const res = await axios.post(
           `${rawApi.defaults.baseURL}/auth/refresh`,
           {},
-          { withCredentials: true }
+          { withCredentials: true, timeout: 15000 }
         );
 
         if (res.data?.success && res.data?.data?.accessToken) {
@@ -77,12 +99,16 @@ rawApi.interceptors.response.use(
           rawApi.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
           processQueue(null, newToken);
+          notifyNetworkStatus(true);
           return rawApi(originalRequest);
         }
       } catch (refreshError) {
         processQueue(refreshError, null);
-        localStorage.removeItem('accessToken');
-        window.dispatchEvent(new Event('auth-logout'));
+        // Only log out if refresh was explicitly rejected with 401 by a reachable server
+        if (refreshError.response?.status === 401) {
+          localStorage.removeItem('accessToken');
+          window.dispatchEvent(new Event('auth-logout'));
+        }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
@@ -112,7 +138,7 @@ const URL_STORE_MAP = [
   { pattern: /\/academic-years/, store: 'academicYears' },
   { pattern: /\/settings/, store: 'settings' },
   { pattern: /\/parent/, store: 'parent' },
-  { pattern: /\/bece/, store: 'bece' },
+  { pattern: /\/bece-candidates|\/bece/, store: 'bece' },
   { pattern: /\/mock-exams/, store: 'mockExams' },
   { pattern: /\/transport/, store: 'transport' },
   { pattern: /\/store/, store: 'store' },
@@ -124,15 +150,25 @@ function resolveStore(url) {
   return entry ? entry.store : null;
 }
 
+function isOnlineOnlyMutation(url) {
+  return /\/auth\/|\/fees\/payments\/momo|\/momo\/|\/admin\/backups|\/restore|\/mock-exams\/.*\/(lock|submit)/.test(url || '');
+}
+
+function createMutationId() {
+  return crypto.randomUUID?.() || `mutation_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
 // ── Offline-Aware GET Handler ────────────────────────────────────────────────
 async function offlineGet(url, config = {}) {
   const storeName = resolveStore(url);
 
-  if (navigator.onLine) {
+  // If browser reports online, always attempt live network request first
+  if (typeof navigator === 'undefined' || navigator.onLine) {
     try {
       const response = await rawApi.get(url, config);
+      notifyNetworkStatus(true);
 
-      // Cache successful response data into IndexedDB asynchronously in background (non-blocking)
+      // Cache successful response data into IndexedDB asynchronously (non-blocking)
       if (storeName && response.data?.success) {
         const payload = response.data?.data;
         (async () => {
@@ -154,38 +190,149 @@ async function offlineGet(url, config = {}) {
 
       return response;
     } catch (err) {
-      // If server is down (5xx / 503 / Mongo DNS error) or network error occurs
-      const isServerDown = !err.response || err.response.status >= 500;
-      if (isServerDown) {
+      const isServerDown =
+        (typeof navigator !== 'undefined' && !navigator.onLine) ||
+        (err.code === 'ERR_NETWORK' && !err.response);
+
+      if (isServerDown || !err.response || err.response.status >= 500) {
+        if (typeof navigator !== 'undefined' && !navigator.onLine) {
+          notifyNetworkStatus(false);
+        }
         return await loadCachedOrFallback(storeName, url, config, err);
       }
       throw err;
     }
   }
 
-  // Offline mode — load from IndexedDB or safe fallback
+  // Offline mode — load immediately from local IndexedDB (instant < 5ms response)
   return await loadCachedOrFallback(storeName, url, config);
 }
 
-// ── Helper to load cached data or return safe fallback for GET requests ───
-async function loadCachedOrFallback(storeName, url, config, originalErr = null) {
+// ── Helper to load cached data, filter in-memory, or return safe fallback ────
+async function loadCachedOrFallback(storeName, url, config = {}, originalErr = null) {
+  // Extract query params from URL string and config.params
+  const urlObj = new URL(url, 'http://localhost');
+  const params = { ...Object.fromEntries(urlObj.searchParams), ...(config.params || {}) };
+
+  // 1. If requesting a single resource by ID (e.g. /students/12345 or /staff/12345)
+  const pathParts = urlObj.pathname.split('/').filter(Boolean);
+  const lastSegment = pathParts[pathParts.length - 1];
+  const isSingleIdQuery = lastSegment && lastSegment.length > 8 && !['stats', 'summary', 'me', 'bootstrap', 'ping'].includes(lastSegment);
+
   if (storeName) {
     try {
-      const cached = await getAll(storeName);
+      if (isSingleIdQuery) {
+        const singleItem = await getOne(storeName, lastSegment);
+        if (singleItem) {
+          return {
+            data: { success: true, data: singleItem, _fromCache: true },
+            status: 200,
+            statusText: 'OK (cached single)',
+            headers: {},
+            config,
+          };
+        }
+      }
+
+      let cached = await getAll(storeName);
+
+      // Synthesize BECE candidates from JHS 3 students if store is empty
+      if (storeName === 'bece' && (!cached || cached.length === 0)) {
+        try {
+          const allStudents = await getAll('students');
+          const jhsStudents = (allStudents || []).filter((s) => {
+            const className = String(s.currentClass?.name || s.currentClass?.code || s.className || '').toLowerCase();
+            return className.includes('jhs 3') || className.includes('jhs3') || className.includes('basic 9') || className.includes('bs9');
+          });
+          if (jhsStudents.length > 0) {
+            cached = jhsStudents.map((s, idx) => ({
+              _id: `bece_${s._id}`,
+              student: s,
+              academicYear: params.academicYear || '2026/2027',
+              registrationStatus: 'registered',
+              indexNumber: s.admissionNumber ? `100100${String(idx + 1).padStart(3, '0')}` : '',
+              mockResults: [],
+              notes: 'Pre-registered BECE candidate',
+            }));
+          }
+        } catch (beceSynthErr) {
+          console.warn('[OfflineAPI] BECE synthesis error:', beceSynthErr);
+        }
+      }
+
       if (cached && cached.length > 0) {
-        // If single object payload was cached
-        let responseData = cached;
-        if (cached.length === 1 && cached[0]._id && cached[0]._id.startsWith('_')) {
+        // Filter in-memory if query parameters are present
+        let filtered = [...cached];
+
+        // Search query filter
+        if (params.search && typeof params.search === 'string') {
+          const q = params.search.trim().toLowerCase();
+          filtered = filtered.filter((item) => {
+            const studentObj = item.student || item;
+            const fullName = `${studentObj.firstName || ''} ${studentObj.lastName || ''} ${studentObj.name || ''}`.toLowerCase();
+            const identifier = `${studentObj.admissionNumber || ''} ${studentObj.staffId || ''} ${item.indexNumber || ''} ${studentObj.code || ''}`.toLowerCase();
+            const phoneOrEmail = `${studentObj.phone || ''} ${studentObj.email || ''}`.toLowerCase();
+            return fullName.includes(q) || identifier.includes(q) || phoneOrEmail.includes(q);
+          });
+        }
+
+        // Status filter
+        if (params.status && params.status !== 'all') {
+          filtered = filtered.filter((item) => {
+            if (!item.status && params.status === 'active') return true;
+            return (
+              item.status === params.status ||
+              item.employmentStatus === params.status ||
+              item.registrationStatus === params.status
+            );
+          });
+        }
+
+        // Academic Year filter
+        if (params.academicYear) {
+          filtered = filtered.filter((item) => {
+            if (!item.academicYear) return true;
+            return item.academicYear === params.academicYear;
+          });
+        }
+
+        // Class filter
+        if (params.class) {
+          filtered = filtered.filter((item) => {
+            const studentObj = item.student || item;
+            const cId = studentObj.currentClass?._id || studentObj.currentClass || studentObj.class;
+            return String(cId) === String(params.class);
+          });
+        }
+
+        // Gender filter
+        if (params.gender) {
+          filtered = filtered.filter((item) => {
+            const studentObj = item.student || item;
+            return String(studentObj.gender || '').toLowerCase() === String(params.gender).toLowerCase();
+          });
+        }
+
+        // Pagination
+        const page = Number(params.page) || 1;
+        const limit = Number(params.limit) || filtered.length;
+        const total = filtered.length;
+        const totalPages = Math.ceil(total / (limit || 1)) || 1;
+        const startIndex = (page - 1) * limit;
+        const paginatedData = limit < filtered.length ? filtered.slice(startIndex, startIndex + limit) : filtered;
+
+        // If single object payload was cached (e.g. dashboard summary)
+        let responseData = paginatedData;
+        if (cached.length === 1 && cached[0]._id && String(cached[0]._id).startsWith('_')) {
           const { _id, ...rest } = cached[0];
           responseData = rest;
         }
 
-        console.info(`[OfflineAPI] Serving cached ${storeName} for ${url}`);
         return {
           data: {
             success: true,
             data: responseData,
-            meta: { page: 1, limit: Array.isArray(responseData) ? responseData.length : 1, total: Array.isArray(responseData) ? responseData.length : 1, totalPages: 1 },
+            meta: { page, limit, total, totalPages, pages: totalPages },
             _fromCache: true,
           },
           status: 200,
@@ -199,8 +346,78 @@ async function loadCachedOrFallback(storeName, url, config, originalErr = null) 
     }
   }
 
+
+  // 2. Synthesize Dashboard / Stats if requested while offline
+  if (url?.includes('summary') || url?.includes('stats') || url?.includes('overview')) {
+    try {
+      const [allStudents, allStaff, allClasses] = await Promise.all([
+        getAll('students'),
+        getAll('staff'),
+        getAll('classes'),
+      ]);
+
+      const classList = (allClasses || []).map((c) => {
+        const sCount = (allStudents || []).filter((s) => {
+          const cId = s.currentClass?._id || s.currentClass || s.class;
+          return String(cId) === String(c._id);
+        }).length;
+        return {
+          _id: c._id,
+          name: c.name,
+          stage: c.stage || 'Basic Education',
+          studentCount: sCount,
+          attendanceRate: 100,
+        };
+      });
+
+      const syntheticStats = {
+        totalStudents: allStudents?.length || 0,
+        totalStaff: allStaff?.length || 0,
+        todayClassesCount: allClasses?.length || 0,
+        attendance: {
+          present: allStudents?.length || 0,
+          absent: 0,
+          late: 0,
+          rate: 100,
+          totalMarked: allStudents?.length || 0,
+        },
+        pendingAttendanceClasses: [],
+        myClasses: classList,
+        recentAdmissions: (allStudents || []).slice(0, 5).map((s) => ({
+          _id: s._id,
+          firstName: s.firstName,
+          lastName: s.lastName,
+          admissionNumber: s.admissionNumber,
+          currentClass: s.currentClass ? { name: s.currentClass.name || 'Assigned' } : null,
+          createdAt: new Date().toISOString(),
+        })),
+        recentAnnouncements: [],
+        pendingMockEntries: 0,
+        upcomingBirthdays: [],
+        isOfflineSynthetic: true,
+      };
+
+      return {
+        data: { success: true, data: syntheticStats, _fromCache: true },
+        status: 200,
+        statusText: 'OK (offline synthetic stats)',
+        headers: {},
+        config,
+      };
+    } catch (e) {
+      // Fall through to empty fallback
+    }
+  }
+
+  // If endpoint is an auth endpoint or unknown endpoint that shouldn't be faked
+  if (!storeName && (url?.includes('/auth/') || url?.includes('/sync/'))) {
+    if (originalErr) throw originalErr;
+    const err = new Error('Offline — network endpoint unavailable');
+    err.code = 'ERR_NETWORK';
+    throw err;
+  }
+
   // Safe fallback response when no cache exists yet (prevents 503 page crash)
-  console.info(`[OfflineAPI] No cache found for ${url}. Returning safe empty fallback.`);
   return {
     data: {
       success: true,
@@ -220,35 +437,59 @@ async function loadCachedOrFallback(storeName, url, config, originalErr = null) 
 async function offlineMutate(method, url, data = null, config = {}) {
   const methodUpper = method.toUpperCase();
 
-  // Never queue authentication or token endpoints offline
-  if (url && (url.includes('/auth/') || url.includes('/login') || url.includes('/refresh'))) {
-    return rawApi({ method, url, data, ...config });
+  const requestConfig = { method, url, ...config };
+  if (data !== null && data !== undefined) {
+    requestConfig.data = data;
   }
 
-  if (navigator.onLine) {
+  // Never queue authentication or token endpoints offline
+  if (url && (url.includes('/auth/') || url.includes('/login') || url.includes('/refresh'))) {
+    return rawApi(requestConfig);
+  }
+
+  if (isOnlineOnlyMutation(url) && (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    const error = new Error('This action requires an active internet connection and cannot be queued.');
+    error.code = 'OFFLINE_ACTION_NOT_ALLOWED';
+    throw error;
+  }
+
+  if (typeof navigator === 'undefined' || navigator.onLine) {
     try {
-      const response = await rawApi({ method, url, data, ...config });
+      const response = await rawApi(requestConfig);
+      notifyNetworkStatus(true);
 
       // Update local IndexedDB cache on successful live mutation
       const storeName = resolveStore(url);
-      if (storeName && response.data?.data) {
+      if (storeName) {
         if (methodUpper === 'DELETE') {
-          const parts = url.split('/');
-          const id = parts[parts.length - 1];
-          if (id && id.length > 10) {
-            await deleteOne(storeName, id);
+          if (url.includes('/month/')) {
+            await clearStore(storeName);
+          } else {
+            const parts = url.split('?')[0].split('/');
+            const id = parts[parts.length - 1];
+            if (id && id.length > 10) {
+              await deleteOne(storeName, id);
+            }
           }
-        } else if (response.data.data._id) {
+        } else if (response.data?.data?._id) {
           await putOne(storeName, response.data.data);
         }
       }
 
       return response;
     } catch (err) {
-      const isServerDown = !err.response || err.response.status >= 500;
+      const isServerDown =
+        err.code === 'ERR_NETWORK' ||
+        err.code === 'ECONNABORTED' ||
+        !err.response ||
+        err.response.status >= 500;
+
       if (isServerDown) {
+        notifyNetworkStatus(false);
         console.warn(`[OfflineAPI] Server down on ${methodUpper} ${url}. Queueing mutation in IndexedDB syncQueue.`);
-        await enqueueSync(methodUpper, url, data);
+        const storeName = resolveStore(url);
+        const clientMutationId = createMutationId();
+        await enqueueSync(methodUpper, url, data, { clientMutationId, storeName });
         return {
           data: {
             success: true,
@@ -267,11 +508,12 @@ async function offlineMutate(method, url, data = null, config = {}) {
   }
 
   // Offline mode — enqueue mutation into syncQueue
-  await enqueueSync(methodUpper, url, data);
-  console.info(`[OfflineAPI] Offline — Queued ${methodUpper} ${url}`);
+  notifyNetworkStatus(false);
+  const storeName = resolveStore(url);
+  const clientMutationId = createMutationId();
+  await enqueueSync(methodUpper, url, data, { clientMutationId, storeName });
 
   // Optimistically save item to IndexedDB if store is resolved
-  const storeName = resolveStore(url);
   if (storeName && data) {
     const itemToSave = { ...data, _id: data._id || `temp_${Date.now()}` };
     await putOne(storeName, itemToSave);
@@ -307,7 +549,7 @@ api.get = (url, config) => offlineGet(url, config);
 api.post = (url, data, config) => offlineMutate('post', url, data, config);
 api.put = (url, data, config) => offlineMutate('put', url, data, config);
 api.patch = (url, data, config) => offlineMutate('patch', url, data, config);
-api.delete = (url, config) => offlineMutate('delete', url, config);
+api.delete = (url, config) => offlineMutate('delete', url, null, config);
 api.defaults = rawApi.defaults;
 api.interceptors = rawApi.interceptors;
 

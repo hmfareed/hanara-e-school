@@ -20,6 +20,7 @@ import {
   VolumeX,
 } from 'lucide-react';
 import api from '../../services/api';
+import { processOfflineScan } from '../../services/staffAttendanceOffline';
 
 // ─── IndexedDB Setup for Offline Scanning Queue ─────────────────────────────
 const DB_NAME = 'HanaraKioskDB';
@@ -255,35 +256,56 @@ const AttendanceKioskPage = () => {
       }
 
       if (!navigator.onLine) {
-        // Queue offline
-        await queueOfflineScan({ credential: decodedText, latitude: lat, longitude: lng, timestamp: new Date() });
-        await updateOfflineCount();
-
-        if (soundEnabled) playChime('success');
-        setScanResult({
-          offline: true,
-          message: 'Attendance recorded locally (Offline Mode). Will sync when reconnected.',
-          data: {
-            staff: { name: 'Staff Member', staffId: 'Offline Scan' },
-          },
+        // Process offline with local cryptographic verification and display true staff details
+        const offlineResult = await processOfflineScan({
+          credential: decodedText,
+          latitude: lat,
+          longitude: lng,
         });
-      } else {
-        const response = await api.post(
-          '/staff-attendance/scan',
-          { credential: decodedText, latitude: lat, longitude: lng },
-          { headers }
-        );
 
-        const data = response.data;
-        setScanResult(data);
+        setScanResult(offlineResult);
 
         if (soundEnabled) {
-          if (data.eventType === 'REJECTED' || !data.success) {
+          if (offlineResult.eventType === 'REJECTED' || !offlineResult.success) {
             playChime('rejected');
-          } else if (data.data?.record?.status === 'late') {
+          } else if (offlineResult.data?.record?.status === 'late') {
             playChime('late');
           } else {
             playChime('success');
+          }
+        }
+      } else {
+        try {
+          const response = await api.post(
+            '/staff-attendance/scan',
+            { credential: decodedText, latitude: lat, longitude: lng },
+            { headers }
+          );
+
+          const data = response.data;
+          setScanResult(data);
+
+          if (soundEnabled) {
+            if (data.eventType === 'REJECTED' || !data.success) {
+              playChime('rejected');
+            } else if (data.data?.record?.status === 'late') {
+              playChime('late');
+            } else {
+              playChime('success');
+            }
+          }
+        } catch (serverErr) {
+          const isOfflineOr5xx = !serverErr.response || serverErr.response.status >= 500;
+          if (isOfflineOr5xx) {
+            const offlineResult = await processOfflineScan({
+              credential: decodedText,
+              latitude: lat,
+              longitude: lng,
+            });
+            setScanResult(offlineResult);
+            if (soundEnabled) playChime(offlineResult.success ? 'success' : 'rejected');
+          } else {
+            throw serverErr;
           }
         }
       }

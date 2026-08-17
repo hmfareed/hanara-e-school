@@ -32,7 +32,11 @@ let mongoServer;
 
 beforeAll(async () => {
   console.log('\n[JEST SETUP] Starting in-memory MongoDB server...');
-  mongoServer = await MongoMemoryServer.create();
+  mongoServer = await MongoMemoryServer.create({
+    instance: {
+      launchTimeout: 60000
+    }
+  });
   const mongoUri = mongoServer.getUri();
   process.env.MONGODB_URI = mongoUri;
 

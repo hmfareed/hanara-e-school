@@ -25,12 +25,7 @@ const {
   createAssignmentSchema,
 } = require('../validators/class.validators');
 
-router.get('/', softProtect, getClasses);
-router.post('/', protect, authorize('superadmin', 'admin'), validate(createClassSchema), createClass);
-router.put('/:id', protect, authorize('superadmin', 'admin'), updateClass);
-router.patch('/:id/form-teacher', protect, authorize('superadmin', 'admin'), assignFormTeacher);
-router.delete('/:id', protect, authorize('superadmin', 'admin'), deleteClass);
-
+// Specific sub-resource routes MUST be registered before generic parameterized `/:id` routes
 router.get('/levels', protect, authorize('superadmin', 'admin', 'teacher', 'system_admin', 'accountant'), getClassLevels);
 
 router.get('/subjects', getSubjects);
@@ -42,5 +37,12 @@ router.get('/assignments', protect, authorize('superadmin', 'admin', 'teacher', 
 router.post('/assignments', protect, authorize('superadmin', 'admin'), validate(createAssignmentSchema), createAssignment);
 router.put('/assignments/:id', protect, authorize('superadmin', 'admin'), updateAssignment);
 router.delete('/assignments/:id', protect, authorize('superadmin', 'admin'), deleteAssignment);
+
+// Generic Class routes
+router.get('/', softProtect, getClasses);
+router.post('/', protect, authorize('superadmin', 'admin'), validate(createClassSchema), createClass);
+router.put('/:id', protect, authorize('superadmin', 'admin'), updateClass);
+router.patch('/:id/form-teacher', protect, authorize('superadmin', 'admin'), assignFormTeacher);
+router.delete('/:id', protect, authorize('superadmin', 'admin'), deleteClass);
 
 module.exports = router;

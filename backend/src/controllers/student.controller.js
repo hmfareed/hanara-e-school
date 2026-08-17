@@ -1,7 +1,11 @@
 const Student = require('../models/Student');
 const Guardian = require('../models/Guardian');
+const Class = require('../models/Class');
+const ClassLevel = require('../models/ClassLevel');
+const Bus = require('../models/Bus');
 const { generateAdmissionNumber } = require('../utils/admissionNumber');
 const logger = require('../utils/logger');
+const mongoose = require('mongoose');
 
 // GET /api/students
 const getStudents = async (req, res, next) => {
@@ -25,17 +29,34 @@ const getStudents = async (req, res, next) => {
     if (req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher')))) {
       const { getTeacherClasses } = require('../utils/authHelpers');
       const allowedClassIds = await getTeacherClasses(req.user.id, req.user.refStaff);
+      const allowedClassObjectIds = allowedClassIds.map((id) => {
+        try {
+          return new mongoose.Types.ObjectId(id.toString());
+        } catch (e) {
+          return id;
+        }
+      });
       if (classId) {
         if (!allowedClassIds.includes(classId.toString())) {
           filter.currentClass = null; // No access
         } else {
-          filter.currentClass = classId;
+          try {
+            filter.currentClass = new mongoose.Types.ObjectId(classId.toString());
+          } catch (e) {
+            filter.currentClass = classId;
+          }
         }
       } else {
-        filter.currentClass = { $in: allowedClassIds };
+        filter.currentClass = { $in: allowedClassObjectIds };
       }
     } else {
-      if (classId) filter.currentClass = classId;
+      if (classId) {
+        try {
+          filter.currentClass = new mongoose.Types.ObjectId(classId.toString());
+        } catch (e) {
+          filter.currentClass = classId;
+        }
+      }
     }
     if (gender) filter.gender = gender;
     
@@ -67,7 +88,7 @@ const getStudents = async (req, res, next) => {
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    const [students, total] = await Promise.all([
+    const [students, total, maleTotal, femaleTotal] = await Promise.all([
       Student.find(filter)
         .populate('currentClass', 'name level')
         .populate({ path: 'currentClass', populate: { path: 'level', select: 'displayName category' } })
@@ -77,6 +98,8 @@ const getStudents = async (req, res, next) => {
         .limit(parseInt(limit))
         .select('-documents'),
       Student.countDocuments(filter),
+      Student.countDocuments({ ...filter, gender: 'male' }),
+      Student.countDocuments({ ...filter, gender: 'female' }),
     ]);
 
     res.json({
@@ -84,6 +107,8 @@ const getStudents = async (req, res, next) => {
       data: students,
       meta: {
         total,
+        maleTotal,
+        femaleTotal,
         page: parseInt(page),
         limit: parseInt(limit),
         pages: Math.ceil(total / parseInt(limit)),

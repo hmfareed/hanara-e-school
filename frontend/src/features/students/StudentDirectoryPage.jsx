@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import Skeleton from '../../components/Skeleton';
 import {
   Search,
   Filter,
@@ -140,6 +141,35 @@ const StudentDirectoryPage = () => {
     setPage(1);
   };
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        {/* Header skeleton */}
+        <div className="bg-gradient-to-r from-emerald-950 via-emerald-900 to-slate-900 p-6 rounded-3xl">
+          <Skeleton.Line width="w-72" height="h-8" className="bg-emerald-800/60" />
+          <Skeleton.Line width="w-96" height="h-4" className="mt-2 bg-emerald-800/40" />
+        </div>
+        {/* Stat cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <Skeleton.StatCard key={i} />)}
+        </div>
+        {/* Filter bar */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {[1, 2, 3, 4, 5].map(i => <Skeleton.Box key={i} h="h-10" rounded="rounded-xl" />)}
+          </div>
+        </div>
+        {/* Table */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex gap-4">
+            {[1, 2, 3, 4, 5].map(i => <Skeleton.Line key={i} width={i === 1 ? 'w-8' : 'w-28'} height="h-3.5" />)}
+          </div>
+          {Array.from({ length: 10 }).map((_, i) => <Skeleton.TableRow key={i} cols={6} />)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* ─── Header & Top Actions ────────────────────────────────────────── */}
@@ -206,7 +236,9 @@ const StudentDirectoryPage = () => {
             </div>
           </div>
           <p className="text-2xl font-bold text-slate-900 mt-2">{meta.total ?? students.length}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Filtered in current view</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            {user?.role === 'teacher' ? 'Across assigned classes' : 'Filtered in current view'}
+          </p>
         </div>
 
         <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
@@ -216,8 +248,10 @@ const StudentDirectoryPage = () => {
               <UserCheck size={18} />
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">{maleCount}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">On current page</p>
+          <p className="text-2xl font-bold text-slate-900 mt-2">{meta.maleTotal ?? maleCount}</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            {meta.maleTotal !== undefined ? 'Total male students' : 'On current page'}
+          </p>
         </div>
 
         <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
@@ -227,19 +261,25 @@ const StudentDirectoryPage = () => {
               <UserCheck size={18} />
             </div>
           </div>
-          <p className="text-2xl font-bold text-slate-900 mt-2">{femaleCount}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">On current page</p>
+          <p className="text-2xl font-bold text-slate-900 mt-2">{meta.femaleTotal ?? femaleCount}</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            {meta.femaleTotal !== undefined ? 'Total female students' : 'On current page'}
+          </p>
         </div>
 
         <div className="bg-white border border-slate-200/80 rounded-2xl p-4 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active Classes</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              {user?.role === 'teacher' ? 'My Classes' : 'Active Classes'}
+            </span>
             <div className="h-9 w-9 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center">
               <Calendar size={18} />
             </div>
           </div>
           <p className="text-2xl font-bold text-slate-900 mt-2">{classesData?.length || 0}</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Registered grades</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            {user?.role === 'teacher' ? 'Assigned classes' : 'Registered grades'}
+          </p>
         </div>
       </div>
 
@@ -420,7 +460,14 @@ const StudentDirectoryPage = () => {
                         <div className="flex items-center space-x-3">
                           <div className="h-9 w-9 rounded-full bg-emerald-50 border border-emerald-200 flex-shrink-0 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden">
                             {student.photoUrl ? (
-                              <img src={student.photoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                              <img
+                                src={student.photoUrl}
+                                alt="Avatar"
+                                className="h-full w-full object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = 'none';
+                                }}
+                              />
                             ) : (
                               <span>{(student.firstName?.[0] || 'S').toUpperCase()}</span>
                             )}
@@ -430,7 +477,7 @@ const StudentDirectoryPage = () => {
                               {student.firstName} {student.otherNames ? `${student.otherNames} ` : ''}{student.lastName}
                             </span>
                             <span className="text-[11px] text-slate-400 font-mono">
-                              ID: {student._id.slice(-6)}
+                              ID: {student._id ? String(student._id).slice(-6) : student.admissionNumber}
                             </span>
                           </div>
                         </div>
@@ -449,26 +496,24 @@ const StudentDirectoryPage = () => {
                             ? 'bg-blue-50 text-blue-700 border border-blue-100' 
                             : 'bg-pink-50 text-pink-700 border border-pink-100'
                         }`}>
-                          {student.gender}
+                          {student.gender || 'N/A'}
                         </span>
                       </td>
                       <td className="py-4 px-6">
                         <span className="inline-block px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200/60">
-                          {student.currentClass?.name || 'Unassigned'}
+                          {student.currentClass?.name || student.className || 'Unassigned'}
                         </span>
                       </td>
                       <td className="py-4 px-6">
                         <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
                           student.status === 'active' 
-                            ? 'bg-emerald-100 text-emerald-800' 
-                            : student.status === 'graduated' 
-                            ? 'bg-blue-100 text-blue-800' 
-                            : 'bg-amber-100 text-amber-800'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                            : 'bg-slate-100 text-slate-600 border border-slate-200'
                         }`}>
-                          {student.status}
+                          {student.status || 'Active'}
                         </span>
                       </td>
-                      <td className="py-4 px-6 text-right">
+                      <td className="py-4 px-6 text-right space-x-2">
                         <Link
                           to={`/students/${student._id}`}
                           className="inline-flex items-center space-x-1.5 py-1.5 px-3 rounded-xl border border-slate-200 hover:bg-emerald-50 hover:border-emerald-300 font-bold text-xs text-slate-700 hover:text-emerald-800 transition-all shadow-sm"
@@ -485,30 +530,39 @@ const StudentDirectoryPage = () => {
           </div>
         ) : (
           /* Grid View */
-          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {students.map((student) => {
               const ageDisplay = calculateAge(student.dob);
               return (
                 <div
                   key={student._id}
-                  className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-emerald-300 hover:shadow-lg transition-all flex flex-col justify-between group relative overflow-hidden"
+                  className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-2xs hover:shadow-md hover:border-emerald-200 transition-all flex flex-col justify-between group"
                 >
                   <div className="space-y-4">
-                    <div className="flex items-start justify-between">
-                      <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
                         {student.admissionNumber}
                       </span>
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide ${
-                        student.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                        student.status === 'active' 
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                          : 'bg-slate-100 text-slate-600'
                       }`}>
-                        {student.status}
+                        {student.status || 'Active'}
                       </span>
                     </div>
 
-                    <div className="flex flex-col items-center text-center space-y-2 pt-2">
-                      <div className="h-16 w-16 rounded-full bg-emerald-100 border-2 border-emerald-200 flex items-center justify-center text-emerald-900 font-extrabold text-xl overflow-hidden shadow-sm">
+                    <div className="flex items-center space-x-3.5">
+                      <div className="h-12 w-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex-shrink-0 flex items-center justify-center text-emerald-800 font-bold text-base overflow-hidden shadow-2xs">
                         {student.photoUrl ? (
-                          <img src={student.photoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                          <img
+                            src={student.photoUrl}
+                            alt="Avatar"
+                            className="h-full w-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
                         ) : (
                           <span>{(student.firstName?.[0] || 'S').toUpperCase()}</span>
                         )}
@@ -549,10 +603,10 @@ const StudentDirectoryPage = () => {
         )}
 
         {/* ─── Pagination Footer ────────────────────────────────────────────── */}
-        {meta.pages > 1 && (
+        {(meta.pages > 1 || meta.totalPages > 1) && (
           <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3">
             <span className="text-xs text-slate-500 font-medium">
-              Showing page <strong className="text-slate-800">{meta.page}</strong> of <strong className="text-slate-800">{meta.pages}</strong> ({meta.total} total students)
+              Showing page <strong className="text-slate-800">{meta.page || 1}</strong> of <strong className="text-slate-800">{meta.pages || meta.totalPages || 1}</strong> ({meta.total || students.length} total students)
             </span>
             <div className="flex items-center space-x-2">
               <button

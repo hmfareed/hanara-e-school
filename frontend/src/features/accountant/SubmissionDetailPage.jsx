@@ -24,7 +24,16 @@ const statusColors = {
   absent: { dot: 'bg-amber-400',   text: 'text-amber-700',   bg: 'bg-amber-50 border-amber-200' },
 };
 
-const FeeStatusBadge = ({ status }) => {
+const FeeStatusBadge = ({ status, usesBus = true, type = 'general' }) => {
+  if (type === 'bus' && !usesBus && status !== 'paid') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-0.5 rounded-full border bg-slate-100 border-slate-200 text-slate-500 uppercase tracking-wider">
+        <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+        No Bus
+      </span>
+    );
+  }
+
   const c = statusColors[status] || statusColors.unpaid;
   return (
     <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${c.bg} ${c.text} uppercase tracking-wider`}>
@@ -176,11 +185,11 @@ const SubmissionDetailPage = () => {
                         <p className="font-bold text-slate-800">{item.name}</p>
                         <span className="text-slate-400 font-mono text-[10px]">{item.admissionNumber}</span>
                       </td>
-                      <td className="px-4 py-3.5 text-center"><FeeStatusBadge status={item.feedingStatus} /></td>
+                      <td className="px-4 py-3.5 text-center"><FeeStatusBadge status={item.feedingStatus} type="feeding" /></td>
                       <td className="px-4 py-3.5 text-right font-bold text-slate-700">
                         {item.feedingStatus === 'paid' ? GHS(item.feedingAmount) : '—'}
                       </td>
-                      <td className="px-4 py-3.5 text-center"><FeeStatusBadge status={item.busStatus} /></td>
+                      <td className="px-4 py-3.5 text-center"><FeeStatusBadge status={item.busStatus} usesBus={item.usesBus} type="bus" /></td>
                       <td className="px-4 py-3.5 text-right font-bold text-slate-700">
                         {item.busStatus === 'paid' ? GHS(item.busAmount) : '—'}
                       </td>

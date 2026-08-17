@@ -131,35 +131,15 @@ const LoginPage = () => {
       return;
     }
 
-    const rawMsg = res.message || '';
-
-    // Detect any server-unavailable / offline / network error
-    const isServiceDown =
-      rawMsg.includes('ENOTFOUND') ||
-      rawMsg.includes('ECONNREFUSED') ||
-      rawMsg.includes('mongodb') ||
-      rawMsg.includes('MongoServerError') ||
-      rawMsg.includes('ETIMEDOUT') ||
-      rawMsg.toLowerCase().includes('temporarily unavailable') ||
-      rawMsg.toLowerCase().includes('service unavailable') ||
-      rawMsg.toLowerCase().includes('offline') ||
-      rawMsg.toLowerCase().includes('internet');
-
-    if (isServiceDown) {
-      // Try restoring from IndexedDB cache before showing error
+    if (!isOnline) {
       const cachedUser = await loadUserSession();
       if (cachedUser) {
-        // We have a cached session — restore it and proceed
         navigate(from, { replace: true });
         return;
       }
-      setLoginError(
-        'Cannot connect to the server. You need internet access to sign in for the first time. ' +
-        'If you have signed in before, please wait — your session will be restored automatically.'
-      );
-    } else {
-      setLoginError(rawMsg || 'Invalid login credentials');
     }
+
+    setLoginError(res.message || 'Invalid login credentials');
   };
 
 

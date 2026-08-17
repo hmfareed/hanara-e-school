@@ -4,11 +4,16 @@ import { useQuery } from '@tanstack/react-query';
 import { mockExamApi } from './mockExamApi';
 import TeacherMockEntryView from './TeacherMockEntryView';
 import AdminMockPanel from './AdminMockPanel';
-import { ShieldAlert, BookOpen } from 'lucide-react';
+import Skeleton from '../../components/Skeleton';
+import { ShieldAlert, BookOpen, Lock } from 'lucide-react';
 
 const MockExamPage = () => {
-  const { user } = useAuth();
+  const { user, isJHS3Teacher } = useAuth();
   const [selectedSeriesId, setSelectedSeriesId] = useState('');
+
+  const isAdminOrHT = ['superadmin', 'admin', 'system_admin'].includes(user?.role);
+  const isTeacher = user?.role === 'teacher';
+  const isBlockedTeacher = isTeacher && !isJHS3Teacher;
 
   const { data: seriesList = [], isLoading, refetch } = useQuery({
     queryKey: ['mockSeriesList'],
@@ -16,6 +21,7 @@ const MockExamPage = () => {
       const res = await mockExamApi.getSeries();
       return res.success ? res.data : [];
     },
+    enabled: !isBlockedTeacher,
   });
 
   // Default to active series
@@ -30,13 +36,55 @@ const MockExamPage = () => {
     }
   }, [seriesList, selectedSeriesId]);
 
-  const isAdminOrHT = ['superadmin', 'admin', 'system_admin'].includes(user?.role);
-  const isTeacher = user?.role === 'teacher';
+  // Gate: teachers who don't teach JHS 3 should not access this page at all
+  if (isBlockedTeacher) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200 shadow-sm p-10 text-center space-y-5">
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400">
+            <Lock size={32} />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-xl font-black text-slate-900">Mock Exams — JHS 3 Only</h2>
+            <p className="text-sm text-slate-500 leading-relaxed">
+              Mock exam entry is restricted to teachers assigned to a <strong>JHS 3</strong> class.
+              If you believe this is a mistake, please contact the school administrator.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-600"></div>
+      <div className="space-y-6">
+        {/* Page header skeleton */}
+        <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Skeleton.Circle size="w-14 h-14" />
+            <div className="space-y-2">
+              <Skeleton.Line width="w-40" height="h-6" />
+              <Skeleton.Line width="w-64" height="h-4" />
+            </div>
+          </div>
+          <Skeleton.Box w="w-48" h="h-10" rounded="rounded-xl" />
+        </div>
+        {/* Series / content area skeleton */}
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
+          <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+            <Skeleton.Line width="w-36" height="h-5" />
+            <Skeleton.Box w="w-32" h="h-8" rounded="rounded-xl" />
+          </div>
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} className="flex items-center gap-4 py-2">
+              <Skeleton.Circle size="w-8 h-8" />
+              <Skeleton.Line width="w-48" height="h-4" />
+              <Skeleton.Line width="w-24" height="h-4" className="ml-auto" />
+              <Skeleton.Box w="w-20" h="h-8" rounded="rounded-lg" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }

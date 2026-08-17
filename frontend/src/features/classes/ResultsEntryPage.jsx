@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import Skeleton from '../../components/Skeleton';
 import {
   ClipboardList, Check, AlertCircle, Save, Loader2,
   BookOpen, Layers, Calendar, FileDown, Award, Archive, MessageSquare, X
@@ -497,6 +498,28 @@ const ResultsEntryPage = () => {
       setSavingRemarks(false);
     }
   };
+
+  if (loadLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="space-y-1">
+          <Skeleton.Line width="w-56" height="h-7" />
+          <Skeleton.Line width="w-80" height="h-4" />
+        </div>
+        {/* Selections panel */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <Skeleton.Box key={i} h="h-10" rounded="rounded-xl" />)}
+        </div>
+        {/* Grade table */}
+        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-slate-100 flex gap-6">
+            {[1, 2, 3, 4, 5, 6, 7].map(i => <Skeleton.Line key={i} width="w-16" height="h-3.5" />)}
+          </div>
+          {Array.from({ length: 12 }).map((_, i) => <Skeleton.TableRow key={i} cols={8} />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

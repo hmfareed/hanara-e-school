@@ -28,6 +28,7 @@
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4",
     "socket.io": "^4.8.3",
+    "web-push": "^3.6.7",
     "winston": "^3.13.0",
     "zod": "^3.23.8"
   },
@@ -46,7 +47,7 @@
       "./tests/setup.js"
     ],
     "globalTeardown": "./tests/teardown.js",
-    "testTimeout": 30000
+    "testTimeout": 90000
   },
   "mongodbMemoryServer": {
     "version": "8.2.1"

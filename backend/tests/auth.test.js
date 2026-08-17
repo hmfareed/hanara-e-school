@@ -145,7 +145,7 @@ describe('Auth Endpoints', () => {
       });
     });
 
-    it('should prevent teacher registration if no classes or subjects are chosen', async () => {
+    it('should successfully register teacher without requiring pre-assigned classes or subjects', async () => {
       const res = await request(app)
         .post('/api/auth/register-teacher')
         .send({
@@ -157,13 +157,12 @@ describe('Auth Endpoints', () => {
           gender: 'male',
           phone: '0244000111',
           registrationCode: '123456',
-          classesAssigned: [],
-          subjectsAssigned: [],
         });
 
-      expect(res.status).toBe(400);
-      expect(res.body.success).toBe(false);
-      expect(res.body.message).toContain('at least one class');
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(res.body.data.approvalStatus).toBe('pending');
+      expect(res.body.data.role).toBe('teacher');
     });
 
     it('should successfully register teacher if classes and subjects are chosen', async () => {

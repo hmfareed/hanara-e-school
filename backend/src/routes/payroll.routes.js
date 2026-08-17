@@ -7,6 +7,7 @@ const {
   approveMonthlyPayroll,
   getPayslipPdf,
   deleteMonthlyPayroll,
+  deletePayrollItem,
 } = require('../controllers/payroll.controller');
 const { protect } = require('../middleware/auth');
 const { authorize } = require('../middleware/rbac');
@@ -16,6 +17,7 @@ router.post('/generate', protect, authorize('superadmin', 'admin', 'system_admin
 router.patch('/:id', protect, authorize('superadmin', 'admin', 'system_admin', 'accountant'), updatePayrollItem);
 router.post('/approve', protect, authorize('superadmin', 'admin', 'system_admin', 'accountant'), approveMonthlyPayroll);
 router.delete('/month/:month', protect, authorize('superadmin', 'admin', 'system_admin', 'accountant'), deleteMonthlyPayroll);
+router.delete('/:id', protect, authorize('superadmin', 'admin', 'system_admin', 'accountant'), deletePayrollItem);
 router.get('/payslip/:id/pdf', protect, getPayslipPdf);
 
 module.exports = router;

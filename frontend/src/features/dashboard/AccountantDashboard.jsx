@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { getStaffGreeting } from '../../utils/greetingUtils';
 import {
   Users,
   GraduationCap,
@@ -28,8 +29,35 @@ const STATUS_BADGES = {
   unpaid: 'bg-slate-100 text-slate-600 border-slate-200 font-semibold',
 };
 
+const FINANCE_QUOTES = [
+  "Beware of little expenses; a small leak will sink a great ship.",
+  "Financial integrity is the foundation of trust and sustainable institutional excellence.",
+  "A budget is telling your money where to go instead of wondering where it went.",
+  "Accounting is the language of transparency and responsible stewardship.",
+  "Precision in numbers creates clarity in vision and purpose.",
+  "Stewardship is the responsible overseeing and protection of resources worth preserving.",
+  "Transparency and fiscal diligence are the true hallmarks of effective management.",
+  "Every cedi accounted for is an investment in our students' brighter future.",
+  "Diligent financial records build the confidence upon which schools thrive.",
+];
+
 const AccountantDashboard = () => {
   const { user } = useAuth();
+  const [quoteIndex, setQuoteIndex] = useState(0);
+  const [fadeQuote, setFadeQuote] = useState(true);
+
+  // 5-second finance quote rotation
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFadeQuote(false);
+      setTimeout(() => {
+        setQuoteIndex((prev) => (prev + 1) % FINANCE_QUOTES.length);
+        setFadeQuote(true);
+      }, 300);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -144,12 +172,14 @@ const AccountantDashboard = () => {
       {/* Welcome Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 pb-2 border-b border-slate-100">
         <div className="space-y-1">
-          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight">
-            Welcome back, {getUserName()}
+          <h1 className="text-2xl md:text-3xl font-extrabold text-slate-800 tracking-tight flex items-center gap-2">
+            {getStaffGreeting(user, getUserName())} 👋
           </h1>
-          <p className="text-sm text-slate-500 font-medium">
-            Monitor invoices, fee statuses, and school collections today.
-          </p>
+          <div className={`transition-all duration-300 min-h-[24px] flex items-center ${fadeQuote ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
+            <p className="text-sm text-slate-500 italic font-medium">
+              "{FINANCE_QUOTES[quoteIndex]}"
+            </p>
+          </div>
         </div>
         <div className="flex items-center space-x-3 shrink-0">
           <span className="text-xs font-bold text-slate-500 bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl flex items-center space-x-1.5 shadow-sm select-none">

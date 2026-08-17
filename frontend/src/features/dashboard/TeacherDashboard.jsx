@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { getStaffGreeting } from '../../utils/greetingUtils';
+import Skeleton from '../../components/Skeleton';
 import {
   Calendar,
   Users,
@@ -19,6 +22,12 @@ import {
   GraduationCap,
   Award,
   Receipt,
+  Fingerprint,
+  MapPin,
+  ShieldCheck,
+  LogIn,
+  LogOut,
+  CheckCircle2,
 } from 'lucide-react';
 
 const TEACHER_QUOTES = [
@@ -32,62 +41,23 @@ const TEACHER_QUOTES = [
   "Inspiring minds, shaping futures, one lesson at a time.",
 ];
 
-const getGreetingTimeOfDay = () => {
-  const hour = new Date().getHours();
-  const dateNum = new Date().getDate();
-  
-  if (hour >= 5 && hour < 12) {
-    const morningGreetings = [
-      "Good morning,",
-      "Morning champion,",
-      "Ready to inspire,",
-      "What's up,",
-      "Fresh start to the day,"
-    ];
-    return morningGreetings[(hour + dateNum) % morningGreetings.length];
-  }
-  
-  if (hour >= 12 && hour < 17) {
-    const afternoonGreetings = [
-      "Good afternoon,",
-      "Hope your day is going great,",
-      "Welcome back,",
-      "What's up,",
-      "Halfway through the day,"
-    ];
-    return afternoonGreetings[(hour + dateNum) % afternoonGreetings.length];
-  }
-  
-  if (hour >= 17 && hour < 22) {
-    const eveningGreetings = [
-      "Good evening,",
-      "Wrapping up the day,",
-      "Hope it was a great day,",
-      "Any tasks left for today,",
-      "Evening review,",
-      "Look at the sunshine and smile,"
-    ];
-    return eveningGreetings[(hour + dateNum) % eveningGreetings.length];
-  }
-  
-  const lateNightGreetings = [
-    "Late Night grind,",
-    "Burning the midnight oil,",
-    "Working late,",
-    "Night owl mode,",
-    "Late hours,",
-    "Staying up late,That's the spirit,"
-  ];
-  return lateNightGreetings[(hour + dateNum) % lateNightGreetings.length];
-};
+function formatTimeAMPM(timeStr) {
+  if (!timeStr) return '—';
+  const [h, m] = timeStr.split(':');
+  const hour = parseInt(h, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const display = hour % 12 === 0 ? 12 : hour % 12;
+  return `${display}:${m} ${ampm}`;
+}
 
 const TeacherDashboard = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [fadeQuote, setFadeQuote] = useState(true);
 
-  // Rotating quote interval (10 seconds)
+  // Rotating quote interval (5 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
       setFadeQuote(false);
@@ -95,11 +65,11 @@ const TeacherDashboard = () => {
         setQuoteIndex((prev) => (prev + 1) % TEACHER_QUOTES.length);
         setFadeQuote(true);
       }, 300);
-    }, 10000);
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
-  const { data: dashboardData } = useQuery({
+  const { data: dashboardData, isLoading, isFetching } = useQuery({
     queryKey: ['teacherDashboardSummary'],
     queryFn: async () => {
       try {
@@ -112,14 +82,112 @@ const TeacherDashboard = () => {
       } catch (err) {}
       return null;
     },
+    staleTime: 5 * 60 * 1000,      // 5 minutes — avoids refetch on every nav
+    refetchInterval: 2 * 60 * 1000, // 2 minutes — reasonable polling cadence
   });
 
-  const teacherName = dashboardData?.profile?.fullName || 'Sir Moh Fareed';
+  // Query teacher's own attendance status for today
+  const { data: attendanceData } = useQuery({
+    queryKey: ['staffMyStatus'],
+    queryFn: async () => {
+      try {
+        const res = await api.get('/staff-attendance/my-status');
+        return res.data?.data;
+      } catch (err) {
+        return null;
+      }
+    },
+    staleTime: 60 * 1000,
+  });
+
+  const todayAttendance = attendanceData?.today || null;
+  const hasCheckedIn = !!todayAttendance?.checkInTime;
+  const hasCheckedOut = !!todayAttendance?.checkOutTime;
+
+  const isInitialLoading = isLoading || (!dashboardData && isFetching);
+
+  if (isInitialLoading) {
+    return (
+      <div className="space-y-6 max-w-[1600px] mx-auto">
+        {/* Row 1: Hero + Today card */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8 bg-white rounded-3xl border border-slate-200/80 p-8 shadow-xs space-y-4">
+            <Skeleton.Line width="w-64" height="h-8" />
+            <Skeleton.Line width="w-48" height="h-4" />
+            <div className="mt-4 pt-3.5 border-t border-slate-100">
+              <Skeleton.Line width="w-80" height="h-4" />
+            </div>
+          </div>
+          <div className="lg:col-span-4 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+            <div className="flex justify-between">
+              <div className="space-y-2">
+                <Skeleton.Line width="w-28" height="h-3" />
+                <Skeleton.Line width="w-44" height="h-5" />
+              </div>
+              <Skeleton.Circle size="w-12 h-12" />
+            </div>
+            <Skeleton.Box h="h-14" rounded="rounded-2xl" />
+            <Skeleton.Box h="h-10" rounded="rounded-2xl" />
+          </div>
+        </div>
+
+        {/* Row 2: 4 stat cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {[1, 2, 3, 4].map(i => <Skeleton.StatCard key={i} />)}
+        </div>
+
+        {/* Row 3: Timetable + Attendance + My Classes */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-3">
+            <Skeleton.Line width="w-36" height="h-5" />
+            {[1, 2, 3, 4].map(i => <Skeleton.Box key={i} h="h-11" rounded="rounded-2xl" />)}
+          </div>
+          <div className="lg:col-span-4 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs">
+            <Skeleton.Line width="w-40" height="h-5" className="mb-6" />
+            <div className="flex gap-5">
+              <Skeleton.Circle size="w-28 h-28" />
+              <div className="flex-1 space-y-3 mt-2">
+                <Skeleton.Box h="h-9" rounded="rounded-xl" />
+                <Skeleton.Box h="h-9" rounded="rounded-xl" />
+                <Skeleton.Box h="h-9" rounded="rounded-xl" />
+              </div>
+            </div>
+          </div>
+          <div className="lg:col-span-3 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-3">
+            <Skeleton.Line width="w-28" height="h-5" />
+            {[1, 2, 3].map(i => <Skeleton.ListItem key={i} />)}
+          </div>
+        </div>
+
+        {/* Row 4: 4 bottom cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-3">
+              <Skeleton.Line width="w-32" height="h-5" />
+              {[1, 2, 3].map(j => <Skeleton.ListItem key={j} />)}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const teacherName =
+    dashboardData?.profile?.fullName ||
+    (user?.refStaff
+      ? `${user.refStaff.title ? user.refStaff.title + ' ' : ''}${user.refStaff.firstName || ''} ${user.refStaff.lastName || ''}`.trim()
+      : null) ||
+    user?.name ||
+    user?.email?.split('@')[0] ||
+    'Teacher';
   const myClasses = dashboardData?.myClasses || [];
   const todaysClasses = dashboardData?.todaysClasses || [];
   const todaysTimetable = dashboardData?.todaysTimetable || [];
   const attendanceSummary = dashboardData?.attendanceSummary || {};
-  const totalStudents = dashboardData?.totalStudents || 0;
+  const myClassesStudentSum = myClasses.reduce((sum, c) => sum + (c.studentCount || 0), 0);
+  const totalStudents = (typeof dashboardData?.totalStudents === 'number' && dashboardData.totalStudents > 0)
+    ? dashboardData.totalStudents
+    : (myClassesStudentSum > 0 ? myClassesStudentSum : (dashboardData?.totalStudents ?? 0));
   const assignmentsSummary = dashboardData?.assignmentsSummary || {};
   const pendingResultsSummary = dashboardData?.pendingResultsSummary || {};
 
@@ -136,21 +204,21 @@ const TeacherDashboard = () => {
   return (
     <div className="flex flex-col gap-6 pb-12 font-sans text-slate-800 select-none max-w-[1600px] mx-auto">
 
-      {/* ── ROW 1: DYNAMIC HERO GREETING & ATTENDANCE ALERT ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* ── ROW 1: DYNAMIC HERO GREETING, GPS ATTENDANCE & SCHEDULE ── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-6">
 
-        {/* Welcome Card (8 Cols) - Clean & Modern White Greeting Banner */}
-        <div className="lg:col-span-8 bg-white rounded-3xl p-6 md:p-8 border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[170px]">
+        {/* Welcome Card (5 Cols) */}
+        <div className="lg:col-span-5 bg-white rounded-3xl p-6 md:p-7 border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[170px]">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-slate-500 tracking-tight leading-tight mb-1">
-              {getGreetingTimeOfDay()}
+            <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight leading-tight flex items-center gap-2">
+              {getStaffGreeting(user, teacherName)} 👋
             </h1>
-            <h2 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight leading-tight">
-              {teacherName} 👋
-            </h2>
+            <p className="text-xs md:text-sm text-slate-500 font-medium mt-1">
+              Welcome back to your teaching portal
+            </p>
           </div>
 
-          {/* Rotating Quote Container with 10-Second Fade Transition */}
+          {/* Rotating Quote Container */}
           <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className={`transition-all duration-300 ${fadeQuote ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
               <p className="text-xs md:text-sm text-slate-500 font-medium italic max-w-xl">
@@ -160,12 +228,92 @@ const TeacherDashboard = () => {
           </div>
         </div>
 
-        {/* Classes Today Action Card (4 Cols) */}
+        {/* My Daily Attendance & GPS Card (4 Cols) */}
         <div className="lg:col-span-4 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between gap-4">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Today's Schedule</span>
-              <h3 className="text-base font-extrabold text-slate-900">You have {classesCount} classes today</h3>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">My Daily Attendance</span>
+              <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-1.5 mt-0.5">
+                <Fingerprint size={18} className="text-[#78282E]" />
+                {hasCheckedOut
+                  ? 'Completed Today'
+                  : hasCheckedIn
+                  ? 'Checked In'
+                  : 'Check-In Pending'}
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full flex items-center gap-1">
+              <MapPin size={11} /> 150m GPS Geofence
+            </span>
+          </div>
+
+          <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1">
+            {!hasCheckedIn ? (
+              <p className="text-xs font-semibold text-slate-600 leading-snug">
+                You have not checked in today. Please verify your GPS location to record attendance.
+              </p>
+            ) : !hasCheckedOut ? (
+              <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+                <span className="font-bold text-slate-800 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  In at <span className="text-emerald-700">{formatTimeAMPM(todayAttendance.checkInTime)}</span>
+                  {todayAttendance.branch && <span className="text-slate-500">({todayAttendance.branch})</span>}
+                </span>
+                {todayAttendance.geofenceVerified && (
+                  <span className="text-[11px] font-bold text-emerald-700 flex items-center gap-1">
+                    <ShieldCheck size={13} /> GPS Verified
+                    {todayAttendance.distanceFromSchool != null && ` (${todayAttendance.distanceFromSchool}m)`}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-700 flex items-center gap-1">
+                  <CheckCircle2 size={14} className="text-emerald-600" />
+                  In: {formatTimeAMPM(todayAttendance.checkInTime)} &nbsp;·&nbsp; Out: {formatTimeAMPM(todayAttendance.checkOutTime)}
+                </span>
+                <span className="text-[11px] font-bold text-slate-500">
+                  {Math.floor((todayAttendance.totalMinutes || 0) / 60)}h {(todayAttendance.totalMinutes || 0) % 60}m
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div>
+            {!hasCheckedIn ? (
+              <button
+                onClick={() => navigate('/staff/check-in')}
+                className="w-full py-3 px-4 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-700 hover:to-emerald-800 text-white font-bold text-xs rounded-2xl border-none cursor-pointer flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-200"
+              >
+                <LogIn size={16} />
+                <span>Check In with GPS</span>
+              </button>
+            ) : !hasCheckedOut ? (
+              <button
+                onClick={() => navigate('/staff/check-in')}
+                className="w-full py-3 px-4 bg-gradient-to-r from-slate-700 to-slate-900 hover:from-slate-800 hover:to-black text-white font-bold text-xs rounded-2xl border-none cursor-pointer flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-200"
+              >
+                <LogOut size={16} />
+                <span>Check Out for Today</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => navigate('/staff/check-in')}
+                className="w-full py-3 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-2xl border border-slate-200 cursor-pointer flex items-center justify-center gap-2 transition-all duration-200"
+              >
+                <Clock size={16} />
+                <span>View Attendance Log</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Classes Today Action Card (3 Cols) */}
+        <div className="lg:col-span-3 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between gap-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Student Classes</span>
+              <h3 className="text-base font-extrabold text-slate-900">{classesCount} classes today</h3>
             </div>
             <div className="p-3 bg-rose-50 border border-rose-100 rounded-2xl text-[#781A1A] shadow-2xs">
               <Calendar size={20}/>
@@ -173,33 +321,26 @@ const TeacherDashboard = () => {
           </div>
 
           <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl">
-            <p className="text-xs font-semibold text-slate-700 leading-snug">
+            <p className="text-xs font-semibold text-slate-700 leading-snug truncate">
               {classesCount === 0 ? (
-                <>No active classes assigned for today.</>
+                <>No classes assigned.</>
               ) : pendingAttendanceClass ? (
-                <>Attendance still pending for <strong className="font-extrabold text-[#781A1A]">{pendingAttendanceClass.className}</strong>.</>
+                <>Pending: <strong className="font-extrabold text-[#781A1A]">{pendingAttendanceClass.className}</strong></>
               ) : completedAttendanceCount > 0 ? (
-                <>Attendance completed for all assigned classes today! 🎉</>
+                <>Attendance completed! 🎉</>
               ) : (
-                <>Daily attendance has not been recorded yet for today.</>
+                <>Attendance not marked.</>
               )}
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex flex-col gap-2">
             <button
               onClick={() => navigate('/attendance')}
-              className="flex-1 py-3 px-4 bg-[#4A1C20] hover:bg-[#781A1A] text-white font-bold text-xs rounded-2xl border-none cursor-pointer flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-200"
+              className="py-3 px-4 bg-[#4A1C20] hover:bg-[#781A1A] text-white font-bold text-xs rounded-2xl border-none cursor-pointer flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-200"
             >
               <UserCheck size={16}/>
-              <span>Take Today's Attendance</span>
-            </button>
-            <button
-              onClick={() => navigate('/fees/daily-register')}
-              className="py-3 px-4 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-2xl border-none cursor-pointer flex items-center justify-center gap-2 shadow-sm hover:shadow-md transition-all duration-200"
-            >
-              <Receipt size={16}/>
-              <span>Fee Collection</span>
+              <span>Student Register</span>
             </button>
           </div>
         </div>
@@ -325,17 +466,31 @@ const TeacherDashboard = () => {
           </div>
 
           <div className="flex items-center justify-between gap-4 my-auto">
-            {/* Donut Chart */}
+            {/* Donut Chart — shows actual rate or "Not Marked" state */}
             <div className="relative w-28 h-28 shrink-0">
               <svg viewBox="0 0 36 36" className="w-full h-full -rotate-90">
                 <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#f1f5f9" strokeWidth="4.5"/>
-                <circle cx="18" cy="18" r="15.915" fill="transparent" stroke="#10b981" strokeWidth="4.5" strokeDasharray={`${attendanceSummary.attendanceRate || 100} ${100 - (attendanceSummary.attendanceRate || 100)}`}/>
+                {attendanceSummary.hasAttendanceData && (
+                  <circle
+                    cx="18" cy="18" r="15.915"
+                    fill="transparent"
+                    stroke="#10b981"
+                    strokeWidth="4.5"
+                    strokeDasharray={`${attendanceSummary.attendanceRate} ${100 - (attendanceSummary.attendanceRate || 0)}`}
+                  />
+                )}
               </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <span className="text-xl font-black text-slate-900 leading-none">
-                  {attendanceSummary.attendanceRate || 100}%
-                </span>
-                <span className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">Overall</span>
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-1">
+                {attendanceSummary.hasAttendanceData ? (
+                  <>
+                    <span className="text-xl font-black text-slate-900 leading-none">
+                      {attendanceSummary.attendanceRate}%
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-400 mt-0.5 uppercase tracking-wider">Overall</span>
+                  </>
+                ) : (
+                  <span className="text-[10px] font-bold text-slate-400 leading-snug uppercase tracking-wider">Not<br/>Marked</span>
+                )}
               </div>
             </div>
 

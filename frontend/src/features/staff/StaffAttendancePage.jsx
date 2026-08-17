@@ -87,7 +87,7 @@ const StaffAttendancePage = () => {
   const { isOnline } = useOffline();
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'history' | 'devices' | 'sessions' | 'events' | 'settings'
+  const [activeTab, setActiveTab] = useState('daily'); // 'daily' | 'history' | 'attempts' | 'overrides' | 'devices' | 'sessions' | 'events' | 'settings'
   const [selectedDate, setSelectedDate] = useState(toDateInputValue(new Date()));
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -101,8 +101,33 @@ const StaffAttendancePage = () => {
   const [geofenceForm, setGeofenceForm] = useState({
     enabled: true,
     radiusMetres: 150,
-    zogbeli: { lat: '', lng: '', radiusMetres: 150 },
-    vittin: { lat: '', lng: '', radiusMetres: 150 },
+    maxGpsAccuracyMeters: 50,
+    checkInStartTime: '05:40',
+    lateAfterTime: '07:45',
+    checkInEndTime: '10:00',
+    checkOutStartTime: '12:00',
+    checkOutEndTime: '20:00',
+    requireGpsOnCheckout: true,
+    zogbeli: { lat: '', lng: '', radiusMetres: 150, maxGpsAccuracyMeters: 50 },
+    vittin: { lat: '', lng: '', radiusMetres: 150, maxGpsAccuracyMeters: 50 },
+  });
+
+  // GPS test result state
+  const [gpsTestResult, setGpsTestResult] = useState(null); // null | { branch, distance, radius, pass, accuracy }
+  const [gpsTestLoading, setGpsTestLoading] = useState(false);
+
+  // Detail modal for a staff row
+  const [detailRow, setDetailRow] = useState(null);
+
+  // Override modal state
+  const [showOverrideModal, setShowOverrideModal] = useState(false);
+  const [overrideForm, setOverrideForm] = useState({
+    staffId: '',
+    staffName: '',
+    temporaryBranch: 'Vittin',
+    startDate: '',
+    endDate: '',
+    reason: '',
   });
 
   // Manual Correction Modal State
@@ -129,9 +154,9 @@ const StaffAttendancePage = () => {
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [newSessionForm, setNewSessionForm] = useState({
     name: 'Morning Attendance',
-    startTime: '06:00',
+    startTime: '05:40',
     endTime: '10:00',
-    lateThresholdTime: '08:00',
+    lateThresholdTime: '07:45',
     sessionType: 'single_daily',
   });
 
@@ -145,7 +170,9 @@ const StaffAttendancePage = () => {
     const handleLiveScan = (payload) => {
       queryClient.invalidateQueries(['staffAdminDaily', selectedDate, branchFilter]);
       queryClient.invalidateQueries(['staffAttendanceEvents']);
-      showMsg(`Live Scan: ${payload.staffName} checked in at ${payload.branch || 'School'} (${payload.status})`, 'success');
+      const isCheckOut = payload.eventType === 'CHECK_OUT' || (payload.checkOutTime && !payload.checkInTime);
+      const actionText = isCheckOut ? 'checked out' : `checked in (${payload.status || 'present'})`;
+      showMsg(`Live Update: ${payload.staffName} ${actionText} at ${payload.branch || 'School'}`, 'success');
     };
 
     subscribeToEvent('staff_attendance_scanned', handleLiveScan);
@@ -179,15 +206,24 @@ const StaffAttendancePage = () => {
         setGeofenceForm({
           enabled: val.enabled !== false,
           radiusMetres: val.radiusMetres || 150,
+          maxGpsAccuracyMeters: val.maxGpsAccuracyMeters || 50,
+          checkInStartTime: val.checkInStartTime || '05:40',
+          lateAfterTime: val.lateAfterTime || '07:45',
+          checkInEndTime: val.checkInEndTime || '10:00',
+          checkOutStartTime: val.checkOutStartTime || '12:00',
+          checkOutEndTime: val.checkOutEndTime || '20:00',
+          requireGpsOnCheckout: val.requireGpsOnCheckout ?? true,
           zogbeli: {
             lat: val.zogbeli?.lat ?? '',
             lng: val.zogbeli?.lng ?? '',
             radiusMetres: val.zogbeli?.radiusMetres || 150,
+            maxGpsAccuracyMeters: val.zogbeli?.maxGpsAccuracyMeters || 50,
           },
           vittin: {
             lat: val.vittin?.lat ?? '',
             lng: val.vittin?.lng ?? '',
             radiusMetres: val.vittin?.radiusMetres || 150,
+            maxGpsAccuracyMeters: val.vittin?.maxGpsAccuracyMeters || 50,
           },
         });
       }
@@ -226,6 +262,26 @@ const StaffAttendancePage = () => {
       return res.data?.data;
     },
     enabled: activeTab === 'sessions',
+  });
+
+  // Rejected Attempts Query
+  const { data: attemptsData, refetch: refetchAttempts } = useQuery({
+    queryKey: ['staffAttendanceAttempts'],
+    queryFn: async () => {
+      const res = await api.get('/staff-attendance/admin/attempts?limit=200');
+      return res.data?.data;
+    },
+    enabled: activeTab === 'attempts',
+  });
+
+  // Temporary Overrides Query
+  const { data: overridesData, refetch: refetchOverrides } = useQuery({
+    queryKey: ['staffAttendanceOverrides'],
+    queryFn: async () => {
+      const res = await api.get('/staff-attendance/admin/overrides?status=active');
+      return res.data?.data;
+    },
+    enabled: activeTab === 'overrides',
   });
 
   // Events Audit Log Query
@@ -308,30 +364,114 @@ const StaffAttendancePage = () => {
     }
   };
 
-  // ── Geofence Settings Handlers ────────────────────────────────────────────
-
   const captureBranchGps = (branchKey) => {
     if (!navigator.geolocation) {
       showMsg('Geolocation is not supported by your device browser', 'error');
       return;
     }
+    const branchLabel = branchKey === 'zogbeli' ? 'Zogbeli' : 'Vittin';
+    showMsg(`Acquiring GPS for ${branchLabel} Branch… (this may take up to 12s)`, 'success');
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const lat = parseFloat(pos.coords.latitude.toFixed(6));
         const lng = parseFloat(pos.coords.longitude.toFixed(6));
-        setGeofenceForm((prev) => ({
-          ...prev,
-          [branchKey]: { ...prev[branchKey], lat, lng, radiusMetres: 150 },
-        }));
-        showMsg(`Captured GPS location for ${branchKey === 'zogbeli' ? 'Zogbeli' : 'Vittin'} Branch: (${lat}, ${lng})`);
+        const accuracy = Math.round(pos.coords.accuracy || 0);
+        // Functional updater guarantees we get fresh state, and we ONLY touch the specific branch key
+        setGeofenceForm((prev) => {
+          const updated = {
+            ...prev,
+            [branchKey]: {
+              ...prev[branchKey],
+              lat,
+              lng,
+            },
+          };
+          return updated;
+        });
+        showMsg(`✅ ${branchLabel} captured: (${lat}, ${lng}) ±${accuracy}m. Click "Save All Settings" to apply.`);
       },
       (err) => {
-        showMsg(`Failed to capture GPS location: ${err.message}`, 'error');
+        showMsg(`GPS capture failed for ${branchLabel}: ${err.message}`, 'error');
       },
-      { enableHighAccuracy: true }
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
     );
   };
 
+
+  const handleTestLocation = (branchKey) => {
+    if (!navigator.geolocation) {
+      showMsg('Geolocation not supported', 'error');
+      return;
+    }
+    setGpsTestLoading(true);
+    setGpsTestResult(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy || 0);
+        const bLat = geofenceForm[branchKey]?.lat;
+        const bLng = geofenceForm[branchKey]?.lng;
+        const radius = geofenceForm[branchKey]?.radiusMetres || 150;
+        const maxAcc = geofenceForm[branchKey]?.maxGpsAccuracyMeters || 50;
+        const branchName = branchKey === 'zogbeli' ? 'Zogbeli' : 'Vittin';
+
+        if (!bLat || !bLng) {
+          setGpsTestLoading(false);
+          showMsg(`No GPS coordinates saved for ${branchName} Branch yet. Capture location first.`, 'error');
+          return;
+        }
+
+        const toRad = (d) => (d * Math.PI) / 180;
+        const R = 6371000;
+        const dLat = toRad(bLat - lat);
+        const dLng = toRad(bLng - lng);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+        const distance = Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+
+        const inGeofence = distance <= radius;
+        const accuracyOk = accuracy <= maxAcc;
+
+        setGpsTestResult({ branch: branchName, distance, radius, pass: inGeofence && accuracyOk, accuracy, maxAcc, inGeofence, accuracyOk });
+        setGpsTestLoading(false);
+      },
+      (err) => {
+        setGpsTestLoading(false);
+        showMsg(`Test failed: ${err.message}`, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 0 }
+    );
+  };
+
+  const handleCreateOverride = async (e) => {
+    e.preventDefault();
+    if (!overrideForm.staffId || !overrideForm.startDate || !overrideForm.endDate) {
+      showMsg('Staff, start date, and end date are required', 'error');
+      return;
+    }
+    try {
+      await api.post('/staff-attendance/admin/overrides', overrideForm);
+      showMsg(`Temporary override created for ${overrideForm.staffName}`);
+      setShowOverrideModal(false);
+      setOverrideForm({ staffId: '', staffName: '', temporaryBranch: 'Vittin', startDate: '', endDate: '', reason: '' });
+      refetchOverrides();
+    } catch (err) {
+      showMsg(err.response?.data?.message || 'Failed to create override', 'error');
+    }
+  };
+
+  const handleCancelOverride = async (overrideId) => {
+    if (!window.confirm('Cancel this temporary branch override?')) return;
+    try {
+      await api.patch(`/staff-attendance/admin/overrides/${overrideId}/cancel`);
+      showMsg('Override cancelled');
+      refetchOverrides();
+    } catch (err) {
+      showMsg(err.response?.data?.message || 'Failed to cancel override', 'error');
+    }
+  };
+
+  // ── Geofence Settings handler
   const handleSaveGeofenceSettings = async (e) => {
     e.preventDefault();
     try {
@@ -353,6 +493,10 @@ const StaffAttendancePage = () => {
   });
 
   const summary = dailyData?.summary || { present: 0, absent: 0, late: 0, onLeave: 0, notMarked: 0, total: 0 };
+  const branchBreakdown = dailyData?.branchBreakdown || { zogbeli: {}, vittin: {} };
+  const attendanceRate = summary.total > 0
+    ? Math.round(((summary.present + summary.late) / summary.total) * 100)
+    : null;
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto">
@@ -409,7 +553,7 @@ const StaffAttendancePage = () => {
         </div>
       )}
 
-      {/* ── Summary Cards Grid ────────────────────────────────────────────── */}
+      {/* ── Summary Cards ────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <SummaryCard label="Present" value={summary.present} color="emerald" sub="On time staff" />
         <SummaryCard label="Late" value={summary.late} color="amber" sub="Arrived after threshold" />
@@ -417,21 +561,59 @@ const StaffAttendancePage = () => {
         <SummaryCard label="On Leave" value={summary.onLeave} color="indigo" sub="Approved leave" />
         <SummaryCard
           label="Attendance Rate"
-          value={summary.attendanceRate != null ? `${summary.attendanceRate}%` : '—'}
+          value={attendanceRate != null ? `${attendanceRate}%` : '—'}
           color="slate"
           sub={`${summary.present + summary.late} / ${summary.total} marked`}
         />
       </div>
 
-      {/* ── Navigation Tabs ───────────────────────────────────────────────── */}
-      <div className="flex items-center space-x-2 border-b border-slate-200 pb-1 overflow-x-auto">
+      {/* Branch Breakdown Strip */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="p-4 rounded-2xl border-2 border-[#78282E]/20 bg-[#78282E]/5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-[#78282E] uppercase tracking-wider flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5" /> Zogbeli Branch
+            </span>
+            <span className="text-[10px] font-bold text-slate-500">{branchBreakdown.zogbeli?.total ?? 0} staff</span>
+          </div>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {[
+              { label: 'Present', val: branchBreakdown.zogbeli?.present ?? 0, cls: 'text-emerald-700' },
+              { label: 'Late', val: branchBreakdown.zogbeli?.late ?? 0, cls: 'text-amber-700' },
+              { label: 'Absent', val: branchBreakdown.zogbeli?.absent ?? 0, cls: 'text-rose-700' },
+              { label: 'Unmarked', val: branchBreakdown.zogbeli?.notMarked ?? 0, cls: 'text-slate-500' },
+            ].map((s) => (<div key={s.label}><p className={`text-xl font-black ${s.cls}`}>{s.val}</p><p className="text-[10px] text-slate-500">{s.label}</p></div>))}
+          </div>
+        </div>
+        <div className="p-4 rounded-2xl border-2 border-amber-900/20 bg-amber-900/5 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-black text-amber-900 uppercase tracking-wider flex items-center gap-1">
+              <MapPin className="w-3.5 h-3.5" /> Vittin Branch
+            </span>
+            <span className="text-[10px] font-bold text-slate-500">{branchBreakdown.vittin?.total ?? 0} staff</span>
+          </div>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            {[
+              { label: 'Present', val: branchBreakdown.vittin?.present ?? 0, cls: 'text-emerald-700' },
+              { label: 'Late', val: branchBreakdown.vittin?.late ?? 0, cls: 'text-amber-700' },
+              { label: 'Absent', val: branchBreakdown.vittin?.absent ?? 0, cls: 'text-rose-700' },
+              { label: 'Unmarked', val: branchBreakdown.vittin?.notMarked ?? 0, cls: 'text-slate-500' },
+            ].map((s) => (<div key={s.label}><p className={`text-xl font-black ${s.cls}`}>{s.val}</p><p className="text-[10px] text-slate-500">{s.label}</p></div>))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Navigation Tabs ──────────────────────────── */}
+      <div className="flex items-center gap-2 border-b border-slate-200 pb-1 overflow-x-auto">
         {[
           { id: 'daily', label: "Today's Register", icon: Calendar },
           { id: 'history', label: 'Attendance History', icon: History },
+          { id: 'attempts', label: 'Rejected Attempts', icon: AlertTriangle },
+          { id: 'overrides', label: 'Branch Overrides', icon: Sliders },
           { id: 'devices', label: 'Kiosk Devices', icon: Laptop },
           { id: 'sessions', label: 'Sessions Setup', icon: Clock },
-          { id: 'events', label: 'Audit Trail Logs', icon: ShieldAlert },
-          { id: 'settings', label: 'Branch GPS Settings', icon: Settings },
+          { id: 'events', label: 'Audit Trail', icon: ShieldAlert },
+          { id: 'settings', label: 'GPS Settings', icon: Settings },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -842,6 +1024,147 @@ const StaffAttendancePage = () => {
         </div>
       )}
 
+      {/* ── TAB: REJECTED ATTEMPTS ─────────────────────────────── */}
+      {activeTab === 'attempts' && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5 text-rose-500" />
+                Rejected Check-In Attempts
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">Every failed attempt with GPS evidence and rejection reason</p>
+            </div>
+            <button onClick={() => refetchAttempts()} className="p-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600">
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="overflow-x-auto rounded-2xl border border-slate-200">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-500 font-bold uppercase tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="p-3.5">Staff</th>
+                  <th className="p-3.5">Time</th>
+                  <th className="p-3.5">Type</th>
+                  <th className="p-3.5">Rejection Reason</th>
+                  <th className="p-3.5">GPS Evidence</th>
+                  <th className="p-3.5">Branch</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                {(attemptsData?.attempts || []).length === 0 ? (
+                  <tr><td colSpan={6} className="p-8 text-center text-slate-400">No rejected attempts found.</td></tr>
+                ) : (
+                  (attemptsData?.attempts || []).map((a) => (
+                    <tr key={a._id} className="hover:bg-rose-50/40 transition-colors">
+                      <td className="p-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <img
+                            src={a.staff?.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(a.staff?.firstName || 'X')}`}
+                            alt=""
+                            className="w-8 h-8 rounded-xl object-cover border border-slate-200"
+                          />
+                          <div>
+                            <p className="font-bold text-slate-900">{a.staff?.firstName} {a.staff?.lastName}</p>
+                            <p className="text-[10px] text-slate-400">{a.staff?.role}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3.5 text-slate-500">{new Date(a.timestamp).toLocaleString('en-GB')}</td>
+                      <td className="p-3.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                          a.attemptType === 'CHECK_IN' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                        }`}>{a.attemptType?.replace('_', ' ')}</span>
+                      </td>
+                      <td className="p-3.5">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-rose-100 text-rose-800">
+                          {(a.rejectionCode || 'UNKNOWN').replace(/_/g, ' ')}
+                        </span>
+                        {a.rejectionMessage && (
+                          <p className="text-[10px] text-slate-500 mt-0.5 max-w-[200px]">{a.rejectionMessage}</p>
+                        )}
+                      </td>
+                      <td className="p-3.5 text-[11px] text-slate-600 space-y-0.5">
+                        {a.latitude != null && <p>Lat: {a.latitude?.toFixed(5)}, Lng: {a.longitude?.toFixed(5)}</p>}
+                        {a.accuracy != null && <p className="text-slate-400">±{a.accuracy}m accuracy</p>}
+                        {a.distanceFromBranch != null && <p className="text-rose-600 font-bold">{a.distanceFromBranch}m from branch</p>}
+                      </td>
+                      <td className="p-3.5">
+                        {a.assignedBranch && (
+                          <span className={`px-2.5 py-1 rounded-full text-[10px] font-black ${
+                            a.assignedBranch === 'Vittin' ? 'bg-amber-100 text-amber-800' : 'bg-[#78282E]/10 text-[#78282E]'
+                          }`}>{a.assignedBranch}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: BRANCH OVERRIDES ──────────────────────────────── */}
+      {activeTab === 'overrides' && (
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                <Sliders className="w-5 h-5 text-indigo-500" />
+                Temporary Branch Assignments
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">Move a teacher temporarily to a different campus for a specified date range</p>
+            </div>
+            <button
+              onClick={() => setShowOverrideModal(true)}
+              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-black transition-all shadow-md"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Add Override</span>
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {(overridesData?.overrides || []).length === 0 ? (
+              <div className="p-8 text-center text-slate-400 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                No active temporary branch overrides.
+              </div>
+            ) : (
+              (overridesData?.overrides || []).map((ov) => (
+                <div key={ov._id} className="p-4 border border-indigo-200 bg-indigo-50/40 rounded-2xl flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={ov.staff?.photoUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(ov.staff?.firstName || 'S')}`}
+                      alt=""
+                      className="w-10 h-10 rounded-xl object-cover border border-indigo-200"
+                    />
+                    <div>
+                      <p className="font-black text-slate-900 text-sm">{ov.staff?.firstName} {ov.staff?.lastName}</p>
+                      <p className="text-xs text-slate-500">
+                        <span className={`font-bold ${ov.permanentBranch === 'Vittin' ? 'text-amber-700' : 'text-[#78282E]'}`}>{ov.permanentBranch}</span>
+                        {' '}&rarr;{' '}
+                        <span className={`font-bold ${ov.temporaryBranch === 'Vittin' ? 'text-amber-700' : 'text-[#78282E]'}`}>{ov.temporaryBranch}</span>
+                        {' '}·{' '}
+                        {new Date(ov.startDate).toLocaleDateString('en-GB')} to {new Date(ov.endDate).toLocaleDateString('en-GB')}
+                      </p>
+                      {ov.reason && <p className="text-[11px] text-slate-400 italic">{ov.reason}</p>}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleCancelOverride(ov._id)}
+                    className="px-3 py-1.5 bg-rose-100 hover:bg-rose-200 text-rose-700 text-xs font-bold rounded-xl transition-colors"
+                  >
+                    Cancel Override
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
       {/* ── TAB 6: BRANCH GEOFENCE SETTINGS ──────────────────────────────── */}
       {activeTab === 'settings' && (
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-6">
@@ -867,6 +1190,13 @@ const StaffAttendancePage = () => {
           </div>
 
           <form onSubmit={handleSaveGeofenceSettings} className="space-y-6">
+            {/* Safe destructure — protects against server returning flat config */}
+            {(() => {
+              const zg = geofenceForm.zogbeli || { lat: '', lng: '', radiusMetres: 150, maxGpsAccuracyMeters: 50 };
+              const vt = geofenceForm.vittin  || { lat: '', lng: '', radiusMetres: 150, maxGpsAccuracyMeters: 50 };
+              const setZg = (patch) => setGeofenceForm((prev) => ({ ...prev, zogbeli: { ...(prev.zogbeli || {}), ...patch } }));
+              const setVt = (patch) => setGeofenceForm((prev) => ({ ...prev, vittin:  { ...(prev.vittin  || {}), ...patch } }));
+              return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Zogbeli Branch Box */}
               <div className="p-5 rounded-2xl border-2 border-red-950/20 bg-red-950/5 space-y-4">
@@ -885,67 +1215,51 @@ const StaffAttendancePage = () => {
                   </span>
                 </div>
 
+                {/* Zogbeli coordinates */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Latitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="e.g. 9.407500"
-                      value={geofenceForm.zogbeli.lat}
-                      onChange={(e) =>
-                        setGeofenceForm({
-                          ...geofenceForm,
-                          zogbeli: { ...geofenceForm.zogbeli, lat: parseFloat(e.target.value) || '' },
-                        })
-                      }
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
-                    />
+                    <input type="number" step="any" placeholder="e.g. 9.407500" value={zg.lat}
+                      onChange={(e) => setZg({ lat: parseFloat(e.target.value) || '' })}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Longitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="e.g. -0.839200"
-                      value={geofenceForm.zogbeli.lng}
-                      onChange={(e) =>
-                        setGeofenceForm({
-                          ...geofenceForm,
-                          zogbeli: { ...geofenceForm.zogbeli, lng: parseFloat(e.target.value) || '' },
-                        })
-                      }
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
-                    />
+                    <input type="number" step="any" placeholder="e.g. -0.839200" value={zg.lng}
+                      onChange={(e) => setZg({ lng: parseFloat(e.target.value) || '' })}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
-                    Allowed Attendance Radius (Metres)
-                  </label>
-                  <input
-                    type="number"
-                    value={geofenceForm.zogbeli.radiusMetres || 150}
-                    onChange={(e) =>
-                      setGeofenceForm({
-                        ...geofenceForm,
-                        zogbeli: { ...geofenceForm.zogbeli, radiusMetres: parseInt(e.target.value, 10) || 150 },
-                      })
-                    }
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Default requirement: 150 Metres</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Radius (Metres)</label>
+                    <input type="number" value={zg.radiusMetres || 150}
+                      onChange={(e) => setZg({ radiusMetres: parseInt(e.target.value, 10) || 150 })}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Max GPS Accuracy (m)</label>
+                    <input type="number" value={zg.maxGpsAccuracyMeters || 50}
+                      onChange={(e) => setZg({ maxGpsAccuracyMeters: parseInt(e.target.value, 10) || 50 })}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
+                    <p className="text-[10px] text-slate-400 mt-1">Reject if GPS worse than this</p>
+                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => captureBranchGps('zogbeli')}
-                  className="w-full flex items-center justify-center space-x-2 py-2.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold transition-all shadow-xs"
-                >
-                  <MapPin className="w-4 h-4 text-[#78282E]" />
-                  <span>Capture Current GPS Location (Zogbeli Campus)</span>
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => captureBranchGps('zogbeli')}
+                    className="flex items-center justify-center gap-2 py-2.5 bg-white border border-[#78282E]/30 hover:bg-[#78282E]/5 text-[#78282E] rounded-xl text-xs font-bold transition-all">
+                    <MapPin className="w-3.5 h-3.5" />
+                    Set Zogbeli GPS
+                  </button>
+                  <button type="button" onClick={() => handleTestLocation('zogbeli')}
+                    disabled={gpsTestLoading}
+                    className="flex items-center justify-center gap-2 py-2.5 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 rounded-xl text-xs font-bold transition-all disabled:opacity-50">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    {gpsTestLoading ? 'Testing…' : 'Test Zogbeli'}
+                  </button>
+                </div>
               </div>
 
               {/* Vittin Branch Box */}
@@ -965,67 +1279,132 @@ const StaffAttendancePage = () => {
                   </span>
                 </div>
 
+                {/* Vittin coordinates */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Latitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="e.g. 9.385000"
-                      value={geofenceForm.vittin.lat}
-                      onChange={(e) =>
-                        setGeofenceForm({
-                          ...geofenceForm,
-                          vittin: { ...geofenceForm.vittin, lat: parseFloat(e.target.value) || '' },
-                        })
-                      }
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
-                    />
+                    <input type="number" step="any" placeholder="e.g. 9.385000" value={vt.lat}
+                      onChange={(e) => setVt({ lat: parseFloat(e.target.value) || '' })}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Longitude</label>
-                    <input
-                      type="number"
-                      step="any"
-                      placeholder="e.g. -0.812000"
-                      value={geofenceForm.vittin.lng}
-                      onChange={(e) =>
-                        setGeofenceForm({
-                          ...geofenceForm,
-                          vittin: { ...geofenceForm.vittin, lng: parseFloat(e.target.value) || '' },
-                        })
-                      }
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
-                    />
+                    <input type="number" step="any" placeholder="e.g. -0.812000" value={vt.lng}
+                      onChange={(e) => setVt({ lng: parseFloat(e.target.value) || '' })}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">
-                    Allowed Attendance Radius (Metres)
-                  </label>
-                  <input
-                    type="number"
-                    value={geofenceForm.vittin.radiusMetres || 150}
-                    onChange={(e) =>
-                      setGeofenceForm({
-                        ...geofenceForm,
-                        vittin: { ...geofenceForm.vittin, radiusMetres: parseInt(e.target.value, 10) || 150 },
-                      })
-                    }
-                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white"
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Default requirement: 150 Metres</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Radius (Metres)</label>
+                    <input type="number" value={vt.radiusMetres || 150}
+                      onChange={(e) => setVt({ radiusMetres: parseInt(e.target.value, 10) || 150 })}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Max GPS Accuracy (m)</label>
+                    <input type="number" value={vt.maxGpsAccuracyMeters || 50}
+                      onChange={(e) => setVt({ maxGpsAccuracyMeters: parseInt(e.target.value, 10) || 50 })}
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
+                    <p className="text-[10px] text-slate-400 mt-1">Reject if GPS worse than this</p>
+                  </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => captureBranchGps('vittin')}
-                  className="w-full flex items-center justify-center space-x-2 py-2.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-800 rounded-xl text-xs font-bold transition-all shadow-xs"
-                >
-                  <MapPin className="w-4 h-4 text-amber-800" />
-                  <span>Capture Current GPS Location (Vittin Campus)</span>
-                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => captureBranchGps('vittin')}
+                    className="flex items-center justify-center gap-2 py-2.5 bg-white border border-amber-800/30 hover:bg-amber-800/5 text-amber-800 rounded-xl text-xs font-bold transition-all">
+                    <MapPin className="w-3.5 h-3.5" />
+                    Set Vittin GPS
+                  </button>
+                  <button type="button" onClick={() => handleTestLocation('vittin')}
+                    disabled={gpsTestLoading}
+                    className="flex items-center justify-center gap-2 py-2.5 bg-white border border-emerald-300 hover:bg-emerald-50 text-emerald-800 rounded-xl text-xs font-bold transition-all disabled:opacity-50">
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    {gpsTestLoading ? 'Testing…' : 'Test Vittin'}
+                  </button>
+                </div>
+              </div>
+            </div>
+            );
+            })()}
+
+            {/* GPS Test Result Panel */}
+            {gpsTestResult && (
+              <div className={`p-4 rounded-2xl border ${gpsTestResult.pass ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
+                <div className="flex items-start gap-3">
+                  {gpsTestResult.pass
+                    ? <ShieldCheck className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    : <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />}
+                  <div>
+                    <p className={`text-xs font-extrabold ${gpsTestResult.pass ? 'text-emerald-900' : 'text-rose-900'}`}>
+                      {gpsTestResult.pass ? `✅ Inside ${gpsTestResult.branch} geofence` : `❌ Outside ${gpsTestResult.branch} geofence`}
+                    </p>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      You are <strong>{gpsTestResult.distance}m</strong> from {gpsTestResult.branch} centre (max {gpsTestResult.radius}m).
+                      GPS accuracy: <strong>±{gpsTestResult.accuracy}m</strong> (max allowed: ±{gpsTestResult.maxAcc}m).
+                    </p>
+                    {!gpsTestResult.inGeofence && <p className="text-[10px] text-rose-600 mt-1 font-bold">Location outside geofence radius.</p>}
+                    {!gpsTestResult.accuracyOk && <p className="text-[10px] text-rose-600 mt-0.5 font-bold">GPS signal too weak for this campus.</p>}
+                  </div>
+                  <button onClick={() => setGpsTestResult(null)} className="ml-auto text-slate-400 hover:text-slate-700">×</button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Time Policy Section ────────────────────────────── */}
+            <div className="pt-4 border-t border-slate-100 space-y-4">
+              <h4 className="font-black text-slate-800 text-sm flex items-center gap-2">
+                <Clock className="w-4 h-4 text-slate-500" />
+                Attendance Time Policy
+              </h4>
+              <p className="text-[11px] text-slate-500">Control when teachers can check in and out each day. All times are in 24-hour format.</p>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Check-In Opens</label>
+                  <input type="time" value={geofenceForm.checkInStartTime || '05:40'}
+                    onChange={(e) => setGeofenceForm({ ...geofenceForm, checkInStartTime: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
+                  <p className="text-[10px] text-slate-400 mt-1">Default: 05:40</p>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Late After</label>
+                  <input type="time" value={geofenceForm.lateAfterTime || '07:45'}
+                    onChange={(e) => setGeofenceForm({ ...geofenceForm, lateAfterTime: e.target.value })}
+                    className="w-full border border-amber-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-amber-50" />
+                  <p className="text-[10px] text-slate-400 mt-1">Default: 07:45</p>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Check-In Closes</label>
+                  <input type="time" value={geofenceForm.checkInEndTime || '10:00'}
+                    onChange={(e) => setGeofenceForm({ ...geofenceForm, checkInEndTime: e.target.value })}
+                    className="w-full border border-rose-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-rose-50" />
+                  <p className="text-[10px] text-slate-400 mt-1">Default: 10:00</p>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Check-Out Opens</label>
+                  <input type="time" value={geofenceForm.checkOutStartTime || '12:00'}
+                    onChange={(e) => setGeofenceForm({ ...geofenceForm, checkOutStartTime: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Check-Out Closes</label>
+                  <input type="time" value={geofenceForm.checkOutEndTime || '20:00'}
+                    onChange={(e) => setGeofenceForm({ ...geofenceForm, checkOutEndTime: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 bg-white" />
+                </div>
+                <div className="flex flex-col justify-center gap-2">
+                  <label className="text-[11px] font-bold uppercase text-slate-500">Require GPS at Checkout</label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={geofenceForm.requireGpsOnCheckout ?? true}
+                      onChange={(e) => setGeofenceForm({ ...geofenceForm, requireGpsOnCheckout: e.target.checked })}
+                      className="w-4 h-4 text-emerald-600 rounded" />
+                    <span className="text-xs font-bold text-slate-700">
+                      {geofenceForm.requireGpsOnCheckout ? 'Yes — GPS required at checkout' : 'No — checkout without GPS allowed'}
+                    </span>
+                  </label>
+                </div>
               </div>
             </div>
 
@@ -1035,10 +1414,111 @@ const StaffAttendancePage = () => {
                 className="flex items-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-6 py-3 rounded-xl text-xs transition-all shadow-md shadow-emerald-600/20"
               >
                 <Save className="w-4 h-4" />
-                <span>Save Branch Geofence Configuration</span>
+                <span>Save All Settings</span>
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* ── BRANCH OVERRIDE CREATION MODAL ───────────────────────────────── */}
+      {showOverrideModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white rounded-3xl p-6 shadow-2xl space-y-5 border border-slate-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 text-base flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-indigo-500" />
+                  Create Temporary Branch Assignment
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Override a teacher's home campus for a specific date range
+                </p>
+              </div>
+              <button onClick={() => setShowOverrideModal(false)} className="text-slate-400 hover:text-slate-700 font-bold text-lg">&times;</button>
+            </div>
+
+            <form onSubmit={handleCreateOverride} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Staff ID</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Staff ID or staffCode (e.g. STF-0023)"
+                    value={overrideForm.staffId}
+                    onChange={(e) => setOverrideForm({ ...overrideForm, staffId: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Staff Name (for reference)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. John Doe"
+                    value={overrideForm.staffName}
+                    onChange={(e) => setOverrideForm({ ...overrideForm, staffName: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Temporary Branch</label>
+                  <select
+                    value={overrideForm.temporaryBranch}
+                    onChange={(e) => setOverrideForm({ ...overrideForm, temporaryBranch: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                  >
+                    <option value="Zogbeli">Zogbeli</option>
+                    <option value="Vittin">Vittin</option>
+                  </select>
+                </div>
+                <div />
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Start Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={overrideForm.startDate}
+                    onChange={(e) => setOverrideForm({ ...overrideForm, startDate: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">End Date</label>
+                  <input
+                    type="date"
+                    required
+                    value={overrideForm.endDate}
+                    onChange={(e) => setOverrideForm({ ...overrideForm, endDate: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-[11px] font-bold uppercase text-slate-500 mb-1">Reason</label>
+                  <textarea
+                    rows={2}
+                    placeholder="e.g. Covering class at Vittin for absent teacher"
+                    value={overrideForm.reason}
+                    onChange={(e) => setOverrideForm({ ...overrideForm, reason: e.target.value })}
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center space-x-3 pt-2">
+                <button type="submit" className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-xl text-xs transition-all">
+                  Create Override
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowOverrideModal(false)}
+                  className="px-4 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { getStaffGreeting } from '../../utils/greetingUtils';
+import Skeleton from '../../components/Skeleton';
 import {
   Users,
   CalendarCheck,
@@ -18,14 +20,45 @@ import {
   MessageSquare,
 } from 'lucide-react';
 
+const LEADERSHIP_QUOTES = [
+  "Leadership is not about being in charge. It is about taking care of those in your charge.",
+  "A leader is one who knows the way, goes the way, and shows the way.",
+  "The function of leadership is to produce more leaders, not more followers.",
+  "Great leaders inspire people to have confidence in themselves.",
+  "Leadership is the capacity to translate vision into reality.",
+  "Before you are a leader, success is all about growing yourself. When you become a leader, success is all about growing others.",
+  "To lead people, walk behind them.",
+  "Inspiring minds, shaping character, and leading by example every day.",
+  "Excellence is never an accident; it is always the result of high intention, sincere effort, and intelligent execution.",
+  "True leadership lies in guiding others to success and bringing out the very best in them.",
+];
+
 const DashboardPage = () => {
   const { user } = useAuth();
-  const { data, isLoading, error } = useQuery({
+  const [quoteIndex, setQuoteIndex] = useState(0);
+  const [fadeQuote, setFadeQuote] = useState(true);
+
+  // 5-second leadership quote rotation
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFadeQuote(false);
+      setTimeout(() => {
+        setQuoteIndex((prev) => (prev + 1) % LEADERSHIP_QUOTES.length);
+        setFadeQuote(true);
+      }, 300);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ['dashboardSummary'],
     queryFn: async () => {
       const res = await api.get('/dashboard/summary');
       return res.data?.data;
     },
+    refetchOnMount: 'always',
+    staleTime: 5 * 60 * 1000,      // 5 minutes
+    refetchInterval: 2 * 60 * 1000, // 2 minutes
   });
 
   const getUserName = () => {
@@ -37,13 +70,35 @@ const DashboardPage = () => {
     return user?.name || user?.email?.split('@')[0] || 'Teacher';
   };
 
-  if (isLoading) {
+  const isInitialLoading = isLoading || (!data && isFetching);
+
+  if (isInitialLoading) {
     return (
-      <div className="space-y-6 animate-pulse p-2">
-        <div className="h-44 bg-slate-200 rounded-3xl"></div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="h-28 bg-white rounded-2xl p-5 border border-slate-200"></div>
+      <div className="space-y-6">
+        {/* Hero banner skeleton */}
+        <Skeleton.HeroBanner className="min-h-[11rem]" />
+        {/* 4 stat cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {[1, 2, 3, 4].map(i => <Skeleton.StatCard key={i} />)}
+        </div>
+        {/* 2-column middle row */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-3">
+            <Skeleton.Line width="w-40" height="h-5" />
+            {[1, 2, 3, 4].map(i => <Skeleton.ListItem key={i} />)}
+          </div>
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-3">
+            <Skeleton.Line width="w-40" height="h-5" />
+            {[1, 2, 3, 4].map(i => <Skeleton.ListItem key={i} />)}
+          </div>
+        </div>
+        {/* Bottom row */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-3">
+              <Skeleton.Line width="w-32" height="h-5" />
+              {[1, 2, 3].map(j => <Skeleton.ListItem key={j} />)}
+            </div>
           ))}
         </div>
       </div>
@@ -88,24 +143,12 @@ const DashboardPage = () => {
         <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2 max-w-xl">
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
-              Welcome back, {getUserName()} 👋
+              {getStaffGreeting(user, getUserName())} 👋
             </h1>
-            <p className="text-sm text-slate-600 italic font-medium leading-relaxed">
-              "Teaching is the one profession that creates all other professions."
-            </p>
-          </div>
-
-          {/* Desktop background graphic illustration stub */}
-          <div className="hidden lg:block absolute right-72 top-1/2 -translate-y-1/2 opacity-80 pointer-events-none">
-            <div className="relative w-40 h-28">
-              <div className="absolute inset-0 bg-emerald-200/30 rounded-2xl transform rotate-3"></div>
-              <div className="absolute inset-2 bg-white/80 backdrop-blur-xs border border-emerald-100 rounded-xl p-3 flex flex-col justify-between shadow-xs">
-                <div className="h-2 w-12 bg-emerald-300 rounded-full"></div>
-                <div className="space-y-1">
-                  <div className="h-1.5 w-20 bg-slate-200 rounded-full"></div>
-                  <div className="h-1.5 w-16 bg-slate-200 rounded-full"></div>
-                </div>
-              </div>
+            <div className={`transition-all duration-300 min-h-[40px] flex items-center ${fadeQuote ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
+              <p className="text-sm text-slate-600 italic font-medium leading-relaxed">
+                "{LEADERSHIP_QUOTES[quoteIndex]}"
+              </p>
             </div>
           </div>
 
@@ -113,7 +156,7 @@ const DashboardPage = () => {
           <div className="bg-white/90 backdrop-blur-md border border-slate-200/90 rounded-2xl p-4 md:p-5 shadow-xs shrink-0 max-w-md w-full xl:w-auto">
             <div className="flex items-center justify-between gap-4 mb-3">
               <h3 className="text-sm font-bold text-slate-900">
-                You have {todayClassesCount} {todayClassesCount === 1 ? 'class' : 'classes'} active
+                {todayClassesCount} {todayClassesCount === 1 ? 'class' : 'classes'} active
               </h3>
               <div className="p-1.5 bg-emerald-50 text-emerald-700 rounded-lg">
                 <Calendar size={16} />
@@ -153,9 +196,9 @@ const DashboardPage = () => {
         {/* Card 1: Classes Count */}
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-xs font-bold text-slate-500 block">Classes Assigned</span>
+            <span className="text-xs font-bold text-slate-500 block">Active Classes</span>
             <h2 className="text-3xl font-black text-slate-900">{todayClassesCount}</h2>
-            <span className="text-xs font-bold text-emerald-700 block mt-1">Active Classrooms</span>
+            <span className="text-xs font-bold text-emerald-700 block mt-1">Classrooms & Streams</span>
           </div>
           <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center shrink-0">
             <BookOpen size={22} />
@@ -165,9 +208,11 @@ const DashboardPage = () => {
         {/* Card 2: Active Students */}
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-xs font-bold text-slate-500 block">Students Enrolled</span>
+            <span className="text-xs font-bold text-slate-500 block">Total Students</span>
             <h2 className="text-3xl font-black text-slate-900">{totalStudents}</h2>
-            <span className="text-xs text-slate-400 font-medium block mt-1">Across assigned classes</span>
+            <span className="text-xs text-slate-400 font-medium block mt-1">
+              {user?.role === 'teacher' ? 'Across assigned classes' : 'Total enrolled students'}
+            </span>
           </div>
           <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0">
             <Users size={22} />
@@ -206,7 +251,7 @@ const DashboardPage = () => {
           <div className="flex items-center justify-between pb-2 border-b border-slate-100">
             <h3 className="text-sm font-bold text-slate-900 flex items-center space-x-2">
               <BookOpen size={18} className="text-emerald-700" />
-              <span>Assigned Classes</span>
+              <span>{user?.role === 'teacher' ? 'Assigned Classes' : 'Classes Overview'}</span>
             </h3>
             <Link to="/classes" className="text-xs font-bold text-slate-600 hover:text-emerald-800 bg-slate-100 hover:bg-slate-200/70 px-2.5 py-1 rounded-lg transition-colors">
               Manage Classes
@@ -231,7 +276,7 @@ const DashboardPage = () => {
               ))
             ) : (
               <div className="py-8 text-center text-xs text-slate-400 font-medium">
-                No active classes found for this teacher.
+                No active classes found in the system.
               </div>
             )}
           </div>

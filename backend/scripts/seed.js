@@ -313,10 +313,11 @@ const seed = async () => {
       passwordHash: 'Driver@2026', role: 'driver', refStaff: driverCaptain._id, isActive: true,
     });
 
-    // 6. Create Classes — Primary 2 → JHS 3 (plain names, no colour suffixes)
-    console.log('Seeding Classes (Primary 2 – JHS 3)...');
+    // 6. Create Classes — Primary 1 → JHS 3 (plain names, no colour suffixes)
+    console.log('Seeding Classes (Primary 1 – JHS 3)...');
 
     const classDefinitions = [
+      { levelCode: 'BS1', name: 'Primary 1',  levelOrder: 5  },
       { levelCode: 'BS2', name: 'Primary 2',  levelOrder: 6  },
       { levelCode: 'BS3', name: 'Primary 3',  levelOrder: 7  },
       { levelCode: 'BS4', name: 'Primary 4',  levelOrder: 8  },
@@ -342,7 +343,7 @@ const seed = async () => {
     }
 
     // Assign teachers to their classes
-    fareedStaff.classesAssigned = [createdClasses[3]._id]; // Primary 5
+    fareedStaff.classesAssigned = [createdClasses[4]._id]; // Primary 5
     await fareedStaff.save();
 
     // 7. Routes & Buses

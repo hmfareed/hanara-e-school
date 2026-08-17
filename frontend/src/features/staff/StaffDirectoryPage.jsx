@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import Skeleton from '../../components/Skeleton';
 import {
   Search, Plus, Edit, ChevronLeft, ChevronRight,
   KeyRound, RefreshCw, CheckCircle2, XCircle, Clock,
@@ -109,11 +110,145 @@ const RegistrationCodePanel = () => {
   );
 };
 
+/* ─── Pending Staff Approvals / Waitlist Panel ─── */
+const StaffWaitlistPanel = () => {
+  const queryClient = useQueryClient();
+  const [notification, setNotification] = useState({ text: '', type: '' });
+
+  const { data: waitlistData, isLoading } = useQuery({
+    queryKey: ['staffWaitlist'],
+    queryFn: async () => {
+      const res = await api.get('/staff/waitlist');
+      return res.data?.data || [];
+    },
+  });
+
+  const approveMutation = useMutation({
+    mutationFn: (userId) => api.post(`/staff/waitlist/${userId}/approve`),
+    onSuccess: (res) => {
+      setNotification({ text: res.data?.message || 'Staff approved successfully!', type: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['staffWaitlist'] });
+      queryClient.invalidateQueries({ queryKey: ['staffList'] });
+      setTimeout(() => setNotification({ text: '', type: '' }), 4000);
+    },
+    onError: (err) => {
+      setNotification({ text: err.response?.data?.message || 'Failed to approve staff.', type: 'error' });
+    },
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: (userId) => api.post(`/staff/waitlist/${userId}/reject`),
+    onSuccess: (res) => {
+      setNotification({ text: res.data?.message || 'Registration rejected.', type: 'success' });
+      queryClient.invalidateQueries({ queryKey: ['staffWaitlist'] });
+      queryClient.invalidateQueries({ queryKey: ['staffList'] });
+      setTimeout(() => setNotification({ text: '', type: '' }), 4000);
+    },
+    onError: (err) => {
+      setNotification({ text: err.response?.data?.message || 'Failed to reject registration.', type: 'error' });
+    },
+  });
+
+  const waitlist = waitlistData || [];
+  if (!isLoading && waitlist.length === 0) return null;
+
+  return (
+    <div className="bg-amber-50/70 border-2 border-amber-200 rounded-2xl p-5 shadow-sm space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-start space-x-3">
+          <div className="h-10 w-10 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center flex-shrink-0">
+            <Clock size={20} className="text-amber-800 animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-black text-amber-950 uppercase tracking-wide">
+                Pending Staff Registrations (Waitlist)
+              </h3>
+              <span className="px-2 py-0.5 rounded-full text-xs font-black bg-amber-500 text-white shadow-xs">
+                {waitlist.length} {waitlist.length === 1 ? 'Applicant' : 'Applicants'}
+              </span>
+            </div>
+            <p className="text-xs text-amber-800/80 mt-0.5">
+              Review and approve newly registered staff accounts before granting system access and subject assignments.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {notification.text && (
+        <div className={`p-3 rounded-xl text-xs font-bold flex items-center gap-2 ${
+          notification.type === 'success' ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-rose-100 text-rose-900 border border-rose-300'
+        }`}>
+          {notification.type === 'success' ? <CheckCircle2 size={16} /> : <AlertTriangle size={16} />}
+          {notification.text}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="p-4 flex items-center justify-center space-x-2 text-xs text-amber-800 font-semibold">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-700 border-t-transparent" />
+          <span>Loading pending waitlist…</span>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+          {waitlist.map((item) => {
+            const staff = item.refStaff || {};
+            const isActing = approveMutation.isPending || rejectMutation.isPending;
+            return (
+              <div key={item._id} className="bg-white border border-amber-200/80 rounded-xl p-4 shadow-xs flex flex-col justify-between space-y-3">
+                <div className="flex items-start space-x-3">
+                  <div className="h-10 w-10 rounded-full bg-amber-100 border border-amber-200 flex-shrink-0 flex items-center justify-center text-amber-800 font-black text-sm">
+                    {staff.firstName ? staff.firstName[0].toUpperCase() : item.email[0].toUpperCase()}
+                  </div>
+                  <div className="overflow-hidden flex-1">
+                    <h4 className="text-sm font-bold text-slate-900 truncate">
+                      {staff.firstName ? `${staff.title ? staff.title + ' ' : ''}${staff.firstName} ${staff.lastName || ''}` : item.email}
+                    </h4>
+                    <p className="text-xs text-slate-500 font-mono truncate">{item.email}</p>
+                    {staff.phone && <p className="text-[11px] text-slate-400">{staff.phone}</p>}
+                    <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                      {staff.role || item.role}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                  <button
+                    onClick={() => approveMutation.mutate(item._id)}
+                    disabled={isActing}
+                    className="flex-1 py-1.5 px-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs flex items-center justify-center gap-1 shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <CheckCircle2 size={13} />
+                    Approve
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Reject registration for ${staff.firstName || item.email}?`)) {
+                        rejectMutation.mutate(item._id);
+                      }
+                    }}
+                    disabled={isActing}
+                    className="py-1.5 px-3 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <XCircle size={13} />
+                    Reject
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 /* ═══════════════════════════════════════════════════════════════ */
 
 const StaffDirectoryPage = () => {
   const { user } = useAuth();
-  const isSuperAdmin = user?.role === 'superadmin';
+  const isAdmin = ['superadmin', 'admin', 'system_admin'].includes(user?.role);
+  const isSuperAdmin = ['superadmin', 'admin', 'system_admin'].includes(user?.role);
 
   const [search, setSearch] = useState('');
   const [page, setPage]     = useState(1);
@@ -141,7 +276,8 @@ const StaffDirectoryPage = () => {
     },
   });
 
-  const staffList = staffData?.data || [];
+  const rawStaffList = staffData?.data || [];
+  const staffList = rawStaffList.filter((s) => s && s.firstName && s.firstName.trim().length > 0);
   const meta = staffData?.meta || {};
 
   const getRoleBadge = (role) => {
@@ -156,6 +292,29 @@ const StaffDirectoryPage = () => {
       default:           return 'bg-slate-100 text-slate-800 border-slate-200';
     }
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-2">
+            <Skeleton.Line width="w-40" height="h-6" />
+            <Skeleton.Line width="w-72" height="h-4" />
+          </div>
+          <Skeleton.Box w="w-40" h="h-10" rounded="rounded-xl" />
+        </div>
+        <div className="flex gap-3">
+          <Skeleton.Box w="w-full" h="h-10" rounded="rounded-xl" />
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-100 flex gap-6">
+            {[1, 2, 3, 4, 5].map(i => <Skeleton.Line key={i} width="w-20" height="h-3.5" />)}
+          </div>
+          {Array.from({ length: 10 }).map((_, i) => <Skeleton.TableRow key={i} cols={6} />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -174,8 +333,11 @@ const StaffDirectoryPage = () => {
         </Link>
       </div>
 
-      {/* ── Registration Code Panel (superadmin only) ── */}
-      {isSuperAdmin && <RegistrationCodePanel />}
+      {/* ── Registration Code Panel (superadmin, admin & system_admin) ── */}
+      {isAdmin && <RegistrationCodePanel />}
+
+      {/* ── Pending Staff Registrations / Waitlist Panel ── */}
+      {isAdmin && <StaffWaitlistPanel />}
 
       {/* ── Directory ── */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
@@ -224,9 +386,16 @@ const StaffDirectoryPage = () => {
                               <div className="flex items-center space-x-3">
                                 <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex-shrink-0 flex items-center justify-center text-slate-400 overflow-hidden">
                                   {member.photoUrl ? (
-                                    <img src={member.photoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                                    <img
+                                      src={member.photoUrl}
+                                      alt="Avatar"
+                                      className="h-full w-full object-cover"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                      }}
+                                    />
                                   ) : (
-                                    <span className="text-xs font-bold font-sans text-slate-500">{(member.firstName?.[0] || '').toUpperCase()}</span>
+                                    <span className="text-xs font-bold font-sans text-slate-500">{(member.firstName?.[0] || 'T').toUpperCase()}</span>
                                   )}
                                 </div>
                                 <span>

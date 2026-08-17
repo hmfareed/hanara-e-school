@@ -57,9 +57,14 @@ const ClassesPage = () => {
   /* ── queries ── */
   const { data: classes } = useQuery({ queryKey: ['classesList'], queryFn: async () => (await api.get('/classes')).data?.data || [] });
   const { data: levels } = useQuery({ queryKey: ['levelsList'], queryFn: async () => (await api.get('/classes/levels')).data?.data || [] });
-  const { data: subjects } = useQuery({ queryKey: ['subjectsList'], queryFn: async () => (await api.get('/classes/subjects')).data?.data || [] });
+  const { data: rawSubjects } = useQuery({ queryKey: ['subjectsList'], queryFn: async () => (await api.get('/classes/subjects')).data?.data || [] });
+  const subjects = (rawSubjects || []).filter((s) => s && s.name && s.name.trim().length > 0);
+
   const { data: assignments } = useQuery({ queryKey: ['assignmentsList'], queryFn: async () => (await api.get('/classes/assignments')).data?.data || [] });
-  const { data: teachers } = useQuery({ queryKey: ['teachersList'], queryFn: async () => (await api.get('/staff?role=teacher,system_admin')).data?.data || [] });
+
+  const { data: rawTeachers } = useQuery({ queryKey: ['teachersList'], queryFn: async () => (await api.get('/staff?role=teacher,system_admin')).data?.data || [] });
+  const teachers = (rawTeachers || []).filter((t) => t && t.firstName && t.firstName.trim().length > 0);
+
   const { data: academicYears } = useQuery({ queryKey: ['academicYearsList'], queryFn: async () => (await api.get('/academic-years')).data?.data || [] });
 
   const activeAcademicYear = academicYears?.find((y) => y.isCurrent) || academicYears?.[0] || null;
@@ -433,13 +438,13 @@ const ClassesPage = () => {
                 {assignments?.length > 0 ? (
                   assignments.map((ass) => (
                     <tr key={ass._id} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="py-4 px-6 font-bold text-slate-900">{ass.class?.name || ass.class}</td>
+                      <td className="py-4 px-6 font-bold text-slate-900">{ass.class?.name || ass.class || 'Unassigned Class'}</td>
                       <td className="py-4 px-6 font-semibold text-slate-800 font-sans">
-                        {ass.subject?.name || ass.subject}{' '}
-                        <span className="text-xs text-slate-400 font-mono">({ass.subject?.code})</span>
+                        {ass.subject?.name || ass.subject || 'Unassigned Subject'}{' '}
+                        {ass.subject?.code && <span className="text-xs text-slate-400 font-mono">({ass.subject.code})</span>}
                       </td>
                       <td className="py-4 px-6 font-medium text-slate-700 font-sans">
-                        {ass.teacher ? `${ass.teacher.firstName} ${ass.teacher.lastName}` : 'Not Assigned'}
+                        {ass.teacher ? `${ass.teacher.firstName || ''} ${ass.teacher.lastName || ''}`.trim() || 'Not Assigned' : 'Not Assigned'}
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex items-center justify-end space-x-1">
@@ -451,7 +456,11 @@ const ClassesPage = () => {
                             <Pencil size={14} />
                           </button>
                           <button
-                            onClick={() => setDeleteTarget({ type: 'assignment', id: ass._id, label: `${ass.class?.name} — ${ass.subject?.name}` })}
+                            onClick={() => setDeleteTarget({
+                              type: 'assignment',
+                              id: ass._id,
+                              label: `${ass.class?.name || 'Class'} — ${ass.subject?.name || 'Subject'}`
+                            })}
                             className={`${actionBtn} text-slate-400 hover:text-red-600 hover:bg-red-50`}
                             title="Delete assignment"
                           >

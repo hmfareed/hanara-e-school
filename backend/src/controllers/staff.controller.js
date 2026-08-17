@@ -8,7 +8,9 @@ const getStaff = async (req, res, next) => {
   try {
     const { page = 1, limit = 20, role, status, search } = req.query;
 
-    const filter = {};
+    const filter = {
+      firstName: { $nin: ['', null] },
+    };
     if (role) {
       if (role.includes(',')) {
         filter.role = { $in: role.split(',') };
@@ -16,7 +18,11 @@ const getStaff = async (req, res, next) => {
         filter.role = role;
       }
     }
-    if (status) filter.employmentStatus = status;
+    if (status && status !== 'all') {
+      filter.employmentStatus = status;
+    } else if (!status) {
+      filter.employmentStatus = { $ne: 'pending' };
+    }
     if (search) {
       filter.$or = [
         { firstName: { $regex: search, $options: 'i' } },
@@ -198,6 +204,12 @@ const approveStaff = async (req, res, next) => {
 
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
+    if (user.refStaff) {
+      await Staff.findByIdAndUpdate(user.refStaff._id || user.refStaff, {
+        $set: { employmentStatus: 'active' },
+      });
+    }
+
     logger.info(`Staff approved by superadmin: ${user.email}`);
     res.json({ success: true, message: `${user.refStaff?.firstName || user.email} has been approved and can now log in.`, data: user });
   } catch (error) {
@@ -215,6 +227,12 @@ const rejectStaff = async (req, res, next) => {
     ).populate('refStaff', 'firstName lastName email role');
 
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+
+    if (user.refStaff) {
+      await Staff.findByIdAndUpdate(user.refStaff._id || user.refStaff, {
+        $set: { employmentStatus: 'terminated' },
+      });
+    }
 
     logger.info(`Staff rejected by superadmin: ${user.email}`);
     res.json({ success: true, message: `${user.refStaff?.firstName || user.email}'s registration has been rejected.`, data: user });

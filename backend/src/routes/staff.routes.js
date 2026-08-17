@@ -18,14 +18,14 @@ const { authorize } = require('../middleware/rbac');
 const { validate } = require('../middleware/validate');
 const { createStaffSchema, updateStaffSchema } = require('../validators/staff.validators');
 
-// Registration code management (superadmin only)
-router.post('/registration-code', protect, authorize('superadmin'), generateRegistrationCode);
-router.get('/registration-code', protect, authorize('superadmin'), getRegistrationCode);
+// Registration code management (superadmin, admin & system_admin)
+router.post('/registration-code', protect, authorize('superadmin', 'admin', 'system_admin'), generateRegistrationCode);
+router.get('/registration-code', protect, authorize('superadmin', 'admin', 'system_admin'), getRegistrationCode);
 
-// Waitlist management (superadmin only)
-router.get('/waitlist', protect, authorize('superadmin'), getWaitlist);
-router.post('/waitlist/:userId/approve', protect, authorize('superadmin'), approveStaff);
-router.post('/waitlist/:userId/reject', protect, authorize('superadmin'), rejectStaff);
+// Waitlist management (superadmin, admin & system_admin)
+router.get('/waitlist', protect, authorize('superadmin', 'admin', 'system_admin'), getWaitlist);
+router.post('/waitlist/:userId/approve', protect, authorize('superadmin', 'admin', 'system_admin'), approveStaff);
+router.post('/waitlist/:userId/reject', protect, authorize('superadmin', 'admin', 'system_admin'), rejectStaff);
 
 // Standard staff CRUD
 router.get('/', protect, authorize('superadmin', 'admin'), getStaff);

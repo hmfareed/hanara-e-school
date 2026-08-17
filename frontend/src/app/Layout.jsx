@@ -43,6 +43,7 @@ import OfflineBanner, { ConnectivityDot } from '../components/OfflineBanner';
 import SyncManagerModal from '../components/SyncManagerModal';
 import ErrorBoundary from '../components/ErrorBoundary';
 import Sidebar from '../components/Sidebar';
+import PwaInstallBanner from '../components/PwaInstallBanner';
 
 /* ── Dynamic header badge showing current academic year ── */
 const ActiveYearBadge = () => {
@@ -251,6 +252,12 @@ const Layout = () => {
       path: '/classes',
       icon: CalendarRange,
       roles: ['superadmin', 'admin'],
+    },
+    {
+      name: 'Master Timetable',
+      path: '/timetable/master',
+      icon: Clock,
+      roles: ['superadmin', 'admin', 'system_admin'],
     },
     {
       name: 'Staff Directory',
@@ -587,7 +594,14 @@ const Layout = () => {
             {/* Date Display Pill */}
             <div className="hidden lg:flex items-center space-x-2 px-3.5 py-1.5 rounded-xl border border-slate-200/80 bg-white text-xs font-semibold text-slate-700 shadow-2xs">
               <CalendarDays size={16} className="text-emerald-600" />
-              <span className="font-medium text-slate-800">Tuesday, Aug 4, 2026</span>
+              <span className="font-medium text-slate-800">
+                {new Date().toLocaleDateString('en-GB', {
+                  weekday: 'long',
+                  year: 'numeric',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </span>
             </div>
 
             {/* Messages Icon (Community Staff Chat) */}
@@ -623,10 +637,17 @@ const Layout = () => {
             {/* User Profile Avatar with Dropdown Arrow */}
             <div className="flex items-center space-x-1.5 pl-2 border-l border-slate-200 cursor-pointer" onClick={handleAvatarClick}>
               <div className="h-9 w-9 bg-emerald-700 text-white rounded-full flex items-center justify-center font-bold text-xs overflow-hidden border border-emerald-600 shadow-2xs">
-                {user?.refStaff?.photoUrl ? (
-                  <img src={user.refStaff.photoUrl} alt="Avatar" className="h-full w-full object-cover" />
+                {user?.refStaff?.photoUrl || user?.photoUrl ? (
+                  <img
+                    src={user.refStaff?.photoUrl || user.photoUrl}
+                    alt="Avatar"
+                    className="h-full w-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
                 ) : (
-                  <span>{getUserName()[0]?.toUpperCase()}</span>
+                  <span>{(getUserName()[0] || 'U').toUpperCase()}</span>
                 )}
               </div>
               <ChevronDown size={14} className="text-slate-400" />
@@ -642,6 +663,9 @@ const Layout = () => {
             </div>
           </ErrorBoundary>
         </main>
+
+        {/* PWA Floating Install & Push Controls */}
+        <PwaInstallBanner />
       </div>
     </div>
   );

@@ -11,8 +11,24 @@ const router = express.Router();
 const { protect } = require('../middleware/auth');
 const syncController = require('../controllers/sync.controller');
 
-// All sync routes require a valid JWT
+const mongoose = require('mongoose');
+
+// Fast lightweight connectivity ping endpoint (verifies backend reachability and database status)
+router.get('/ping', (req, res) => {
+  const isDbConnected = mongoose.connection.readyState === 1;
+  return res.json({
+    success: true,
+    isOnline: true,
+    dbConnected: isDbConnected,
+    timestamp: Date.now(),
+  });
+});
+
+// All subsequent sync routes require a valid JWT
 router.use(protect);
+
+// Consolidated offline bootstrap bundle for initial client cache hydration
+router.get('/bootstrap', syncController.bootstrap);
 
 // Pull delta documents from any store since a given timestamp
 router.get('/pull', syncController.pull);

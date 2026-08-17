@@ -108,11 +108,19 @@ const BackupRestorePage = () => {
   });
 
   const runBackup = useMutation({
-    mutationFn: () => api.post('/admin/backups/run'),
+    mutationFn: () => {
+      if (!navigator.onLine) {
+        throw new Error('System backup generation requires an active internet connection.');
+      }
+      return api.post('/admin/backups/run');
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-backups'] }),
   });
 
   const restoreBackup = async (id, token) => {
+    if (!navigator.onLine) {
+      throw new Error('Destructive system restore requires real-time online two-person authorization and cannot be run offline.');
+    }
     await api.post(`/admin/backups/${id}/restore`, { confirmationToken: token });
     queryClient.invalidateQueries({ queryKey: ['admin-backups'] });
   };

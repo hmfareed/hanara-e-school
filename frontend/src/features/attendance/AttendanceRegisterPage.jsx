@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import Skeleton from '../../components/Skeleton';
 import {
   ClipboardList,
   Check,
@@ -33,22 +34,45 @@ const AttendanceRegisterPage = () => {
   const [message, setMessage] = useState({ text: '', type: '' });
 
   // History Filter States
+  const [historyFilterMode, setHistoryFilterMode] = useState('date'); // 'date' | 'range' | 'presets'
+  const [historySpecificDate, setHistorySpecificDate] = useState(new Date().toISOString().split('T')[0]);
+  const [historyDateFrom, setHistoryDateFrom] = useState('');
+  const [historyDateTo, setHistoryDateTo] = useState('');
   const [historyTimeframe, setHistoryTimeframe] = useState('last_week'); // 'yesterday', 'last_week', 'last_month', 'term'
   const [historySearch, setHistorySearch] = useState('');
 
-  const { data: classes } = useQuery({
-    queryKey: ['classesList'],
+  const isTeacherOnly = user?.role === 'teacher';
+  const currentUserId = (user?.id || user?._id)?.toString();
+  const currentStaffId = (user?.refStaff?._id || user?.refStaff)?.toString();
+
+  const { data: rawClasses = [], isLoading: classesLoading } = useQuery({
+    queryKey: ['attendanceClassesList', user?.role, currentUserId, currentStaffId],
     queryFn: async () => {
       const res = await api.get('/classes');
       return res.data?.data || [];
     },
   });
 
-  const availableClasses = classes || [];
+  const availableClasses = React.useMemo(() => {
+    if (!rawClasses || rawClasses.length === 0) return [];
+    if (['superadmin', 'admin', 'system_admin'].includes(user?.role)) {
+      return rawClasses;
+    }
+    // For teachers: only classes where they are the designated formTeacher or classTeacher
+    return rawClasses.filter((cls) => {
+      const ftId = (cls.formTeacher?._id || cls.formTeacher)?.toString();
+      const ctId = (cls.classTeacher?._id || cls.classTeacher)?.toString();
+      return (currentUserId && ftId === currentUserId) || (currentStaffId && (ctId === currentStaffId || ftId === currentStaffId));
+    });
+  }, [rawClasses, user?.role, currentUserId, currentStaffId]);
 
   useEffect(() => {
-    if (availableClasses.length > 0 && !selectedClass) {
-      setSelectedClass(availableClasses[0]._id);
+    if (availableClasses.length > 0) {
+      if (!selectedClass || !availableClasses.some((c) => c._id === selectedClass)) {
+        setSelectedClass(availableClasses[0]._id);
+      }
+    } else {
+      setSelectedClass('');
     }
   }, [availableClasses, selectedClass]);
 
@@ -65,10 +89,27 @@ const AttendanceRegisterPage = () => {
 
   // Query Attendance History
   const { data: historyData, isLoading: historyLoading } = useQuery({
-    queryKey: ['attendanceHistory', selectedClass, historyTimeframe, historySearch],
+    queryKey: [
+      'attendanceHistory',
+      selectedClass,
+      historyFilterMode,
+      historySpecificDate,
+      historyDateFrom,
+      historyDateTo,
+      historyTimeframe,
+      historySearch,
+    ],
     queryFn: async () => {
       if (!selectedClass) return null;
-      const params = { classId: selectedClass, timeframe: historyTimeframe, search: historySearch };
+      const params = { classId: selectedClass, search: historySearch };
+      if (historyFilterMode === 'date') {
+        params.date = historySpecificDate;
+      } else if (historyFilterMode === 'range') {
+        if (historyDateFrom) params.from = historyDateFrom;
+        if (historyDateTo) params.to = historyDateTo;
+      } else {
+        params.timeframe = historyTimeframe;
+      }
       const res = await api.get('/attendance/history', { params });
       return res.data?.data;
     },
@@ -93,17 +134,19 @@ const AttendanceRegisterPage = () => {
 
   const saveMutation = useMutation({
     mutationFn: async (payload) => {
-      return await api.post('/attendance/bulk', payload);
+      const res = await api.post('/attendance/bulk', payload);
+      return res.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['attendanceRegister', selectedClass, selectedDate] });
+      queryClient.invalidateQueries({ queryKey: ['attendanceRegister'] });
+      queryClient.invalidateQueries({ queryKey: ['attendanceHistory'] });
       queryClient.invalidateQueries({ queryKey: ['teacherDashboardSummary'] });
       queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
       setMessage({ text: 'Attendance register saved successfully! Dashboard & parent portal updated.', type: 'success' });
       setTimeout(() => setMessage({ text: '', type: '' }), 5000);
     },
     onError: (err) => {
-      setMessage({ text: err.response?.data?.message || 'Failed to save attendance.', type: 'error' });
+      setMessage({ text: err.response?.data?.message || err.message || 'Failed to save attendance.', type: 'error' });
     },
   });
 
@@ -124,22 +167,63 @@ const AttendanceRegisterPage = () => {
   };
 
   const handleSave = () => {
-    if (!selectedClass) return;
-    const termId = classes?.find((c) => c._id === selectedClass)?.academicYear?.terms?.[0]?._id || null;
+    if (!selectedClass) {
+      setMessage({ text: 'Please select a class first.', type: 'error' });
+      return;
+    }
+    if (register.length === 0) {
+      setMessage({ text: 'No students found in this class to save.', type: 'error' });
+      return;
+    }
+
+    const targetCls = (availableClasses || []).find((c) => c._id === selectedClass);
+    const termId = targetCls?.academicYear?.terms?.[0]?._id || null;
+
+    const dateObj = new Date(selectedDate);
+    dateObj.setHours(0, 0, 0, 0);
 
     const payload = {
       classId: selectedClass,
-      date: new Date(selectedDate).toISOString(),
-      termId,
+      date: dateObj.toISOString(),
+      termId: termId || null,
       records: register.map((r) => ({
         studentId: r.studentId,
-        status: r.status,
-        notes: r.notes,
+        status: r.status || 'present',
+        notes: r.notes || '',
       })),
     };
 
     saveMutation.mutate(payload);
   };
+
+  if (classesLoading) {
+    return (
+      <div className="space-y-6 pb-12">
+        {/* Header skeleton */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton.Line width="w-64" height="h-7" />
+            <Skeleton.Line width="w-80" height="h-4" />
+          </div>
+          <Skeleton.Box w="w-52" h="h-11" rounded="rounded-2xl" />
+        </div>
+        {/* Class + date selector bar */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-xs">
+          <div className="flex flex-col sm:flex-row gap-4">
+            <Skeleton.Box w="w-full" h="h-10" rounded="rounded-xl" />
+            <Skeleton.Box w="w-48" h="h-10" rounded="rounded-xl" />
+          </div>
+        </div>
+        {/* Register table skeleton */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 flex gap-6">
+            {[1, 2, 3, 4].map(i => <Skeleton.Line key={i} width="w-24" height="h-3.5" />)}
+          </div>
+          {Array.from({ length: 12 }).map((_, i) => <Skeleton.TableRow key={i} cols={5} />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-12">
@@ -195,8 +279,25 @@ const AttendanceRegisterPage = () => {
         </div>
       )}
 
+      {/* Empty State / Not Form Teacher Guard */}
+      {availableClasses.length === 0 && !classesLoading && (
+        <div className="bg-amber-50 border border-amber-200 rounded-3xl p-8 text-amber-900 flex items-start gap-4 shadow-xs">
+          <AlertCircle className="w-6 h-6 text-amber-600 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <h3 className="font-bold text-base text-amber-950">
+              {isTeacherOnly ? 'No Form Class Assigned' : 'No Classes Found'}
+            </h3>
+            <p className="text-xs text-amber-800 leading-relaxed">
+              {isTeacherOnly
+                ? 'Attendance registration is reserved exclusively for designated Form Teachers for their assigned classes. Your account is not currently assigned as the Form Teacher for any class. If you are supposed to take attendance for a class, please contact your school administrator to assign you as the Form Teacher under Classes & Subjects.'
+                : 'There are no active classes found in the system. Please create classes under Classes & Subjects first.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* MODE 1: DAILY REGISTER */}
-      {activeMode === 'register' && (
+      {activeMode === 'register' && availableClasses.length > 0 && (
         <div className="space-y-6">
           {/* Controls Bar */}
           <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -337,56 +438,173 @@ const AttendanceRegisterPage = () => {
       )}
 
       {/* MODE 2: ATTENDANCE HISTORY */}
-      {activeMode === 'history' && (
+      {activeMode === 'history' && availableClasses.length > 0 && (
         <div className="space-y-6">
           {/* History Controls Bar */}
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                Class
-              </label>
-              <select
-                value={selectedClass}
-                onChange={(e) => setSelectedClass(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-              >
-                {availableClasses.map((cls) => (
-                  <option key={cls._id} value={cls._id}>
-                    {cls.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+              {/* Class Selector */}
+              <div className="lg:col-span-3">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Class
+                </label>
+                <select
+                  value={selectedClass}
+                  onChange={(e) => setSelectedClass(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-700"
+                >
+                  {availableClasses.map((cls) => (
+                    <option key={cls._id} value={cls._id}>
+                      {cls.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                Timeframe Filter
-              </label>
-              <select
-                value={historyTimeframe}
-                onChange={(e) => setHistoryTimeframe(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800"
-              >
-                <option value="yesterday">Yesterday</option>
-                <option value="last_week">Last 7 Days (Last Week)</option>
-                <option value="last_month">Last 30 Days (Last Month)</option>
-                <option value="term">Current Term</option>
-              </select>
-            </div>
+              {/* Date Filter Mode & Calendar Controls */}
+              <div className="lg:col-span-6 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                    Date Filter
+                  </label>
+                  <div className="flex items-center gap-1 p-0.5 bg-slate-100 rounded-lg text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => setHistoryFilterMode('date')}
+                      className={`px-2 py-0.5 rounded-md transition-all ${
+                        historyFilterMode === 'date'
+                          ? 'bg-white text-emerald-800 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Calendar Date
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryFilterMode('range')}
+                      className={`px-2 py-0.5 rounded-md transition-all ${
+                        historyFilterMode === 'range'
+                          ? 'bg-white text-emerald-800 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Date Range
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistoryFilterMode('presets')}
+                      className={`px-2 py-0.5 rounded-md transition-all ${
+                        historyFilterMode === 'presets'
+                          ? 'bg-white text-emerald-800 shadow-xs'
+                          : 'text-slate-500 hover:text-slate-900'
+                      }`}
+                    >
+                      Presets
+                    </button>
+                  </div>
+                </div>
 
-            <div>
-              <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                Search Student
-              </label>
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder="Search student name or adm no..."
-                  value={historySearch}
-                  onChange={(e) => setHistorySearch(e.target.value)}
-                  className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none"
-                />
+                {/* Specific Calendar Date Picker */}
+                {historyFilterMode === 'date' && (
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex-1">
+                      <Calendar className="w-4 h-4 text-emerald-700 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="date"
+                        value={historySpecificDate}
+                        onChange={(e) => setHistorySpecificDate(e.target.value)}
+                        className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-emerald-700"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date(historySpecificDate || new Date());
+                        d.setDate(d.getDate() - 1);
+                        setHistorySpecificDate(d.toISOString().split('T')[0]);
+                      }}
+                      className="px-2.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+                      title="Previous Day"
+                    >
+                      ← Prev
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setHistorySpecificDate(new Date().toISOString().split('T')[0])}
+                      className="px-2.5 py-2.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-800 rounded-xl text-xs font-bold transition-colors"
+                      title="Today"
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const d = new Date(historySpecificDate || new Date());
+                        d.setDate(d.getDate() + 1);
+                        setHistorySpecificDate(d.toISOString().split('T')[0]);
+                      }}
+                      className="px-2.5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors"
+                      title="Next Day"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+
+                {/* Custom Date Range Pickers */}
+                {historyFilterMode === 'range' && (
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <input
+                        type="date"
+                        placeholder="From Date"
+                        value={historyDateFrom}
+                        onChange={(e) => setHistoryDateFrom(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-emerald-700"
+                      />
+                    </div>
+                    <div>
+                      <input
+                        type="date"
+                        placeholder="To Date"
+                        value={historyDateTo}
+                        onChange={(e) => setHistoryDateTo(e.target.value)}
+                        className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-emerald-700"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Preset Timeframes */}
+                {historyFilterMode === 'presets' && (
+                  <select
+                    value={historyTimeframe}
+                    onChange={(e) => setHistoryTimeframe(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-700"
+                  >
+                    <option value="yesterday">Yesterday</option>
+                    <option value="last_week">Last 7 Days (Last Week)</option>
+                    <option value="last_month">Last 30 Days (Last Month)</option>
+                    <option value="term">Current Term</option>
+                  </select>
+                )}
+              </div>
+
+              {/* Student Search */}
+              <div className="lg:col-span-3">
+                <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                  Search Student
+                </label>
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Search student name or adm no..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    className="w-full pl-9 pr-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-700"
+                  />
+                </div>
               </div>
             </div>
           </div>

@@ -2,6 +2,8 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
+import { getStaffGreeting } from '../../utils/greetingUtils';
 import { subscribeToEvent, unsubscribeFromEvent } from '../../services/socket';
 import {
   ClipboardList,
@@ -59,9 +61,36 @@ const statusBadge = {
   resolved:           'bg-slate-100 text-slate-600 border-slate-200',
 };
 
+const FINANCE_QUOTES = [
+  "Beware of little expenses; a small leak will sink a great ship.",
+  "Financial integrity is the foundation of trust and sustainable institutional excellence.",
+  "A budget is telling your money where to go instead of wondering where it went.",
+  "Accounting is the language of transparency and responsible stewardship.",
+  "Precision in numbers creates clarity in vision and purpose.",
+  "Stewardship is the responsible overseeing and protection of resources worth preserving.",
+  "Transparency and fiscal diligence are the true hallmarks of effective management.",
+  "Every cedi accounted for is an investment in our students' brighter future.",
+  "Diligent financial records build the confidence upon which schools thrive.",
+];
+
 const AccountantDashboardPage = () => {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [recentSubmissions, setRecentSubmissions] = useState([]);
+  const [quoteIndex, setQuoteIndex] = useState(0);
+  const [fadeQuote, setFadeQuote] = useState(true);
+
+  // 5-second finance quote rotation
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setFadeQuote(false);
+      setTimeout(() => {
+        setQuoteIndex((prev) => (prev + 1) % FINANCE_QUOTES.length);
+        setFadeQuote(true);
+      }, 300);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Today's stats
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery({
@@ -109,9 +138,16 @@ const AccountantDashboardPage = () => {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-black text-slate-800 tracking-tight">Accounts Dashboard</h1>
-          <p className="text-sm text-slate-500 mt-0.5">
-            {new Date().toLocaleDateString('en-GH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
+            {getStaffGreeting(user)} 👋
+          </h1>
+          <div className={`transition-all duration-300 min-h-[22px] flex items-center mt-0.5 ${fadeQuote ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
+            <p className="text-sm text-slate-500 italic font-medium">
+              "{FINANCE_QUOTES[quoteIndex]}"
+            </p>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5 font-medium">
+            {new Date().toLocaleDateString('en-GH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })} • Accounts Overview
           </p>
         </div>
         <button

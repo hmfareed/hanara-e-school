@@ -23,6 +23,10 @@ const {
   getAdminDailyOverview,
   adminBulkMark,
   getAdminHistory,
+  getAttendanceAttempts,
+  getTemporaryOverrides,
+  createTemporaryOverride,
+  cancelTemporaryOverride,
 } = require('../controllers/staffAttendance.controller');
 
 const { protect } = require('../middleware/auth');
@@ -69,5 +73,13 @@ router.post('/check-out', protect, authorize(...ALL_STAFF_ROLES), checkOut);
 router.get('/admin/daily', protect, authorize(...ADMIN_ROLES), getAdminDailyOverview);
 router.post('/admin/bulk', protect, authorize(...ADMIN_ROLES), adminBulkMark);
 router.get('/admin/history', protect, authorize(...ADMIN_ROLES), getAdminHistory);
+
+// ── Rejected Attendance Attempts ──────────────────────────────────────────────
+router.get('/admin/attempts', protect, authorize(...ADMIN_ROLES), getAttendanceAttempts);
+
+// ── Temporary Branch Overrides ────────────────────────────────────────────────
+router.get('/admin/overrides', protect, authorize(...ADMIN_ROLES), getTemporaryOverrides);
+router.post('/admin/overrides', protect, authorize(...ADMIN_ROLES), createTemporaryOverride);
+router.patch('/admin/overrides/:id/cancel', protect, authorize(...ADMIN_ROLES), cancelTemporaryOverride);
 
 module.exports = router;

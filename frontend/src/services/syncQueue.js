@@ -11,6 +11,7 @@ import {
   getDB,
   getAllQueuedItems,
   removeQueuedItem,
+  updateQueuedItem,
   getQueueCount,
   clearSyncQueue,
 } from './db';
@@ -29,6 +30,39 @@ function notifySyncListeners(state) {
 
 let isFlushing = false;
 
+function describeError(error) {
+  return error.response?.data?.message || error.message || 'Unable to synchronize this change';
+}
+
+async function syncAttendanceScans(items, headers) {
+  const events = items.map((item) => ({
+    ...item.body,
+    eventId: item.body?.eventId || item.clientMutationId,
+  }));
+  const response = await axios.post(
+    `${BASE_URL}/staff-attendance/sync`,
+    { events },
+    { headers, withCredentials: true }
+  );
+  const errors = response.data?.data?.errors || [];
+  const errorByEventId = new Map(errors.map((error) => [error.eventId, error]));
+
+  for (const item of items) {
+    const error = errorByEventId.get(item.body?.eventId || item.clientMutationId);
+    if (error) {
+      await updateQueuedItem(item.id, {
+        state: 'failed',
+        retries: (item.retries || 0) + 1,
+        lastError: error.reason || error.error || 'Attendance event was rejected',
+      });
+    } else {
+      await removeQueuedItem(item.id);
+    }
+  }
+
+  return { synced: items.length - errors.length, failed: errors.length };
+}
+
 /**
  * Replay all pending queued mutations against the backend.
  * Called automatically when the browser comes online.
@@ -40,7 +74,9 @@ export async function flush() {
   if (isFlushing) return { synced: 0, failed: 0 };
   isFlushing = true;
 
-  const items = await getAllQueuedItems();
+  const items = (await getAllQueuedItems()).filter(
+    (item) => item.state !== 'failed' && item.state !== 'conflict'
+  );
   if (items.length === 0) {
     isFlushing = false;
     return { synced: 0, failed: 0 };
@@ -58,7 +94,27 @@ export async function flush() {
   let failed = 0;
   const startTime = Date.now();
 
-  for (const item of items) {
+  const attendanceItems = items.filter((item) => item.url === '/staff-attendance/scan');
+  const remainingItems = items.filter((item) => item.url !== '/staff-attendance/scan');
+
+  if (attendanceItems.length > 0) {
+    try {
+      const result = await syncAttendanceScans(attendanceItems, headers);
+      synced += result.synced;
+      failed += result.failed;
+    } catch (err) {
+      for (const item of attendanceItems) {
+        await updateQueuedItem(item.id, {
+          state: 'pending',
+          retries: (item.retries || 0) + 1,
+          lastError: describeError(err),
+        });
+      }
+      failed += attendanceItems.length;
+    }
+  }
+
+  for (const item of remainingItems) {
     if (item.url && (item.url.includes('/auth/') || item.url.includes('/login'))) {
       await removeQueuedItem(item.id);
       continue;
@@ -68,7 +124,7 @@ export async function flush() {
         method: item.method,
         url: `${BASE_URL}${item.url}`,
         data: item.body,
-        headers,
+        headers: { ...headers, 'X-Idempotency-Key': item.clientMutationId },
         withCredentials: true,
       });
 
@@ -85,9 +141,18 @@ export async function flush() {
         console.warn(
           `[SyncQueue] Discarding ${item.method} ${item.url} — server rejected with ${err.response.status}`
         );
-        await removeQueuedItem(item.id);
+        await updateQueuedItem(item.id, {
+          state: err.response.status === 409 ? 'conflict' : 'failed',
+          retries: (item.retries || 0) + 1,
+          lastError: describeError(err),
+        });
+        failed++;
       } else {
-        console.error(`[SyncQueue] Failed to sync ${item.method} ${item.url}`, err);
+        await updateQueuedItem(item.id, {
+          state: 'pending',
+          retries: (item.retries || 0) + 1,
+          lastError: describeError(err),
+        });
         failed++;
         break; // Stop flushing remainder when network is unreachable to prevent CPU hang
       }
@@ -134,7 +199,7 @@ export async function syncSingleItem(itemId) {
       method: item.method,
       url: `${BASE_URL}${item.url}`,
       data: item.body,
-      headers,
+      headers: { ...headers, 'X-Idempotency-Key': item.clientMutationId },
       withCredentials: true,
     });
     await removeQueuedItem(itemId);
@@ -147,14 +212,18 @@ export async function syncSingleItem(itemId) {
     return { success: true };
   } catch (err) {
     if (err.response && err.response.status >= 400 && err.response.status < 500) {
-      await removeQueuedItem(itemId);
+      await updateQueuedItem(itemId, {
+        state: err.response.status === 409 ? 'conflict' : 'failed',
+        retries: (item.retries || 0) + 1,
+        lastError: describeError(err),
+      });
       const remaining = await getQueueCount();
       notifySyncListeners({
         status: 'idle',
         pendingCount: remaining,
         lastSyncTime: new Date().toISOString(),
       });
-      return { success: false, message: `Server rejected (${err.response.status}): Discarded item` };
+      return { success: false, message: describeError(err) };
     }
     return { success: false, message: err.message || 'Network error' };
   }

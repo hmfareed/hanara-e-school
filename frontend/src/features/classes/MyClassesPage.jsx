@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import Skeleton from '../../components/Skeleton';
 import {
   Users,
   UserCheck,
@@ -143,9 +144,30 @@ const MyClassesPage = () => {
 
   if (classesLoading) {
     return (
-      <div className="space-y-6 animate-pulse p-2">
-        <div className="h-20 bg-slate-200/80 rounded-3xl"></div>
-        <div className="h-64 bg-slate-200/80 rounded-3xl"></div>
+      <div className="space-y-6 pb-12">
+        {/* Page header */}
+        <Skeleton.Line width="w-40" height="h-8" />
+        {/* Class pill cards row */}
+        <div className="flex gap-3 overflow-x-auto pb-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="min-w-[200px] bg-white rounded-2xl border border-slate-200 p-4 shadow-xs space-y-2 shrink-0">
+              <Skeleton.Line width="w-28" height="h-4" />
+              <Skeleton.Line width="w-20" height="h-3" />
+            </div>
+          ))}
+        </div>
+        {/* Detail panel */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 space-y-5">
+          <div className="flex gap-3 border-b border-slate-100 pb-4">
+            {[1, 2, 3, 4, 5].map(i => <Skeleton.Box key={i} w="w-24" h="h-9" rounded="rounded-xl" />)}
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map(i => <Skeleton.StatCard key={i} />)}
+          </div>
+          <div className="space-y-1">
+            {Array.from({ length: 8 }).map((_, i) => <Skeleton.TableRow key={i} cols={5} />)}
+          </div>
+        </div>
       </div>
     );
   }

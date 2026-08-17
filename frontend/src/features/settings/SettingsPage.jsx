@@ -26,12 +26,8 @@ import {
 
 import TeacherProfileSettingsPage from './TeacherProfileSettingsPage';
 
-const SettingsPage = () => {
-  const { user, hasRole } = useAuth();
-
-  if (user?.role === 'teacher') {
-    return <TeacherProfileSettingsPage />;
-  }
+const AdminSettingsContent = () => {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const isSuperAdmin = user?.role === 'superadmin';
 
@@ -1133,6 +1129,14 @@ const SettingsPage = () => {
       </div>
     </div>
   );
+};
+
+const SettingsPage = () => {
+  const { user } = useAuth();
+  if (user?.role === 'teacher') {
+    return <TeacherProfileSettingsPage />;
+  }
+  return <AdminSettingsContent />;
 };
 
 export default SettingsPage;

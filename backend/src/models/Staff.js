@@ -59,7 +59,7 @@ const staffSchema = new mongoose.Schema(
     },
     employmentStatus: {
       type: String,
-      enum: ['active', 'on_leave', 'terminated', 'retired'],
+      enum: ['pending', 'active', 'on_leave', 'terminated', 'retired'],
       default: 'active',
     },
     role: {

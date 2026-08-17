@@ -4,8 +4,8 @@ const payrollSchema = new mongoose.Schema(
   {
     staff: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: [true, 'Staff user ID is required'],
+      ref: 'Staff',
+      required: [true, 'Staff ID is required'],
     },
     month: {
       type: String, // Format: YYYY-MM (e.g. 2026-08)
