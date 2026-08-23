@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { Layers, BookOpen, UserCheck, Plus, Pencil, Trash2, AlertTriangle } from 'lucide-react';
 
 /* ─────────────────── tiny reusable confirm dialog ─────────────────── */
@@ -53,9 +54,11 @@ const ClassesPage = () => {
   const [deleteTarget, setDeleteTarget] = useState(null); // { type, id, label }
 
   const queryClient = useQueryClient();
+  const { user, activeMode } = useAuth();
 
   /* ── queries ── */
-  const { data: classes } = useQuery({ queryKey: ['classesList'], queryFn: async () => (await api.get('/classes')).data?.data || [] });
+  const { data: rawClasses } = useQuery({ queryKey: ['classesList', user?._id || user?.id, activeMode], queryFn: async () => (await api.get('/classes')).data?.data || [] });
+  const classes = (rawClasses || []).filter((c) => c && c.name && c.name.trim().length > 0);
   const { data: levels } = useQuery({ queryKey: ['levelsList'], queryFn: async () => (await api.get('/classes/levels')).data?.data || [] });
   const { data: rawSubjects } = useQuery({ queryKey: ['subjectsList'], queryFn: async () => (await api.get('/classes/subjects')).data?.data || [] });
   const subjects = (rawSubjects || []).filter((s) => s && s.name && s.name.trim().length > 0);

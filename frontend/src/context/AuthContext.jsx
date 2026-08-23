@@ -26,6 +26,9 @@ export const AuthProvider = ({ children }) => {
     setActiveMode((prev) => {
       const next = prev === 'admin' ? 'teacher' : 'admin';
       localStorage.setItem('activeMode', next);
+      if (typeof window !== 'undefined' && window.__REACT_QUERY_CLIENT__) {
+        window.__REACT_QUERY_CLIENT__.clear();
+      }
       return next;
     });
   };
@@ -137,6 +140,9 @@ export const AuthProvider = ({ children }) => {
         const loggedUser = res.data.data.user;
         localStorage.setItem('accessToken', res.data.data.accessToken);
         localStorage.setItem('hanara_session_user', JSON.stringify(loggedUser));
+        if (typeof window !== 'undefined' && window.__REACT_QUERY_CLIENT__) {
+          window.__REACT_QUERY_CLIENT__.clear();
+        }
         setUser(loggedUser);
         await saveUserSession(loggedUser);
         generateNewLoginGreeting(loggedUser);
@@ -211,6 +217,10 @@ export const AuthProvider = ({ children }) => {
       setUser(null);
       localStorage.removeItem('accessToken');
       localStorage.removeItem('hanara_session_user');
+      localStorage.removeItem('activeMode');
+      if (typeof window !== 'undefined' && window.__REACT_QUERY_CLIENT__) {
+        window.__REACT_QUERY_CLIENT__.clear();
+      }
       await clearUserSession();
       clearSessionGreeting();
     }

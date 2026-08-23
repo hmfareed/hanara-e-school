@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 
 const ReportsGeneratorPage = () => {
-  const { user } = useAuth();
+  const { user, activeMode } = useAuth();
   const queryClient = useQueryClient();
 
   const [selectedClass, setSelectedClass] = useState('');
@@ -58,7 +58,7 @@ const ReportsGeneratorPage = () => {
 
   // Fetch Classes
   const { data: classes = [] } = useQuery({
-    queryKey: ['reportsGeneratorClassesList'],
+    queryKey: ['reportsGeneratorClassesList', user?._id || user?.id, activeMode],
     queryFn: async () => {
       const res = await api.get('/classes');
       return res.data?.data || [];

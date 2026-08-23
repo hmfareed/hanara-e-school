@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import {
   CreditCard,
   Printer,
@@ -19,9 +20,11 @@ import {
   Building,
   Calendar,
   Award,
+  Layers,
 } from 'lucide-react';
 
 const IdCardGeneratorPage = () => {
+  const { user, activeMode } = useAuth();
   const [entityType, setEntityType] = useState('student'); // 'student' | 'staff'
   const [selectedClass, setSelectedClass] = useState('');
   const [orientation, setOrientation] = useState('portrait'); // 'portrait' | 'landscape'
@@ -30,7 +33,7 @@ const IdCardGeneratorPage = () => {
 
   // Fetch classes for student filter
   const { data: classes = [] } = useQuery({
-    queryKey: ['classesListIdCards'],
+    queryKey: ['classesListIdCards', user?._id || user?.id, activeMode],
     queryFn: async () => (await api.get('/classes')).data?.data || [],
   });
 

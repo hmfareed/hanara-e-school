@@ -15,6 +15,10 @@ const queryClient = new QueryClient({
   },
 });
 
+if (typeof window !== 'undefined') {
+  window.__REACT_QUERY_CLIENT__ = queryClient;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>

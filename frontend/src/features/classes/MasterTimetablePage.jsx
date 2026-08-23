@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import {
   Calendar,
   Clock,
@@ -111,9 +112,11 @@ export default function MasterTimetablePage() {
     targetClassId: '',
   });
 
+  const { user, activeMode } = useAuth();
+
   // Fetch Classes
   const { data: classes = [], isLoading: loadingClasses } = useQuery({
-    queryKey: ['allClassesTimetable'],
+    queryKey: ['allClassesTimetable', user?._id || user?.id, activeMode],
     queryFn: async () => {
       const res = await api.get('/classes');
       return res.data?.data || [];

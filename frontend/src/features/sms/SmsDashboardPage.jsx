@@ -12,9 +12,11 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 
 const SmsDashboardPage = () => {
   const queryClient = useQueryClient();
+  const { user, activeMode } = useAuth();
   const [activeSubTab, setActiveSubTab] = useState('compose'); // compose, logs
   const [targets, setTargets] = useState('all');
   const [classId, setClassId] = useState('');
@@ -38,7 +40,7 @@ const SmsDashboardPage = () => {
 
   // Query Classes (for selective class broadcast)
   const { data: classes } = useQuery({
-    queryKey: ['broadcastClasses'],
+    queryKey: ['broadcastClasses', user?._id || user?.id, activeMode],
     queryFn: async () => {
       const res = await api.get('/classes');
       return res.data?.data || [];

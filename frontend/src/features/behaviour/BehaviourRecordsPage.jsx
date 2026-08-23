@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 const BehaviourRecordsPage = () => {
-  const { user } = useAuth();
+  const { user, activeMode } = useAuth();
   const queryClient = useQueryClient();
 
   const [selectedClass, setSelectedClass] = useState('');
@@ -41,9 +41,9 @@ const BehaviourRecordsPage = () => {
   });
 
   // Fetch Classes for Behaviour logging (all classes for admins/headteacher, or teacher-assigned classes)
-  const isAdmin = ['superadmin', 'admin', 'system_admin'].includes(user?.role);
+  const isAdmin = ['superadmin', 'admin'].includes(user?.role) || (user?.role === 'system_admin' && activeMode === 'admin');
   const { data: classes = [] } = useQuery({
-    queryKey: ['behaviourClassesList', isAdmin, user?._id],
+    queryKey: ['behaviourClassesList', isAdmin, user?._id || user?.id, activeMode],
     queryFn: async () => {
       if (isAdmin) {
         const res = await api.get('/classes');

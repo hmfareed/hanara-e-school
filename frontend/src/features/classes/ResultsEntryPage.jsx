@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 const ResultsEntryPage = () => {
-  const { user } = useAuth();
+  const { user, activeMode } = useAuth();
   const queryClient = useQueryClient();
 
   // Filters & State
@@ -43,11 +43,11 @@ const ResultsEntryPage = () => {
   }, [academicYears, selectedYear]);
 
   // 2. Fetch data based on role
-  const isAdmin = ['superadmin', 'admin'].includes(user?.role);
+  const isAdmin = ['superadmin', 'admin'].includes(user?.role) || (user?.role === 'system_admin' && activeMode === 'admin');
 
   // If Admin: fetch ALL classes & subjects
   const { data: allClasses = [] } = useQuery({
-    queryKey: ['classesList', selectedYear],
+    queryKey: ['classesList', user?._id || user?.id, activeMode, selectedYear],
     queryFn: async () => {
       const res = await api.get('/classes');
       return res.data?.data || [];

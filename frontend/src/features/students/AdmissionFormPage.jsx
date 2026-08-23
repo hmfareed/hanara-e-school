@@ -2,11 +2,13 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import { ArrowLeft, Loader2, Save, User } from 'lucide-react';
 
 const AdmissionFormPage = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { user, activeMode } = useAuth();
 
   const [student, setStudent] = useState({
     firstName: '',
@@ -23,9 +25,10 @@ const AdmissionFormPage = () => {
   const [guardian, setGuardian] = useState({
     firstName: '',
     lastName: '',
-    relationship: 'father',
-    phone: '',
-    altPhone: '',
+    otherNames: '',
+    relationship: 'Father',
+    primaryPhone: '',
+    secondaryPhone: '',
     email: '',
     occupation: '',
     address: '',
@@ -37,7 +40,7 @@ const AdmissionFormPage = () => {
   const [errorMsg, setErrorMsg] = useState('');
 
   const { data: classes } = useQuery({
-    queryKey: ['classesList'],
+    queryKey: ['classesList', user?._id || user?.id, activeMode],
     queryFn: async () => {
       const res = await api.get('/classes');
       return res.data?.data || [];

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { putAll, getAll, putOne, deleteOne, clearStore, enqueueSync, getOne } from './db';
+import { putAll, getAll, putOne, deleteOne, clearStore, enqueueSync, getOne, replaceStore, clearAllCaches } from './db';
 
 // ── Raw Axios Instance for live network requests ─────────────────────────────
 const rawApi = axios.create({
@@ -21,13 +21,15 @@ export function notifyNetworkStatus(online) {
   }
 }
 
-// Request interceptor to attach JWT access token
+// Request interceptor to attach JWT access token & activeMode
 rawApi.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('accessToken');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    const activeMode = localStorage.getItem('activeMode') || 'admin';
+    config.headers['X-Active-Mode'] = activeMode;
     return config;
   },
   (error) => Promise.reject(error)
@@ -175,7 +177,13 @@ async function offlineGet(url, config = {}) {
           try {
             if (Array.isArray(payload)) {
               const validItems = payload.filter((i) => i && i._id);
-              if (validItems.length > 0) {
+              // For full list collections or non-paginated lists, replace the store to clean up stale records
+              if (
+                ['classes', 'academicYears', 'feeStructures', 'settings'].includes(storeName) ||
+                (!config.params?.page && !config.params?.search)
+              ) {
+                await replaceStore(storeName, validItems);
+              } else if (validItems.length > 0) {
                 await putAll(storeName, validItems);
               }
             } else if (payload && typeof payload === 'object') {
@@ -235,6 +243,17 @@ async function loadCachedOrFallback(storeName, url, config = {}, originalErr = n
       }
 
       let cached = await getAll(storeName);
+
+      // Filter out corrupted/blank items from cache
+      if (cached && Array.isArray(cached)) {
+        if (storeName === 'classes') {
+          cached = cached.filter((c) => c && c.name && String(c.name).trim().length > 0);
+        } else if (storeName === 'students') {
+          cached = cached.filter((s) => s && (s.firstName || s.lastName || s.admissionNumber));
+        } else if (storeName === 'staff') {
+          cached = cached.filter((s) => s && (s.firstName || s.lastName || s.email));
+        }
+      }
 
       // Synthesize BECE candidates from JHS 3 students if store is empty
       if (storeName === 'bece' && (!cached || cached.length === 0)) {

@@ -1,13 +1,16 @@
-require('dotenv').config();
+require('dns').setDefaultResultOrder('ipv4first');
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '../.env') });
 const mongoose = require('mongoose');
 const Staff = require('../src/models/Staff');
 const Subject = require('../src/models/Subject');
+const Class = require('../src/models/Class');
 const env = require('../src/config/env');
 
 async function cleanBlanks() {
   try {
-    const mongoUri = env.MONGODB_URI || process.env.MONGODB_URI || 'mongodb://localhost:27017/hanara-sms';
-    await mongoose.connect(mongoUri);
+    const mongoUri = env.MONGODB_URI || process.env.MONGODB_URI;
+    await mongoose.connect(mongoUri, { family: 4 });
     console.log('Connected to database to clean blanks...');
 
     // 1. Clean blank / invalid staff
@@ -31,6 +34,15 @@ async function cleanBlanks() {
       ],
     });
     console.log(`Deleted ${blankSubjectResult.deletedCount} blank subjects.`);
+
+    // 3. Clean blank / invalid classes
+    const blankClassResult = await Class.deleteMany({
+      $or: [
+        { name: { $in: ['', null, undefined] } },
+        { name: /^\s*$/ },
+      ],
+    });
+    console.log(`Deleted ${blankClassResult.deletedCount} blank classes.`);
 
     console.log('Cleanup completed successfully.');
     await mongoose.disconnect();

@@ -10,7 +10,7 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'hanara-sms-db';
-const DB_VERSION = 5;
+const DB_VERSION = 6;
 
 let _db = null;
 
@@ -65,7 +65,6 @@ export async function getDB() {
       // Add indexes to existing stores if upgrading
       if (oldVersion < 4) {
         if (db.objectStoreNames.contains('staff')) {
-          const staffStore = db.objectStoreNames.contains('staff');
           // idb handles store indices dynamically in upgrade handler
         }
       }
@@ -98,6 +97,21 @@ export async function getDB() {
         }
       }
 
+      // ── Clean stale/corrupted caches when upgrading to v6 ────────
+      if (oldVersion > 0 && oldVersion < 6) {
+        const storesToClearOnUpgrade = ['classes', 'students', 'staff', 'dashboard', 'analytics', 'grades'];
+        storesToClearOnUpgrade.forEach((storeName) => {
+          if (db.objectStoreNames.contains(storeName)) {
+            try {
+              const os = transaction.objectStore(storeName);
+              os.clear();
+            } catch (e) {
+              console.warn('[DB Upgrade] Error clearing store:', storeName, e);
+            }
+          }
+        });
+      }
+
       // ── Meta (last sync timestamps & session) ────────────────────
       if (!db.objectStoreNames.contains('meta')) {
         db.createObjectStore('meta');
@@ -117,6 +131,56 @@ export async function putAll(storeName, items) {
   const tx = db.transaction(storeName, 'readwrite');
   await Promise.all(items.map((item) => tx.store.put(item)));
   await tx.done;
+}
+
+/** Replace all records in a store (clears existing items first) */
+export async function replaceStore(storeName, items) {
+  const db = await getDB();
+  const tx = db.transaction(storeName, 'readwrite');
+  await tx.store.clear();
+  if (items && items.length > 0) {
+    await Promise.all(items.map((item) => tx.store.put(item)));
+  }
+  await tx.done;
+}
+
+/** Clear all cached data stores in IndexedDB */
+export async function clearAllCaches() {
+  const db = await getDB();
+  const storesToClear = [
+    'students',
+    'staff',
+    'classes',
+    'attendance',
+    'grades',
+    'fees',
+    'feeStructures',
+    'dailyFeeRegisters',
+    'payroll',
+    'notices',
+    'assignments',
+    'lessonPlans',
+    'behaviour',
+    'academicYears',
+    'settings',
+    'dashboard',
+    'analytics',
+    'parent',
+    'bece',
+    'mockExams',
+    'transport',
+    'store',
+    'staffAttendance',
+  ];
+  for (const name of storesToClear) {
+    if (db.objectStoreNames.contains(name)) {
+      try {
+        await db.clear(name);
+      } catch (err) {
+        console.warn(`[clearAllCaches] Error clearing ${name}:`, err);
+      }
+    }
+  }
 }
 
 /** Get all records from a store */

@@ -16,10 +16,11 @@ const CACHE_TTL_MS = 6000; // 6 seconds
 // GET /api/dashboard/summary
 const getSummary = async (req, res, next) => {
   try {
-    const isTeacher = req.user && req.user.role === 'teacher';
+    const activeMode = req.headers['x-active-mode'] || req.query.mode || 'admin';
+    const isTeacher = req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && activeMode === 'teacher'));
     const isAccountant = req.user && req.user.role === 'accountant';
     const userId = req.user ? (req.user.id || req.user._id)?.toString() : 'guest';
-    const cacheKey = `${userId}_${req.user?.role || 'anon'}`;
+    const cacheKey = `${userId}_${req.user?.role || 'anon'}_${activeMode}`;
 
     const cached = dashboardCache.get(cacheKey);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {

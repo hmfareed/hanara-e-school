@@ -50,13 +50,46 @@ const app = express();
 // Security HTTP headers
 app.use(helmet());
 
-// CORS configuration - support localhost:5173 for Vite dev server
+const allowedOrigins = [
+  process.env.CLIENT_ORIGIN,
+  process.env.FRONTEND_URL,
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+  'http://localhost:5174',
+  'http://127.0.0.1:5174',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000',
+].filter(Boolean);
+
+// CORS configuration - support localhost/127.0.0.1 and configured client origins
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (
+        allowedOrigins.includes(origin) ||
+        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+      ) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Active-Mode',
+      'x-active-mode',
+      'X-Idempotency-Key',
+      'x-idempotency-key',
+      'X-Kiosk-Device-Token',
+      'x-kiosk-device-token',
+      'X-Requested-With',
+      'x-requested-with',
+      'Accept',
+      'Origin',
+    ],
   })
 );
 

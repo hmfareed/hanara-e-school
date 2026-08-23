@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 const AttendanceRegisterPage = () => {
-  const { user } = useAuth();
+  const { user, activeMode: systemActiveMode } = useAuth();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const urlClassId = searchParams.get('classId');
@@ -41,12 +41,12 @@ const AttendanceRegisterPage = () => {
   const [historyTimeframe, setHistoryTimeframe] = useState('last_week'); // 'yesterday', 'last_week', 'last_month', 'term'
   const [historySearch, setHistorySearch] = useState('');
 
-  const isTeacherOnly = user?.role === 'teacher';
+  const isTeacherOnly = user?.role === 'teacher' || (user?.role === 'system_admin' && systemActiveMode === 'teacher');
   const currentUserId = (user?.id || user?._id)?.toString();
   const currentStaffId = (user?.refStaff?._id || user?.refStaff)?.toString();
 
   const { data: rawClasses = [], isLoading: classesLoading } = useQuery({
-    queryKey: ['attendanceClassesList', user?.role, currentUserId, currentStaffId],
+    queryKey: ['attendanceClassesList', user?.role, currentUserId, currentStaffId, systemActiveMode],
     queryFn: async () => {
       const res = await api.get('/classes');
       return res.data?.data || [];
@@ -55,7 +55,7 @@ const AttendanceRegisterPage = () => {
 
   const availableClasses = React.useMemo(() => {
     if (!rawClasses || rawClasses.length === 0) return [];
-    if (['superadmin', 'admin', 'system_admin'].includes(user?.role)) {
+    if (['superadmin', 'admin'].includes(user?.role) || (user?.role === 'system_admin' && systemActiveMode === 'admin')) {
       return rawClasses;
     }
     // For teachers: only classes where they are the designated formTeacher or classTeacher
@@ -64,7 +64,7 @@ const AttendanceRegisterPage = () => {
       const ctId = (cls.classTeacher?._id || cls.classTeacher)?.toString();
       return (currentUserId && ftId === currentUserId) || (currentStaffId && (ctId === currentStaffId || ftId === currentStaffId));
     });
-  }, [rawClasses, user?.role, currentUserId, currentStaffId]);
+  }, [rawClasses, user?.role, systemActiveMode, currentUserId, currentStaffId]);
 
   useEffect(() => {
     if (availableClasses.length > 0) {

@@ -8,9 +8,10 @@ const getClasses = async (req, res, next) => {
   try {
     const { academicYearId, page = 1, limit = 50 } = req.query;
     const filter = {};
-    if (academicYearId) filter.academicYear = academicYearId;
+    const activeMode = req.headers['x-active-mode'] || req.query.mode || 'admin';
+    const isTeacher = req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && activeMode === 'teacher'));
 
-    if (req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher')))) {
+    if (isTeacher) {
       const { getTeacherClasses } = require('../utils/authHelpers');
       const allowedClassIds = await getTeacherClasses(req.user.id, req.user.refStaff);
       filter._id = { $in: allowedClassIds };

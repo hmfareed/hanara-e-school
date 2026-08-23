@@ -26,7 +26,10 @@ const getStudents = async (req, res, next) => {
       filter.status = status;
     }
     
-    if (req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher')))) {
+    const activeMode = req.headers['x-active-mode'] || req.query.mode || 'admin';
+    const isTeacher = req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && activeMode === 'teacher'));
+
+    if (isTeacher) {
       const { getTeacherClasses } = require('../utils/authHelpers');
       const allowedClassIds = await getTeacherClasses(req.user.id, req.user.refStaff);
       const allowedClassObjectIds = allowedClassIds.map((id) => {
@@ -171,7 +174,10 @@ const getStudentById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Student not found' });
     }
 
-    if (req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher')))) {
+    const activeMode = req.headers['x-active-mode'] || req.query.mode || 'admin';
+    const isTeacher = req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && activeMode === 'teacher'));
+
+    if (isTeacher) {
       const { getTeacherClasses } = require('../utils/authHelpers');
       const allowedClassIds = await getTeacherClasses(req.user.id, req.user.refStaff);
       const studentClassId = student.currentClass ? student.currentClass._id.toString() : null;
@@ -197,7 +203,10 @@ const updateStudent = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Student not found' });
     }
 
-    if (req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && req.user.secondaryCapacities?.includes('teacher')))) {
+    const activeMode = req.headers['x-active-mode'] || req.query.mode || 'admin';
+    const isTeacher = req.user && (req.user.role === 'teacher' || (req.user.role === 'system_admin' && activeMode === 'teacher'));
+
+    if (isTeacher) {
       const { getTeacherClasses } = require('../utils/authHelpers');
       const allowedClassIds = await getTeacherClasses(req.user.id, req.user.refStaff);
       const studentClassId = existingStudent.currentClass ? existingStudent.currentClass.toString() : null;

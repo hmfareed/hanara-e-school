@@ -35,15 +35,15 @@ const authorizeClassAccess = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Not authenticated' });
     }
 
-    const { role, refStaff } = req.user;
+    const activeMode = req.headers['x-active-mode'] || req.query.mode || 'admin';
 
-    // Admins and super admins see everything
-    if (role === 'superadmin' || role === 'admin' || role === 'accountant') {
+    // Admins, super admins, and system_admins in admin panel mode see everything
+    if (role === 'superadmin' || role === 'admin' || role === 'accountant' || (role === 'system_admin' && activeMode === 'admin')) {
       return next();
     }
 
     // Teachers and subject teachers, or system_admin acting in teaching capacity: check class assignment
-    if (role === 'teacher' || (role === 'system_admin' && req.user.secondaryCapacities && req.user.secondaryCapacities.includes('teacher'))) {
+    if (role === 'teacher' || (role === 'system_admin' && activeMode === 'teacher')) {
       const classId =
         req.params.classId ||
         req.query.class ||

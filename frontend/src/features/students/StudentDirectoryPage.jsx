@@ -41,7 +41,7 @@ const calculateAge = (dob) => {
 };
 
 const StudentDirectoryPage = () => {
-  const { user } = useAuth();
+  const { user, activeMode } = useAuth();
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
@@ -72,17 +72,20 @@ const StudentDirectoryPage = () => {
   }, [ageRangeFilter]);
 
   // Fetch available classes for filtering
-  const { data: classesData } = useQuery({
-    queryKey: ['classesList'],
+  const { data: rawClassesData } = useQuery({
+    queryKey: ['classesList', user?._id || user?.id, activeMode],
     queryFn: async () => {
       const res = await api.get('/classes');
       return res.data?.data || [];
     },
   });
+  const classesData = useMemo(() => {
+    return (rawClassesData || []).filter((c) => c && c.name && c.name.trim().length > 0);
+  }, [rawClassesData]);
 
   // Fetch students with active filters & pagination
   const { data: studentsData, isLoading, error, refetch } = useQuery({
-    queryKey: ['studentsList', search, classFilter, genderFilter, statusFilter, minAge, maxAge, page],
+    queryKey: ['studentsList', user?._id || user?.id, activeMode, search, classFilter, genderFilter, statusFilter, minAge, maxAge, page],
     queryFn: async () => {
       const params = {
         page,
