@@ -284,8 +284,13 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, handleAvatarClick, fileInputRef,
       return current === '/fees' && !location.search.includes('tab=daily');
     }
 
-    if (basePath === '/fees/daily-register') {
-      return current === '/fees/daily-register' || (current === '/fees' && location.search.includes('tab=daily'));
+    if (basePath === '/fees/daily-register' || basePath === '/fees/daily-collection') {
+      return (
+        current === '/fees/daily-register' ||
+        current === '/fees/daily-collection' ||
+        current === '/fee-collection' ||
+        (current === '/fees' && location.search.includes('tab=daily'))
+      );
     }
 
     return current === basePath || current.startsWith(basePath + '/');

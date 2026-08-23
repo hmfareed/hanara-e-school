@@ -7,8 +7,9 @@ import {
   HelpCircle, RefreshCw, Eye, ShieldAlert, Plus, History, X 
 } from 'lucide-react';
 import { subscribeToEvent, unsubscribeFromEvent } from '../../services/socket';
+import AdminDailyFeeOverview from './AdminDailyFeeOverview';
 
-const DailyFeeRegisterPage = () => {
+const TeacherDailyFeeRegister = () => {
   const { user } = useAuth();
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -904,4 +905,17 @@ const DailyFeeRegisterPage = () => {
   );
 };
 
+const DailyFeeRegisterPage = () => {
+  const { user, activeMode } = useAuth();
+  const isTeacherMode =
+    user?.role === 'teacher' || (user?.role === 'system_admin' && activeMode === 'teacher');
+
+  if (isTeacherMode) {
+    return <TeacherDailyFeeRegister />;
+  }
+
+  return <AdminDailyFeeOverview />;
+};
+
 export default DailyFeeRegisterPage;
+
