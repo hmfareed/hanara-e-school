@@ -163,12 +163,11 @@ const AccountantLayout = () => {
                 setSidebarOpen(false);
               }}
             >
-              <div
-                className="h-9 w-9 rounded-xl flex items-center justify-center font-black text-lg text-white shrink-0"
-                style={{ background: 'linear-gradient(135deg, #0d9488, #0891b2)' }}
-              >
-                ₵
-              </div>
+              <img
+                src="/hanara-badge.png"
+                alt="HANARA Official Badge"
+                className="h-10 w-10 object-contain drop-shadow-md shrink-0"
+              />
               <div>
                 <span className="block text-sm font-black tracking-wide text-white uppercase leading-tight">
                   Accounts
