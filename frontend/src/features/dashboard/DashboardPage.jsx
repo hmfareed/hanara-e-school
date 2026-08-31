@@ -19,6 +19,7 @@ import {
   Cake,
   ChevronRight,
   MessageSquare,
+  Sparkles,
 } from 'lucide-react';
 
 const LEADERSHIP_QUOTES = [
@@ -40,7 +41,7 @@ const DashboardPage = () => {
   const [quoteIndex, setQuoteIndex] = useState(0);
   const [fadeQuote, setFadeQuote] = useState(true);
 
-  // 5-second leadership quote rotation
+  // Rotating quote interval (5 seconds)
   useEffect(() => {
     const interval = setInterval(() => {
       setFadeQuote(false);
@@ -52,26 +53,33 @@ const DashboardPage = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Real-time socket event subscription for live dashboard updates
+  // Real-time socket events for dynamic refresh
   useEffect(() => {
-    const handleLiveBroadcast = () => {
+    const handleSync = () => {
       queryClient.invalidateQueries({ queryKey: ['dashboardSummary'] });
     };
 
-    subscribeToEvent('sms_broadcast_sent', handleLiveBroadcast);
-    subscribeToEvent('dashboard_summary_updated', handleLiveBroadcast);
+    subscribeToEvent('attendance:marked', handleSync);
+    subscribeToEvent('fees:collected', handleSync);
+    subscribeToEvent('student:admitted', handleSync);
+    subscribeToEvent('dashboard_summary_updated', handleSync);
+    subscribeToEvent('sms_broadcast_sent', handleSync);
 
     return () => {
-      unsubscribeFromEvent('sms_broadcast_sent', handleLiveBroadcast);
-      unsubscribeFromEvent('dashboard_summary_updated', handleLiveBroadcast);
+      unsubscribeFromEvent('attendance:marked', handleSync);
+      unsubscribeFromEvent('fees:collected', handleSync);
+      unsubscribeFromEvent('student:admitted', handleSync);
+      unsubscribeFromEvent('dashboard_summary_updated', handleSync);
+      unsubscribeFromEvent('sms_broadcast_sent', handleSync);
     };
   }, [queryClient]);
 
+  // Fetch real aggregated metrics from the backend API
   const { data, isLoading, isFetching, error } = useQuery({
     queryKey: ['dashboardSummary'],
     queryFn: async () => {
       const res = await api.get('/dashboard/summary');
-      return res.data?.data;
+      return res.data?.data || {};
     },
     refetchOnMount: 'always',
     staleTime: 5 * 60 * 1000,      // 5 minutes
@@ -92,12 +100,34 @@ const DashboardPage = () => {
   if (isInitialLoading) {
     return (
       <div className="space-y-6">
-        {/* Hero banner skeleton */}
-        <Skeleton.HeroBanner className="min-h-[11rem]" />
-        {/* 4 stat cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {/* Row 1: Hero Banner & Today's classes skeleton */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-7 xl:col-span-8 bg-white rounded-3xl border border-slate-200/80 p-6 md:p-7 shadow-xs space-y-4">
+            <Skeleton.Line width="w-32" height="h-6" />
+            <Skeleton.Line width="w-64" height="h-8" />
+            <Skeleton.Line width="w-48" height="h-4" />
+            <div className="mt-4 pt-3.5 border-t border-slate-100">
+              <Skeleton.Line width="w-80" height="h-4" />
+            </div>
+          </div>
+          <div className="lg:col-span-5 xl:col-span-4 bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-4">
+            <div className="flex justify-between items-center">
+              <div className="space-y-1">
+                <Skeleton.Line width="w-24" height="h-3" />
+                <Skeleton.Line width="w-36" height="h-5" />
+              </div>
+              <Skeleton.Circle size="w-10 h-10" />
+            </div>
+            <Skeleton.Box h="h-12" rounded="rounded-2xl" />
+            <Skeleton.Box h="h-10" rounded="rounded-2xl" />
+          </div>
+        </div>
+
+        {/* Row 2: 4 stat cards in one line */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
           {[1, 2, 3, 4].map(i => <Skeleton.StatCard key={i} />)}
         </div>
+
         {/* 2-column middle row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-xs space-y-3">
@@ -109,6 +139,7 @@ const DashboardPage = () => {
             {[1, 2, 3, 4].map(i => <Skeleton.ListItem key={i} />)}
           </div>
         </div>
+
         {/* Bottom row */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {[1, 2, 3].map(i => (
@@ -154,71 +185,82 @@ const DashboardPage = () => {
   const strokeOffset = circumference - (circumference * overallRate) / 100;
 
   return (
-    <div className="space-y-6">
-      {/* ── Top Header Banner Card ── */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-50 via-emerald-50/40 to-teal-50/60 border border-slate-200/80 p-6 md:p-8 shadow-2xs">
-        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 relative z-10">
-          <div className="space-y-2 max-w-xl">
+    <div className="space-y-6 max-w-[1600px] mx-auto">
+      {/* ── Row 1: Greetings Banner & Active Classes / Attendance Card (Side by Side) ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        {/* Greetings & Quotes Card */}
+        <div className="lg:col-span-7 xl:col-span-8 relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-50 via-emerald-50/40 to-teal-50/60 border border-slate-200/80 p-6 md:p-7 shadow-xs flex flex-col justify-between">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100/80 text-emerald-800 text-[11px] font-bold tracking-wide">
+              <Sparkles size={12} />
+              <span>HANARA School Management</span>
+            </div>
             <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
               {getStaffGreeting(user, getUserName())} 👋
             </h1>
-            <div className={`transition-all duration-300 min-h-[40px] flex items-center ${fadeQuote ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
-              <p className="text-sm text-slate-600 italic font-medium leading-relaxed">
+            <p className="text-xs md:text-sm text-slate-500 font-medium">
+              Welcome back to your administration dashboard
+            </p>
+          </div>
+
+          <div className="mt-4 pt-3.5 border-t border-slate-200/60 flex items-center gap-3">
+            <div className={`transition-all duration-300 min-h-[36px] flex items-center ${fadeQuote ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-1'}`}>
+              <p className="text-xs md:text-sm text-slate-600 italic font-medium leading-relaxed">
                 "{LEADERSHIP_QUOTES[quoteIndex]}"
               </p>
             </div>
           </div>
+        </div>
 
-          {/* Action Card: Real Attendance Alert */}
-          <div className="bg-white/90 backdrop-blur-md border border-slate-200/90 rounded-2xl p-4 md:p-5 shadow-xs shrink-0 max-w-md w-full xl:w-auto">
-            <div className="flex items-center justify-between gap-4 mb-3">
-              <h3 className="text-sm font-bold text-slate-900">
-                {todayClassesCount} {todayClassesCount === 1 ? 'class' : 'classes'} active
+        {/* Active Classes & Attendance Alert Card */}
+        <div className="lg:col-span-5 xl:col-span-4 bg-white border border-slate-200/80 rounded-3xl p-6 shadow-xs flex flex-col justify-between gap-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Today's Sessions</span>
+              <h3 className="text-base font-extrabold text-slate-900 mt-0.5">
+                {todayClassesCount} {todayClassesCount === 1 ? 'Class' : 'Classes'} Active
               </h3>
-              <div className="p-1.5 bg-emerald-50 text-emerald-700 rounded-lg">
-                <Calendar size={16} />
-              </div>
             </div>
-
-            {pendingAttendanceClasses.length > 0 ? (
-              <div className="bg-amber-50/90 border border-amber-200/80 rounded-xl p-3 mb-3.5 flex items-center space-x-2.5 text-xs text-amber-950 font-semibold">
-                <AlertCircle size={16} className="text-amber-700 shrink-0" />
-                <span>
-                  Attendance pending for{' '}
-                  <strong className="font-extrabold text-amber-950">
-                    {pendingAttendanceClasses.map((c) => c.name).join(', ')}
-                  </strong>.
-                </span>
-              </div>
-            ) : (
-              <div className="bg-emerald-50/90 border border-emerald-200/80 rounded-xl p-3 mb-3.5 flex items-center space-x-2.5 text-xs text-emerald-950 font-semibold">
-                <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />
-                <span>Attendance has been marked for today!</span>
-              </div>
-            )}
-
-            <Link
-              to="/attendance"
-              className="w-full inline-flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl bg-[#046a4e] hover:bg-[#03523d] text-white font-bold text-xs shadow-sm transition-all duration-150 active:scale-98"
-            >
-              <UserCheck size={16} />
-              <span>Take Attendance</span>
-            </Link>
+            <div className="p-2.5 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-2xl">
+              <Calendar size={18} />
+            </div>
           </div>
+
+          {pendingAttendanceClasses.length > 0 ? (
+            <div className="bg-amber-50/90 border border-amber-200/80 rounded-2xl p-3 flex items-center space-x-2.5 text-xs text-amber-950 font-semibold">
+              <AlertCircle size={16} className="text-amber-700 shrink-0" />
+              <span className="leading-snug truncate">
+                Pending for <strong className="font-extrabold text-amber-950">{pendingAttendanceClasses.map((c) => c.name).join(', ')}</strong>
+              </span>
+            </div>
+          ) : (
+            <div className="bg-emerald-50/90 border border-emerald-200/80 rounded-2xl p-3 flex items-center space-x-2.5 text-xs text-emerald-950 font-semibold">
+              <CheckCircle2 size={16} className="text-emerald-700 shrink-0" />
+              <span>Attendance marked for today! 🎉</span>
+            </div>
+          )}
+
+          <Link
+            to="/attendance"
+            className="w-full inline-flex items-center justify-center space-x-2 py-2.5 px-4 rounded-2xl bg-[#046a4e] hover:bg-[#03523d] text-white font-bold text-xs shadow-sm transition-all duration-150 active:scale-98"
+          >
+            <UserCheck size={16} />
+            <span>Take Attendance</span>
+          </Link>
         </div>
       </div>
 
-      {/* ── KPI Stats Grid Row (4 Cards) ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
+      {/* ── Row 2: KPI Stats Grid (4 Cards in One Line) ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5">
         {/* Card 1: Classes Count */}
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs font-bold text-slate-500 block">Active Classes</span>
-            <h2 className="text-3xl font-black text-slate-900">{todayClassesCount}</h2>
-            <span className="text-xs font-bold text-emerald-700 block mt-1">Classrooms & Streams</span>
+            <h2 className="text-2xl lg:text-3xl font-black text-slate-900">{todayClassesCount}</h2>
+            <span className="text-[11px] font-bold text-emerald-700 block mt-1">Classrooms & Streams</span>
           </div>
-          <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center shrink-0">
-            <BookOpen size={22} />
+          <div className="h-11 w-11 lg:h-12 lg:w-12 rounded-2xl bg-emerald-50 text-emerald-700 border border-emerald-100 flex items-center justify-center shrink-0">
+            <BookOpen size={20} />
           </div>
         </div>
 
@@ -226,37 +268,37 @@ const DashboardPage = () => {
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
           <div className="space-y-1">
             <span className="text-xs font-bold text-slate-500 block">Total Students</span>
-            <h2 className="text-3xl font-black text-slate-900">{totalStudents}</h2>
-            <span className="text-xs text-slate-400 font-medium block mt-1">
-              {user?.role === 'teacher' ? 'Across assigned classes' : 'Total enrolled students'}
+            <h2 className="text-2xl lg:text-3xl font-black text-slate-900">{totalStudents}</h2>
+            <span className="text-[11px] text-slate-400 font-medium block mt-1 truncate">
+              {user?.role === 'teacher' ? 'Assigned classes' : 'Enrolled students'}
             </span>
           </div>
-          <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0">
-            <Users size={22} />
+          <div className="h-11 w-11 lg:h-12 lg:w-12 rounded-2xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center shrink-0">
+            <Users size={20} />
           </div>
         </div>
 
         {/* Card 3: Pending Mock Entries / Grade Items */}
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-xs font-bold text-slate-500 block">Pending Results / Entries</span>
-            <h2 className="text-3xl font-black text-slate-900">{pendingMockEntries}</h2>
-            <span className="text-xs font-semibold text-amber-600 block mt-1">Need verification</span>
+            <span className="text-xs font-bold text-slate-500 block">Pending Results</span>
+            <h2 className="text-2xl lg:text-3xl font-black text-slate-900">{pendingMockEntries}</h2>
+            <span className="text-[11px] font-semibold text-amber-600 block mt-1">Need verification</span>
           </div>
-          <div className="h-12 w-12 rounded-2xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center shrink-0">
-            <FileText size={22} />
+          <div className="h-11 w-11 lg:h-12 lg:w-12 rounded-2xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center shrink-0">
+            <FileText size={20} />
           </div>
         </div>
 
         {/* Card 4: Attendance Rate Today */}
         <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs hover:shadow-xs transition-all flex items-center justify-between">
           <div className="space-y-1">
-            <span className="text-xs font-bold text-slate-500 block">Today's Attendance Rate</span>
-            <h2 className="text-3xl font-black text-slate-900">{overallRate}%</h2>
-            <span className="text-xs font-bold text-purple-700 block mt-1">{totalMarked} students marked</span>
+            <span className="text-xs font-bold text-slate-500 block">Today's Attendance</span>
+            <h2 className="text-2xl lg:text-3xl font-black text-slate-900">{overallRate}%</h2>
+            <span className="text-[11px] font-bold text-purple-700 block mt-1 truncate">{totalMarked} marked</span>
           </div>
-          <div className="h-12 w-12 rounded-2xl bg-purple-50 text-purple-600 border border-purple-100 flex items-center justify-center shrink-0">
-            <CalendarCheck size={22} />
+          <div className="h-11 w-11 lg:h-12 lg:w-12 rounded-2xl bg-purple-50 text-purple-600 border border-purple-100 flex items-center justify-center shrink-0">
+            <CalendarCheck size={20} />
           </div>
         </div>
       </div>
