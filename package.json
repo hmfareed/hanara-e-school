@@ -8,7 +8,9 @@
     "build:frontend": "bun run --cwd frontend build",
     "start:backend": "node backend/src/server.js",
     "build:exe": "bun run build:frontend && bun build --compile --windows-title=\"HANARA SMS\" --outfile=HANARA-SMS.exe ./desktop-launcher.js",
+    "build:installer": "bun run build:frontend && electron-builder --win",
     "build": "bun run build:exe",
+    "dist": "bun run build:installer",
     "start": "HANARA-SMS.exe"
   },
   "devDependencies": {

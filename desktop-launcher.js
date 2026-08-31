@@ -34,17 +34,51 @@ console.log(` [School Wi-Fi / LAN] : http://${localIp}:${port}`);
 console.log('================================================================');
 
 // Launch Backend API & Static Frontend Server
+let backendProcess = null;
 try {
-  const serverEntry = path.join(backendDir, 'src/server.js');
-  if (fs.existsSync(serverEntry)) {
-    require(serverEntry);
-  } else {
-    // Fallback if running inside backend or relative
-    require('./backend/src/server.js');
-  }
+  const serverEntry = path.join(backendDir, 'src', 'server.js');
+  const env = {
+    ...process.env,
+    PORT: String(port),
+    NODE_ENV: process.env.NODE_ENV || 'production',
+  };
+
+  // Spawn node in backend working directory so backend dependencies (dotenv, mongoose, etc.) resolve properly
+  backendProcess = spawn('node', [serverEntry], {
+    cwd: backendDir,
+    env,
+    stdio: 'inherit',
+    shell: true,
+  });
+
+  backendProcess.on('error', () => {
+    // Fallback to bun if node is not directly in PATH
+    backendProcess = spawn('bun', ['src/server.js'], {
+      cwd: backendDir,
+      env,
+      stdio: 'inherit',
+      shell: true,
+    });
+    backendProcess.on('error', (err) => {
+      console.error('❌ Failed to launch backend server:', err);
+    });
+  });
 } catch (err) {
   console.error('❌ Failed to launch backend server:', err);
 }
+
+process.on('SIGINT', () => {
+  if (backendProcess) {
+    try { backendProcess.kill(); } catch (_) {}
+  }
+  process.exit();
+});
+
+process.on('exit', () => {
+  if (backendProcess) {
+    try { backendProcess.kill(); } catch (_) {}
+  }
+});
 
 // Launch Desktop Application Window
 function openDesktopApp() {
