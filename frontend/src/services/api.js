@@ -1,9 +1,26 @@
 import axios from 'axios';
 import { putAll, getAll, putOne, deleteOne, clearStore, enqueueSync, getOne, replaceStore, clearAllCaches } from './db';
 
+// ── Dynamic Base URL Resolution (supports localhost, LAN IPs & desktop mode) ─
+export const getApiBaseUrl = () => {
+  const envUrl = import.meta.env.VITE_API_URL;
+  if (envUrl && !envUrl.startsWith('/')) {
+    return envUrl;
+  }
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    const origin = window.location.origin;
+    // If running inside Vite dev server (e.g. port 5173), default to port 5000 backend
+    if (origin.includes(':5173') || origin.includes(':5174') || origin.includes(':3000')) {
+      return envUrl || 'http://localhost:5000/api';
+    }
+    return `${origin}/api`;
+  }
+  return 'http://localhost:5000/api';
+};
+
 // ── Raw Axios Instance for live network requests ─────────────────────────────
 const rawApi = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL: getApiBaseUrl(),
   withCredentials: true,
   timeout: 20000, // 20 seconds timeout for remote MongoDB cloud connections & mobile latency
   headers: {

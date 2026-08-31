@@ -16,7 +16,9 @@ import {
   clearSyncQueue,
 } from './db';
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import { getApiBaseUrl } from './api';
+
+const getBaseUrl = () => getApiBaseUrl();
 
 /** Broadcasts sync state changes to all interested React contexts */
 const syncListeners = new Set();
@@ -39,8 +41,9 @@ async function syncAttendanceScans(items, headers) {
     ...item.body,
     eventId: item.body?.eventId || item.clientMutationId,
   }));
+  const baseUrl = getApiBaseUrl();
   const response = await axios.post(
-    `${BASE_URL}/staff-attendance/sync`,
+    `${baseUrl}/staff-attendance/sync`,
     { events },
     { headers, withCredentials: true }
   );
@@ -120,9 +123,10 @@ export async function flush() {
       continue;
     }
     try {
+      const baseUrl = getApiBaseUrl();
       await axios({
         method: item.method,
-        url: `${BASE_URL}${item.url}`,
+        url: `${baseUrl}${item.url}`,
         data: item.body,
         headers: { ...headers, 'X-Idempotency-Key': item.clientMutationId },
         withCredentials: true,

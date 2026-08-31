@@ -1,6 +1,21 @@
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = import.meta.env.VITE_WS_URL || 'http://localhost:5000';
+export const getSocketUrl = () => {
+  const envWs = import.meta.env.VITE_WS_URL;
+  if (envWs && !envWs.startsWith('/')) {
+    return envWs;
+  }
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    const origin = window.location.origin;
+    if (origin.includes(':5173') || origin.includes(':5174') || origin.includes(':3000')) {
+      return envWs || 'http://localhost:5000';
+    }
+    return origin;
+  }
+  return 'http://localhost:5000';
+};
+
+const SOCKET_URL = getSocketUrl();
 
 let socket = null;
 const listeners = new Map();

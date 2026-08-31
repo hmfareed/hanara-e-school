@@ -1,0 +1,3 @@
+@echo off
+echo Starting HANARA Schools Management System Desktop Edition...
+start "" "HANARA-SMS.exe"

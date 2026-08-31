@@ -31,6 +31,7 @@ import {
   checkOfflineReadiness,
   getOfflineStorageStats,
 } from '../services/offlineDataService';
+import { getApiBaseUrl } from '../services/api';
 
 const OfflineContext = createContext(null);
 
@@ -99,7 +100,7 @@ export const OfflineProvider = ({ children }) => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const pingUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/sync/ping?_t=${Date.now()}`;
+      const pingUrl = `${getApiBaseUrl()}/sync/ping?_t=${Date.now()}`;
 
       const res = await fetch(pingUrl, {
         method: 'GET',

@@ -49,7 +49,12 @@ const sectionRoutes = require('./routes/section.routes');
 const app = express();
 
 // Security HTTP headers
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
 
 const allowedOrigins = [
   process.env.CLIENT_ORIGIN,
@@ -60,16 +65,18 @@ const allowedOrigins = [
   'http://127.0.0.1:5174',
   'http://localhost:3000',
   'http://127.0.0.1:3000',
+  'http://localhost:5000',
+  'http://127.0.0.1:5000',
 ].filter(Boolean);
 
-// CORS configuration - support localhost/127.0.0.1 and configured client origins
+// CORS configuration - support localhost, 127.0.0.1, LAN private IPs, and configured client origins
 app.use(
   cors({
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (
         allowedOrigins.includes(origin) ||
-        /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+        /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+)(:\d+)?$/.test(origin)
       ) {
         return callback(null, true);
       }
@@ -159,8 +166,34 @@ app.use('/api/color-sections', sectionRoutes);
 
 
 
-// Fallback for 404
-app.use((req, res, next) => {
+// ── Static Frontend & SPA Fallback for Desktop & LAN Access ──────────────────
+const path = require('path');
+const fs = require('fs');
+
+const distLocations = [
+  path.resolve(__dirname, '../../frontend/dist'),
+  path.resolve(__dirname, '../frontend/dist'),
+  path.resolve(process.cwd(), 'frontend/dist'),
+  path.resolve(process.cwd(), 'resources/frontend/dist'),
+];
+
+const frontendDist = distLocations.find((loc) => fs.existsSync(loc) && fs.existsSync(path.join(loc, 'index.html')));
+
+if (frontendDist) {
+  logger.info(`Serving static frontend build from: ${frontendDist}`);
+  app.use(express.static(frontendDist));
+
+  // SPA fallback for all web pages
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+}
+
+// Fallback for 404 API routes
+app.use('/api', (req, res, next) => {
   res.status(404).json({ success: false, message: `Route ${req.method} ${req.path} not found` });
 });
 
