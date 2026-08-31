@@ -19,11 +19,20 @@ const getStudents = async (req, res, next) => {
       gender,
       minAge,
       maxAge,
+      colorSection,
     } = req.query;
 
     const filter = {};
     if (status && status !== 'all') {
       filter.status = status;
+    }
+    
+    if (colorSection) {
+      if (colorSection === 'unassigned' || colorSection === 'none') {
+        filter.colorSection = null;
+      } else {
+        filter.colorSection = colorSection;
+      }
     }
     
     const activeMode = req.headers['x-active-mode'] || req.query.mode || 'admin';
@@ -402,6 +411,7 @@ const createStudentsBulk = async (req, res, next) => {
         medicalNotes: row.medicalNotes || '',
         enrollmentDate: row.enrollmentDate ? new Date(row.enrollmentDate) : new Date(),
         status: 'active',
+        colorSection: row.colorSection || null,
         transport: {
           usesBus: row.transport?.usesBus || false,
           bus: row.transport?.bus || null,

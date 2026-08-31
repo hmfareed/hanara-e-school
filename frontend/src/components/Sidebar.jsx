@@ -31,6 +31,7 @@ import {
   Fingerprint,
   QrCode,
   Database,
+  Palette,
   Wifi,
   WifiOff,
 } from 'lucide-react';
@@ -74,6 +75,12 @@ const navCategories = [
         path: '/classes',
         icon: CalendarRange,
         roles: ['superadmin', 'admin'],
+      },
+      {
+        name: 'Color Sections',
+        path: '/sections',
+        icon: Palette,
+        roles: ['superadmin', 'admin', 'teacher', 'system_admin'],
       },
     ],
   },

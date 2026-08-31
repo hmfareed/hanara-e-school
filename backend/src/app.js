@@ -44,6 +44,7 @@ const idCardsRoutes = require('./routes/idCards.routes');
 const reportCardRoutes = require('./routes/reportCard.routes');
 const timetableRoutes = require('./routes/timetable.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const sectionRoutes = require('./routes/section.routes');
 
 const app = express();
 
@@ -152,6 +153,8 @@ app.use('/api/gate-scanner', idCardsRoutes);
 app.use('/api/reports', reportCardRoutes);
 app.use('/api/timetables', timetableRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/sections', sectionRoutes);
+app.use('/api/color-sections', sectionRoutes);
 
 
 

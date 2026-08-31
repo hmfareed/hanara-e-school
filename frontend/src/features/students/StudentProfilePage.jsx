@@ -159,6 +159,7 @@ const EditProfileModal = ({ student, classes, onClose, onSaved }) => {
     gender: student.gender || 'male',
     dob: student.dob ? new Date(student.dob).toISOString().slice(0, 10) : '',
     currentClass: student.currentClass?._id || student.currentClass || '',
+    colorSection: student.colorSection || '',
     medicalNotes: student.medicalNotes || '',
   });
   const [saving, setSaving] = useState(false);
@@ -180,6 +181,7 @@ const EditProfileModal = ({ student, classes, onClose, onSaved }) => {
         gender: form.gender,
         dob: form.dob,
         currentClass: form.currentClass || null,
+        colorSection: form.colorSection || null,
         medicalNotes: form.medicalNotes.trim(),
       });
       onSaved();
@@ -239,14 +241,26 @@ const EditProfileModal = ({ student, classes, onClose, onSaved }) => {
             </div>
           </div>
 
-          <div>
-            <label className={labelCls}>Current Class</label>
-            <select value={form.currentClass} onChange={set('currentClass')} className={inputCls}>
-              <option value="">— Unassigned —</option>
-              {(classes || []).map((cls) => (
-                <option key={cls._id} value={cls._id}>{cls.name}</option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={labelCls}>Current Class</label>
+              <select value={form.currentClass} onChange={set('currentClass')} className={inputCls}>
+                <option value="">— Unassigned —</option>
+                {(classes || []).map((cls) => (
+                  <option key={cls._id} value={cls._id}>{cls.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Color Section</label>
+              <select value={form.colorSection} onChange={set('colorSection')} className={inputCls}>
+                <option value="">— Unassigned —</option>
+                <option value="Red">Red Section</option>
+                <option value="Yellow">Yellow Section</option>
+                <option value="Green">Green Section</option>
+                <option value="Blue">Blue Section</option>
+              </select>
+            </div>
           </div>
 
           <div>
@@ -372,7 +386,7 @@ const StudentProfilePage = () => {
 
   const {
     admissionNumber, firstName, lastName, otherNames, gender, dob,
-    currentClass, guardians, enrollmentDate, status, medicalNotes, transport,
+    currentClass, guardians, enrollmentDate, status, medicalNotes, transport, colorSection,
   } = student;
 
   const handleWithdraw = () => {
@@ -387,6 +401,16 @@ const StudentProfilePage = () => {
       case 'withdrawn': return 'bg-red-100 text-red-800 border-red-200';
       case 'graduated': return 'bg-blue-100 text-blue-800 border-blue-200';
       default:          return 'bg-slate-100 text-slate-800 border-slate-200';
+    }
+  };
+
+  const getColorSectionBadge = (cs) => {
+    switch (cs) {
+      case 'Red':    return 'bg-rose-100 text-rose-800 border-rose-300';
+      case 'Yellow': return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 'Green':  return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      case 'Blue':   return 'bg-sky-100 text-sky-800 border-sky-300';
+      default:       return 'bg-slate-100 text-slate-600 border-slate-200';
     }
   };
 
@@ -467,6 +491,12 @@ const StudentProfilePage = () => {
               <span className="inline-flex text-xs font-semibold px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-100">
                 {currentClass?.name || 'Unassigned'}
               </span>
+              {colorSection && (
+                <span className={`inline-flex items-center gap-1 text-xs font-bold px-2.5 py-0.5 rounded-full border ${getColorSectionBadge(colorSection)}`}>
+                  <span className={`w-2 h-2 rounded-full ${colorSection === 'Red' ? 'bg-red-500' : colorSection === 'Yellow' ? 'bg-amber-400' : colorSection === 'Green' ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                  {colorSection} Section
+                </span>
+              )}
               <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded border capitalize ${getStatusBadge(status)}`}>
                 {status}
               </span>
@@ -543,6 +573,18 @@ const StudentProfilePage = () => {
                 <span className="text-slate-800 font-semibold">{new Date(enrollmentDate).toLocaleDateString('en-GB')}</span>
               </div>
               <div>
+                <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Color Section</span>
+                <span className="text-slate-800 font-semibold">
+                  {colorSection ? (
+                    <span className={`inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-md border ${getColorSectionBadge(colorSection)}`}>
+                      {colorSection} Section
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 italic">Unassigned</span>
+                  )}
+                </span>
+              </div>
+              <div className="col-span-2">
                 <span className="text-slate-400 block font-semibold text-[10px] uppercase tracking-wider">Bus Services</span>
                 <span className="text-slate-800 font-semibold">
                   {transport?.usesBus

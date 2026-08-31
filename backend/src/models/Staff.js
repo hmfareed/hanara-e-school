@@ -84,6 +84,19 @@ const staffSchema = new mongoose.Schema(
         ref: 'Class',
       },
     ],
+    // Color Section / House Assignment (Red, Yellow, Green, Blue)
+    colorSection: {
+      type: String,
+      enum: ['Red', 'Yellow', 'Green', 'Blue', null],
+      default: null,
+      trim: true,
+    },
+    sectionRole: {
+      type: String,
+      enum: ['House Master', 'House Mistress', 'Patron', 'Assistant', 'Member', null],
+      default: 'Patron',
+      trim: true,
+    },
   },
   {
     timestamps: true,
@@ -96,5 +109,7 @@ staffSchema.virtual('fullName').get(function () {
     .filter(Boolean)
     .join(' ');
 });
+
+staffSchema.index({ colorSection: 1 });
 
 module.exports = mongoose.model('Staff', staffSchema);

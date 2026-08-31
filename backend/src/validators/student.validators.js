@@ -49,6 +49,7 @@ const createStudentSchema = z.object({
     customBusRate: z.number().optional().nullable().default(null),
     notes: z.string().optional().default(''),
   }).optional(),
+  colorSection: z.enum(['Red', 'Yellow', 'Green', 'Blue']).or(z.literal('')).optional().nullable().default(null),
   guardian: guardianSchema.optional(),
 });
 

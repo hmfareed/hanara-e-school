@@ -72,6 +72,16 @@ const TeacherStudentDetailModal = ({ studentId, onClose }) => {
                   <span className="px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-bold rounded-full uppercase">
                     {student?.status || 'Active'}
                   </span>
+                  {student?.colorSection && (
+                    <span className={`px-2.5 py-0.5 text-[10px] font-bold rounded-full border ${
+                      student.colorSection === 'Red' ? 'bg-rose-500/20 text-rose-300 border-rose-400/30' :
+                      student.colorSection === 'Yellow' ? 'bg-amber-500/20 text-amber-300 border-amber-400/30' :
+                      student.colorSection === 'Green' ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30' :
+                      'bg-sky-500/20 text-sky-300 border-sky-400/30'
+                    }`}>
+                      {student.colorSection} Section
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-300 flex items-center gap-2 pt-0.5">
                   <span className="font-mono">Adm No: {student?.admissionNumber}</span>
@@ -154,6 +164,12 @@ const TeacherStudentDetailModal = ({ studentId, onClose }) => {
                         <span className="text-slate-400 font-medium">Date of Birth</span>
                         <p className="font-bold text-slate-800">
                           {student?.dob ? new Date(student.dob).toLocaleDateString() : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 font-medium">Color Section</span>
+                        <p className="font-bold text-slate-800">
+                          {student?.colorSection ? `${student.colorSection} Section` : 'Unassigned'}
                         </p>
                       </div>
                       <div>

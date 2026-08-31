@@ -6,7 +6,7 @@ const logger = require('../utils/logger');
 // GET /api/staff
 const getStaff = async (req, res, next) => {
   try {
-    const { page = 1, limit = 20, role, status, search } = req.query;
+    const { page = 1, limit = 20, role, status, search, colorSection } = req.query;
 
     const filter = {
       firstName: { $nin: ['', null] },
@@ -16,6 +16,13 @@ const getStaff = async (req, res, next) => {
         filter.role = { $in: role.split(',') };
       } else {
         filter.role = role;
+      }
+    }
+    if (colorSection) {
+      if (colorSection === 'unassigned' || colorSection === 'none') {
+        filter.colorSection = null;
+      } else {
+        filter.colorSection = colorSection;
       }
     }
     if (status && status !== 'all') {

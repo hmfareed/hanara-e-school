@@ -17,6 +17,7 @@ const AdmissionFormPage = () => {
     gender: 'male',
     dob: '',
     currentClass: '',
+    colorSection: '',
     medicalNotes: '',
     transport: { usesBus: false, stop: '' },
     photoUrl: null,
@@ -88,6 +89,7 @@ const AdmissionFormPage = () => {
       ...student,
       dob: student.dob ? new Date(student.dob).toISOString() : undefined,
       currentClass: student.currentClass || null,
+      colorSection: student.colorSection || null,
       guardian: {
         firstName: guardian.firstName,
         lastName: guardian.lastName,
@@ -197,7 +199,7 @@ const AdmissionFormPage = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div>
                   <label className="block text-sm font-semibold text-slate-700">Gender <span className="text-red-500">*</span></label>
                   <select
@@ -232,6 +234,20 @@ const AdmissionFormPage = () => {
                         {cls.name}
                       </option>
                     ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700">Color Section</label>
+                  <select
+                    value={student.colorSection}
+                    onChange={(e) => setStudent({ ...student, colorSection: e.target.value })}
+                    className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm"
+                  >
+                    <option value="">— Unassigned —</option>
+                    <option value="Red">Red Section</option>
+                    <option value="Yellow">Yellow Section</option>
+                    <option value="Green">Green Section</option>
+                    <option value="Blue">Blue Section</option>
                   </select>
                 </div>
               </div>

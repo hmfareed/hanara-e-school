@@ -251,6 +251,7 @@ const StaffDirectoryPage = () => {
   const isSuperAdmin = ['superadmin', 'admin', 'system_admin'].includes(user?.role);
 
   const [search, setSearch] = useState('');
+  const [colorSectionFilter, setColorSectionFilter] = useState('');
   const [page, setPage]     = useState(1);
   const limit = 10;
 
@@ -267,10 +268,11 @@ const StaffDirectoryPage = () => {
   });
 
   const { data: staffData, isLoading, error } = useQuery({
-    queryKey: ['staffList', search, page],
+    queryKey: ['staffList', search, colorSectionFilter, page],
     queryFn: async () => {
       const params = { page, limit };
       if (search) params.search = search;
+      if (colorSectionFilter) params.colorSection = colorSectionFilter;
       const res = await api.get('/staff', { params });
       return res.data;
     },
@@ -340,140 +342,191 @@ const StaffDirectoryPage = () => {
       {isAdmin && <StaffWaitlistPanel />}
 
       {/* ── Directory ── */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-            <div className="relative max-w-md">
-              <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search staff by name or email..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800"
-              />
-            </div>
-          </div>
+      <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="relative w-full sm:max-w-md">
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search staff by name or email..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl text-slate-800 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800"
+          />
+        </div>
 
-          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-            {isLoading ? (
-              <div className="p-12 flex flex-col items-center justify-center space-y-4">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-800 border-t-transparent" />
-                <p className="text-sm font-semibold text-slate-400">Loading staff directory...</p>
-              </div>
-            ) : error ? (
-              <div className="p-8 text-center text-red-700 bg-red-50 border-b border-slate-200">
-                <p className="font-bold text-base">Error loading staff list</p>
-                <p className="text-sm mt-1">{error.message}</p>
-              </div>
-            ) : (
-              <>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm text-slate-600">
-                    <thead>
-                      <tr className="bg-slate-50/50 border-b border-slate-200 text-slate-400 text-xs font-semibold uppercase tracking-wider">
-                        <th className="py-4 px-6">Name</th>
-                        <th className="py-4 px-6">Role</th>
-                        <th className="py-4 px-6">Base Salary</th>
-                        <th className="py-4 px-6">Contact Info</th>
-                        <th className="py-4 px-6">Status</th>
-                        <th className="py-4 px-6 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {staffList.length > 0 ? (
-                        staffList.map((member) => (
-                          <tr key={member._id} className="hover:bg-slate-50/50">
-                            <td className="py-4 px-6 font-medium text-slate-900 font-sans">
-                              <div className="flex items-center space-x-3">
-                                <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex-shrink-0 flex items-center justify-center text-slate-400 overflow-hidden">
-                                  {member.photoUrl ? (
-                                    <img
-                                      src={member.photoUrl}
-                                      alt="Avatar"
-                                      className="h-full w-full object-cover"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                      }}
-                                    />
-                                  ) : (
-                                    <span className="text-xs font-bold font-sans text-slate-500">{(member.firstName?.[0] || 'T').toUpperCase()}</span>
-                                  )}
-                                </div>
-                                <span>
-                                  {member.firstName} {member.otherNames ? `${member.otherNames} ` : ''} {member.lastName}
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-4 px-6 capitalize">
-                              <span className={`inline-block px-2.5 py-0.5 rounded border text-xs font-medium ${getRoleBadge(member.role)}`}>
-                                {member.role === 'superadmin' ? 'headteacher' : member.role}
-                              </span>
-                            </td>
-                            <td className="py-4 px-6 font-bold text-emerald-800 text-xs">
-                              {(member.baseSalary || 0) > 0 ? `${(member.baseSalary).toFixed(2)} GHS` : 'Not Set (1,800)'}
-                            </td>
-                            <td className="py-4 px-6">
-                              <p className="text-slate-800 font-mono text-xs">{member.phone}</p>
-                              <p className="text-slate-400 text-xs truncate max-w-[200px]">{member.email}</p>
-                            </td>
-                            <td className="py-4 px-6">
-                              <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                member.employmentStatus === 'active'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : 'bg-slate-100 text-slate-500'
-                              }`}>
-                                {member.employmentStatus}
-                              </span>
-                            </td>
-                            <td className="py-4 px-6 text-right">
-                              <div className="flex items-center justify-end space-x-2">
-                                <button
-                                  onClick={() => setSelectedStaffForQr(member)}
-                                  className="inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 font-semibold text-xs text-emerald-800 transition-colors cursor-pointer"
-                                  title="Staff QR Code Credential"
-                                >
-                                  <QrCode size={12} />
-                                  <span>QR Pass</span>
-                                </button>
-                                <Link
-                                  to={`/staff/edit/${member._id}`}
-                                  className="inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-semibold text-xs text-slate-600 transition-colors"
-                                >
-                                  <Edit size={12} />
-                                  <span>Edit</span>
-                                </Link>
-                                {isSuperAdmin && (
-                                  <button
-                                    onClick={() => setStaffToFire(member)}
-                                    disabled={member._id === user?.refStaff || member._id === user?.refStaff?._id || member.role === 'superadmin'}
-                                    title={
-                                      (member._id === user?.refStaff || member._id === user?.refStaff?._id)
-                                        ? "You cannot fire yourself"
-                                        : member.role === 'superadmin'
-                                        ? "Cannot fire the headteacher"
-                                        : "Fire staff member"
-                                    }
-                                    className={`inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border font-semibold text-xs transition-colors cursor-pointer ${
-                                      (member._id === user?.refStaff || member._id === user?.refStaff?._id || member.role === 'superadmin')
-                                        ? 'border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed opacity-50'
-                                        : 'border-red-200 bg-white hover:bg-red-50 text-red-600 hover:border-red-300'
-                                    }`}
-                                  >
-                                    <Trash2 size={12} />
-                                    <span>Fire</span>
-                                  </button>
+        <div className="w-full sm:w-56">
+          <select
+            value={colorSectionFilter}
+            onChange={(e) => { setColorSectionFilter(e.target.value); setPage(1); }}
+            className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-slate-800 text-xs font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-emerald-800"
+          >
+            <option value="">All Color Sections</option>
+            <option value="Red">Red Section</option>
+            <option value="Yellow">Yellow Section</option>
+            <option value="Green">Green Section</option>
+            <option value="Blue">Blue Section</option>
+            <option value="unassigned">Unassigned</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+        {isLoading ? (
+          <div className="p-12 flex flex-col items-center justify-center space-y-4">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-emerald-800 border-t-transparent" />
+            <p className="text-sm font-semibold text-slate-400">Loading staff directory...</p>
+          </div>
+        ) : error ? (
+          <div className="p-8 text-center text-red-700 bg-red-50 border-b border-slate-200">
+            <p className="font-bold text-base">Error loading staff list</p>
+            <p className="text-sm mt-1">{error.message}</p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-600">
+                <thead>
+                  <tr className="bg-slate-50/50 border-b border-slate-200 text-slate-400 text-xs font-semibold uppercase tracking-wider">
+                    <th className="py-4 px-6">Name</th>
+                    <th className="py-4 px-6">Role</th>
+                    <th className="py-4 px-6">Color Section</th>
+                    <th className="py-4 px-6">Base Salary</th>
+                    <th className="py-4 px-6">Contact Info</th>
+                    <th className="py-4 px-6">Status</th>
+                    <th className="py-4 px-6 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {staffList.length === 0 ? (
+                    <tr>
+                      <td colSpan="7" className="py-12 text-center text-sm text-slate-400">
+                        No staff members found matching search query.
+                      </td>
+                    </tr>
+                  ) : (
+                    staffList.map((member) => {
+                      const colorSec = member.colorSection;
+                      const secBadge = colorSec === 'Red'
+                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                        : colorSec === 'Yellow'
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : colorSec === 'Green'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : colorSec === 'Blue'
+                        ? 'bg-sky-50 text-sky-700 border-sky-200'
+                        : 'bg-slate-100 text-slate-500 border-slate-200';
+
+                      const isSelfOrHead =
+                        member._id === user?.refStaff ||
+                        member._id === user?.refStaff?._id ||
+                        member.role === 'superadmin';
+
+                      return (
+                        <tr key={member._id} className="hover:bg-slate-50/50">
+                          <td className="py-4 px-6 font-medium text-slate-900 font-sans">
+                            <div className="flex items-center space-x-3">
+                              <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex-shrink-0 flex items-center justify-center text-slate-400 overflow-hidden">
+                                {member.photoUrl ? (
+                                  <img
+                                    src={member.photoUrl}
+                                    alt="Avatar"
+                                    className="h-full w-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.style.display = 'none';
+                                    }}
+                                  />
+                                ) : (
+                                  <span className="text-xs font-bold font-sans text-slate-500">
+                                    {(member.firstName?.[0] || 'T').toUpperCase()}
+                                  </span>
                                 )}
                               </div>
-                            </td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="5" className="py-12 text-center text-sm text-slate-400">
-                            No staff members found matching search query.
+                              <span>
+                                {member.firstName} {member.otherNames ? `${member.otherNames} ` : ''} {member.lastName}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 capitalize">
+                            <span className={`inline-block px-2.5 py-0.5 rounded border text-xs font-medium ${getRoleBadge(member.role)}`}>
+                              {member.role === 'superadmin' ? 'headteacher' : member.role}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6">
+                            {colorSec ? (
+                              <div className="flex flex-col gap-0.5">
+                                <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold border w-fit ${secBadge}`}>
+                                  <span className={`w-2 h-2 rounded-full ${colorSec === 'Red' ? 'bg-red-500' : colorSec === 'Yellow' ? 'bg-amber-400' : colorSec === 'Green' ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                                  {colorSec}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-semibold pl-1">
+                                  {member.sectionRole || 'Patron'}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-slate-400 italic">None</span>
+                            )}
+                          </td>
+                          <td className="py-4 px-6 font-bold text-emerald-800 text-xs">
+                            {(member.baseSalary || 0) > 0 ? `${(member.baseSalary).toFixed(2)} GHS` : 'Not Set (1,800)'}
+                          </td>
+                          <td className="py-4 px-6">
+                            <p className="text-slate-800 font-mono text-xs">{member.phone}</p>
+                            <p className="text-slate-400 text-xs truncate max-w-[200px]">{member.email}</p>
+                          </td>
+                          <td className="py-4 px-6">
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                              member.employmentStatus === 'active'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-slate-100 text-slate-500'
+                            }`}>
+                              {member.employmentStatus}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-right">
+                            <div className="flex items-center justify-end space-x-2">
+                              <button
+                                onClick={() => setSelectedStaffForQr(member)}
+                                className="inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 font-semibold text-xs text-emerald-800 transition-colors cursor-pointer"
+                                title="Staff QR Code Credential"
+                              >
+                                <QrCode size={12} />
+                                <span>QR Pass</span>
+                              </button>
+                              <Link
+                                to={`/staff/edit/${member._id}`}
+                                className="inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border border-slate-200 hover:bg-slate-50 font-semibold text-xs text-slate-600 transition-colors"
+                              >
+                                <Edit size={12} />
+                                <span>Edit</span>
+                              </Link>
+                              {isSuperAdmin && (
+                                <button
+                                  onClick={() => setStaffToFire(member)}
+                                  disabled={isSelfOrHead}
+                                  title={
+                                    (member._id === user?.refStaff || member._id === user?.refStaff?._id)
+                                      ? "You cannot fire yourself"
+                                      : member.role === 'superadmin'
+                                      ? "Cannot fire the headteacher"
+                                      : "Fire staff member"
+                                  }
+                                  className={`inline-flex items-center space-x-1 py-1.5 px-3 rounded-lg border font-semibold text-xs transition-colors cursor-pointer ${
+                                    isSelfOrHead
+                                      ? 'border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed opacity-50'
+                                      : 'border-red-200 bg-white hover:bg-red-50 text-red-600 hover:border-red-300'
+                                  }`}
+                                >
+                                  <Trash2 size={12} />
+                                  <span>Fire</span>
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
-                      )}
-                    </tbody>
+                      );
+                    })
+                  )}
+                </tbody>
                   </table>
                 </div>
 

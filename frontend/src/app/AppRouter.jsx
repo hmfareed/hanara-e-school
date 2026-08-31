@@ -27,6 +27,7 @@ import ReportsGeneratorPage from '../features/reports/ReportsGeneratorPage';
 import TeacherProfileSettingsPage from '../features/settings/TeacherProfileSettingsPage';
 import AttendanceRegisterPage from '../features/attendance/AttendanceRegisterPage';
 import FeesPage from '../features/fees/FeesPage';
+import ColorSectionsPage from '../features/sections/ColorSectionsPage';
 import AcademicYearPage from '../features/academicYear/AcademicYearPage';
 import PayrollManagementPage from '../features/accountant/PayrollManagementPage';
 import SchoolStorePage from '../features/accountant/SchoolStorePage';
@@ -163,6 +164,22 @@ const AppRouter = () => {
             element={
               <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'accountant', 'system_admin']}>
                 <StudentProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="sections"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'system_admin']}>
+                <ColorSectionsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="color-sections"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin', 'admin', 'teacher', 'system_admin']}>
+                <ColorSectionsPage />
               </ProtectedRoute>
             }
           />

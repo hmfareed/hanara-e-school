@@ -140,6 +140,12 @@ const studentSchema = new mongoose.Schema(
       },
     },
     documents: [documentSchema],
+    colorSection: {
+      type: String,
+      enum: ['Red', 'Yellow', 'Green', 'Blue', null],
+      default: null,
+      trim: true,
+    },
   },
   {
     timestamps: true,
@@ -155,5 +161,6 @@ studentSchema.virtual('fullName').get(function () {
 
 studentSchema.index({ currentClass: 1 });
 studentSchema.index({ status: 1 });
+studentSchema.index({ colorSection: 1 });
 
 module.exports = mongoose.model('Student', studentSchema);

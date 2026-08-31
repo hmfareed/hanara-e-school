@@ -18,6 +18,7 @@ const BulkImportModal = ({ onClose, onImportSuccess }) => {
     'Gender',
     'Date of Birth',
     'Class Name',
+    'Color Section',
     'Medical Notes',
     'Guardian First Name',
     'Guardian Last Name',
@@ -33,8 +34,8 @@ const BulkImportModal = ({ onClose, onImportSuccess }) => {
   const handleDownloadTemplate = () => {
     const csvContent = [
       HEADERS.join(','),
-      'John,Doe,Kofi,male,2015-05-15,Primary 1A,Allergic to peanuts,Robert,Doe,father,0241234567,,robert.doe@example.com,Engineer,123 Tamale St',
-      'Mary,Mensah,Ama,female,2016-08-20,Primary 1B,,Elizabeth,Mensah,mother,0277654321,0201112222,,Trader,Tamale Market Square'
+      'John,Doe,Kofi,male,2015-05-15,Primary 1A,Red,Allergic to peanuts,Robert,Doe,father,0241234567,,robert.doe@example.com,Engineer,123 Tamale St',
+      'Mary,Mensah,Ama,female,2016-08-20,Primary 1B,Yellow,,Elizabeth,Mensah,mother,0277654321,0201112222,,Trader,Tamale Market Square'
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -112,6 +113,14 @@ const BulkImportModal = ({ onClose, onImportSuccess }) => {
 
     if (!row.className || !row.className.trim()) {
       errors.className = 'Class Name is required';
+    }
+
+    if (row.colorSection && row.colorSection.trim()) {
+      const validSections = ['Red', 'Yellow', 'Green', 'Blue'];
+      const normalized = row.colorSection.trim().charAt(0).toUpperCase() + row.colorSection.trim().slice(1).toLowerCase();
+      if (!validSections.includes(normalized)) {
+        errors.colorSection = 'Color Section must be Red, Yellow, Green, or Blue';
+      }
     }
 
     // Guardian Validations (Only if guardian columns are provided)
@@ -208,6 +217,11 @@ const BulkImportModal = ({ onClose, onImportSuccess }) => {
             continue;
           }
 
+          const rawColor = cols[idxOf('Color Section')] || '';
+          const normalizedColor = rawColor.trim() 
+            ? rawColor.trim().charAt(0).toUpperCase() + rawColor.trim().slice(1).toLowerCase() 
+            : '';
+
           const studentObj = {
             firstName: cols[idxOf('First Name')] || '',
             lastName: cols[idxOf('Last Name')] || '',
@@ -215,6 +229,7 @@ const BulkImportModal = ({ onClose, onImportSuccess }) => {
             gender: cols[idxOf('Gender')] || '',
             dob: cols[idxOf('Date of Birth')] || '',
             className: cols[idxOf('Class Name')] || '',
+            colorSection: normalizedColor || undefined,
             medicalNotes: cols[idxOf('Medical Notes')] || '',
             guardian: {
               firstName: cols[idxOf('Guardian First Name')] || '',

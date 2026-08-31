@@ -45,6 +45,7 @@ const StudentDirectoryPage = () => {
   const [search, setSearch] = useState('');
   const [classFilter, setClassFilter] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
+  const [colorSectionFilter, setColorSectionFilter] = useState('');
   const [ageRangeFilter, setAgeRangeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('active');
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'grid'
@@ -85,7 +86,7 @@ const StudentDirectoryPage = () => {
 
   // Fetch students with active filters & pagination
   const { data: studentsData, isLoading, error, refetch } = useQuery({
-    queryKey: ['studentsList', user?._id || user?.id, activeMode, search, classFilter, genderFilter, statusFilter, minAge, maxAge, page],
+    queryKey: ['studentsList', user?._id || user?.id, activeMode, search, classFilter, genderFilter, colorSectionFilter, statusFilter, minAge, maxAge, page],
     queryFn: async () => {
       const params = {
         page,
@@ -95,6 +96,7 @@ const StudentDirectoryPage = () => {
       if (search) params.search = search;
       if (classFilter) params.class = classFilter;
       if (genderFilter) params.gender = genderFilter;
+      if (colorSectionFilter) params.colorSection = colorSectionFilter;
       if (minAge) params.minAge = minAge;
       if (maxAge) params.maxAge = maxAge;
 
@@ -113,7 +115,7 @@ const StudentDirectoryPage = () => {
   // Handle Export to CSV
   const handleExportCSV = () => {
     if (!students.length) return;
-    const headers = ['Admission No', 'First Name', 'Last Name', 'Other Names', 'Gender', 'DOB', 'Class', 'Status'];
+    const headers = ['Admission No', 'First Name', 'Last Name', 'Other Names', 'Gender', 'DOB', 'Class', 'Color Section', 'Status'];
     const rows = students.map(s => [
       `"${s.admissionNumber || ''}"`,
       `"${s.firstName || ''}"`,
@@ -122,6 +124,7 @@ const StudentDirectoryPage = () => {
       `"${s.gender || ''}"`,
       `"${s.dob ? new Date(s.dob).toISOString().split('T')[0] : ''}"`,
       `"${s.currentClass?.name || 'Unassigned'}"`,
+      `"${s.colorSection || 'Unassigned'}"`,
       `"${s.status || ''}"`
     ]);
 
@@ -139,6 +142,7 @@ const StudentDirectoryPage = () => {
     setSearch('');
     setClassFilter('');
     setGenderFilter('');
+    setColorSectionFilter('');
     setAgeRangeFilter('');
     setStatusFilter('active');
     setPage(1);
@@ -288,7 +292,7 @@ const StudentDirectoryPage = () => {
 
       {/* ─── Advanced Filter & Control Bar ───────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           {/* Search Box */}
           <div className="relative">
             <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -320,6 +324,26 @@ const StudentDirectoryPage = () => {
                   {cls.name}
                 </option>
               ))}
+            </select>
+            <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          </div>
+
+          {/* Color Section Filter */}
+          <div className="relative">
+            <select
+              value={colorSectionFilter}
+              onChange={(e) => {
+                setColorSectionFilter(e.target.value);
+                setPage(1);
+              }}
+              className="w-full pl-4 pr-10 py-2.5 border border-slate-200 rounded-xl text-slate-800 text-sm bg-slate-50/50 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 appearance-none font-semibold text-slate-700"
+            >
+              <option value="">All Color Sections</option>
+              <option value="Red">Red Section</option>
+              <option value="Yellow">Yellow Section</option>
+              <option value="Green">Green Section</option>
+              <option value="Blue">Blue Section</option>
+              <option value="unassigned">Unassigned</option>
             </select>
             <ChevronDown size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
@@ -447,6 +471,7 @@ const StudentDirectoryPage = () => {
                   <th className="py-4 px-6">Age / DOB</th>
                   <th className="py-4 px-6">Gender</th>
                   <th className="py-4 px-6">Current Class</th>
+                  <th className="py-4 px-6">Color Section</th>
                   <th className="py-4 px-6">Status</th>
                   <th className="py-4 px-6 text-right">Actions</th>
                 </tr>
@@ -454,6 +479,17 @@ const StudentDirectoryPage = () => {
               <tbody className="divide-y divide-slate-100">
                 {students.map((student) => {
                   const ageDisplay = calculateAge(student.dob);
+                  const colorSec = student.colorSection;
+                  const secBadge = colorSec === 'Red'
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : colorSec === 'Yellow'
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : colorSec === 'Green'
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                    : colorSec === 'Blue'
+                    ? 'bg-sky-50 text-sky-700 border-sky-200'
+                    : 'bg-slate-100 text-slate-500 border-slate-200';
+
                   return (
                     <tr key={student._id} className="hover:bg-slate-50/60 transition-colors">
                       <td className="py-4 px-6 font-mono text-xs font-bold text-slate-800">
@@ -508,6 +544,16 @@ const StudentDirectoryPage = () => {
                         </span>
                       </td>
                       <td className="py-4 px-6">
+                        {colorSec ? (
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border ${secBadge}`}>
+                            <span className={`w-2 h-2 rounded-full ${colorSec === 'Red' ? 'bg-red-500' : colorSec === 'Yellow' ? 'bg-amber-400' : colorSec === 'Green' ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                            {colorSec}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">None</span>
+                        )}
+                      </td>
+                      <td className="py-4 px-6">
                         <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${
                           student.status === 'active' 
                             ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
@@ -536,6 +582,17 @@ const StudentDirectoryPage = () => {
           <div className="p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {students.map((student) => {
               const ageDisplay = calculateAge(student.dob);
+              const colorSec = student.colorSection;
+              const secBadge = colorSec === 'Red'
+                ? 'bg-rose-50 text-rose-700 border-rose-200'
+                : colorSec === 'Yellow'
+                ? 'bg-amber-50 text-amber-700 border-amber-200'
+                : colorSec === 'Green'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : colorSec === 'Blue'
+                ? 'bg-sky-50 text-sky-700 border-sky-200'
+                : 'bg-slate-100 text-slate-500 border-slate-200';
+
               return (
                 <div
                   key={student._id}
@@ -546,13 +603,21 @@ const StudentDirectoryPage = () => {
                       <span className="font-mono text-xs font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-lg border border-slate-100">
                         {student.admissionNumber}
                       </span>
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                        student.status === 'active' 
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
-                          : 'bg-slate-100 text-slate-600'
-                      }`}>
-                        {student.status || 'Active'}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {colorSec && (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${secBadge}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${colorSec === 'Red' ? 'bg-red-500' : colorSec === 'Yellow' ? 'bg-amber-400' : colorSec === 'Green' ? 'bg-emerald-500' : 'bg-sky-500'}`} />
+                            {colorSec}
+                          </span>
+                        )}
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                          student.status === 'active' 
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                            : 'bg-slate-100 text-slate-600'
+                        }`}>
+                          {student.status || 'Active'}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex items-center space-x-3.5">

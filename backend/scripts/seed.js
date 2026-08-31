@@ -108,6 +108,9 @@ const generateStudentsForClass = (classDoc, year) => {
       consentDataProcessing: { granted: true, grantedAt: new Date() },
     };
 
+    const colorSections = ['Red', 'Yellow', 'Green', 'Blue'];
+    const colorSection = colorSections[i % colorSections.length];
+
     const student = {
       _id: studentId,
       admissionNumber: makeAdmissionNum(year),
@@ -120,6 +123,7 @@ const generateStudentsForClass = (classDoc, year) => {
       guardians: [guardianId],
       enrollmentDate: new Date(`${year}-09-08`),
       status: 'active',
+      colorSection,
       medicalNotes: '',
       transport: { usesBus: false, bus: null, stop: '' },
     };
@@ -279,10 +283,53 @@ const seed = async () => {
       email: 'hmohammedfareedmandeeya@gmail.com',
       qualification: 'B.Ed. Computer Science',
       employmentDate: new Date('2023-09-01'), employmentStatus: 'active', role: 'teacher',
+      colorSection: 'Red', sectionRole: 'House Master',
     });
     await User.create({
       email: 'hmohammedfareedmandeeya@gmail.com', phone: '0244111333',
       passwordHash: 'JoshuaKimmich6', role: 'teacher', refStaff: fareedStaff._id,
+      isActive: true, approvalStatus: 'approved',
+    });
+
+    const yellowPatron = await Staff.create({
+      firstName: 'Amina', lastName: 'Yakubu', gender: 'female',
+      dob: new Date('1993-08-14'), phone: '0244111444',
+      email: 'amina.yakubu@hanaraschools.edu.gh',
+      qualification: 'B.Ed. Mathematics',
+      employmentDate: new Date('2022-09-01'), employmentStatus: 'active', role: 'teacher',
+      colorSection: 'Yellow', sectionRole: 'House Mistress',
+    });
+    await User.create({
+      email: 'amina.yakubu@hanaraschools.edu.gh', phone: '0244111444',
+      passwordHash: 'Teacher@2026', role: 'teacher', refStaff: yellowPatron._id,
+      isActive: true, approvalStatus: 'approved',
+    });
+
+    const greenPatron = await Staff.create({
+      firstName: 'Kwame', lastName: 'Asante', gender: 'male',
+      dob: new Date('1991-03-22'), phone: '0244111555',
+      email: 'kwame.asante@hanaraschools.edu.gh',
+      qualification: 'B.Sc. Integrated Science Education',
+      employmentDate: new Date('2021-09-01'), employmentStatus: 'active', role: 'teacher',
+      colorSection: 'Green', sectionRole: 'House Master',
+    });
+    await User.create({
+      email: 'kwame.asante@hanaraschools.edu.gh', phone: '0244111555',
+      passwordHash: 'Teacher@2026', role: 'teacher', refStaff: greenPatron._id,
+      isActive: true, approvalStatus: 'approved',
+    });
+
+    const bluePatron = await Staff.create({
+      firstName: 'Fatima', lastName: 'Sulemana', gender: 'female',
+      dob: new Date('1994-11-30'), phone: '0244111666',
+      email: 'fatima.sulemana@hanaraschools.edu.gh',
+      qualification: 'B.A. English Language Education',
+      employmentDate: new Date('2023-01-15'), employmentStatus: 'active', role: 'teacher',
+      colorSection: 'Blue', sectionRole: 'House Mistress',
+    });
+    await User.create({
+      email: 'fatima.sulemana@hanaraschools.edu.gh', phone: '0244111666',
+      passwordHash: 'Teacher@2026', role: 'teacher', refStaff: bluePatron._id,
       isActive: true, approvalStatus: 'approved',
     });
 
@@ -355,6 +402,15 @@ const seed = async () => {
     // Assign teachers to their classes
     fareedStaff.classesAssigned = [createdClasses[4]._id]; // Primary 5
     await fareedStaff.save();
+
+    yellowPatron.classesAssigned = [createdClasses[2]._id]; // Primary 3
+    await yellowPatron.save();
+
+    greenPatron.classesAssigned = [createdClasses[5]._id]; // Primary 6
+    await greenPatron.save();
+
+    bluePatron.classesAssigned = [createdClasses[7]._id]; // JHS 2
+    await bluePatron.save();
 
     // 7. Routes & Buses
     console.log('Seeding Routes & Buses...');

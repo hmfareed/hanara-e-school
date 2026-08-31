@@ -25,6 +25,8 @@ const StaffFormPage = () => {
     employmentDate: '',
     employmentStatus: 'active',
     role: 'teacher',
+    colorSection: '',
+    sectionRole: 'Patron',
     baseSalary: 1800,
     createUserAccount: true,
     password: '',
@@ -43,6 +45,8 @@ const StaffFormPage = () => {
           title: data.title || '',
           photoUrl: data.photoUrl || null,
           baseSalary: data.baseSalary || 1800,
+          colorSection: data.colorSection || '',
+          sectionRole: data.sectionRole || 'Patron',
           dob: data.dob ? data.dob.split('T')[0] : '',
           employmentDate: data.employmentDate ? data.employmentDate.split('T')[0] : '',
           createUserAccount: false,
@@ -134,6 +138,8 @@ const StaffFormPage = () => {
       qualification: formData.qualification || '',
       employmentStatus: formData.employmentStatus || 'active',
       role: formData.role || 'teacher',
+      colorSection: formData.colorSection || null,
+      sectionRole: formData.colorSection ? (formData.sectionRole || 'Patron') : null,
       baseSalary: Number(formData.baseSalary) || 0,
       classesAssigned: cleanClasses,
       dob: formData.dob ? new Date(formData.dob).toISOString() : null,
@@ -385,7 +391,38 @@ const StaffFormPage = () => {
             </div>
           </div>
 
-
+          {/* Color Section Assignment */}
+          <div className="pt-4 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label className="block text-sm font-semibold text-slate-700">Color Section / House</label>
+              <select
+                value={formData.colorSection}
+                onChange={(e) => setFormData({ ...formData, colorSection: e.target.value })}
+                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm font-medium"
+              >
+                <option value="">— Unassigned —</option>
+                <option value="Red">Red Section</option>
+                <option value="Yellow">Yellow Section</option>
+                <option value="Green">Green Section</option>
+                <option value="Blue">Blue Section</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-slate-700">House / Section Role</label>
+              <select
+                value={formData.sectionRole}
+                onChange={(e) => setFormData({ ...formData, sectionRole: e.target.value })}
+                disabled={!formData.colorSection}
+                className="mt-1.5 block w-full px-4 py-2 border border-slate-200 rounded-xl bg-white text-slate-800 focus:ring-2 focus:ring-emerald-800 focus:border-emerald-800 text-sm font-medium disabled:opacity-50"
+              >
+                <option value="House Master">House Master</option>
+                <option value="House Mistress">House Mistress</option>
+                <option value="Patron">Patron</option>
+                <option value="Assistant">Assistant Patron</option>
+                <option value="Member">Section Member</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         {!isEdit && (

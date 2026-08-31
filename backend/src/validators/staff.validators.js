@@ -17,6 +17,8 @@ const createStaffSchema = z.object({
   role: z.enum(['teacher', 'accountant', 'admin', 'driver', 'support', 'cleaner']),
   baseSalary: z.coerce.number().optional().default(0),
   classesAssigned: z.array(z.union([z.string(), z.object({ _id: z.string() }).passthrough()])).optional().default([]),
+  colorSection: z.enum(['Red', 'Yellow', 'Green', 'Blue']).or(z.literal('')).optional().nullable().default(null),
+  sectionRole: z.enum(['House Master', 'House Mistress', 'Patron', 'Assistant', 'Member']).or(z.literal('')).optional().nullable().default('Patron'),
   // Create a user login account for this staff member
   createUserAccount: z.boolean().optional().default(true),
   password: z.string().optional().nullable(),
