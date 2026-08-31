@@ -261,6 +261,16 @@ const seed = async () => {
       isActive: true,
     });
 
+    await User.create({
+      email: 'sysadmin@hanaraschools.edu.gh',
+      phone: '0244111224',
+      passwordHash: 'Admin@2026',
+      role: 'system_admin',
+      isSuperAdmin: true,
+      isActive: true,
+      approvalStatus: 'approved',
+    });
+
     // Seeded staff members Abubakar Sadik and Mariam Issah have been removed per request.
 
     const fareedStaff = await Staff.create({
