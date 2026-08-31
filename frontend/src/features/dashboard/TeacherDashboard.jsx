@@ -611,6 +611,18 @@ const TeacherDashboard = () => {
                   <div key={act._id || idx} className="flex items-start gap-2.5">
                     {act.photoUrl ? (
                       <img src={act.photoUrl} alt={act.title} className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5"/>
+                    ) : act.type === 'attendance' ? (
+                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                        <CheckCircle2 size={14}/>
+                      </div>
+                    ) : act.type === 'grade' ? (
+                      <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                        <Award size={14}/>
+                      </div>
+                    ) : act.type === 'assignment' ? (
+                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                        <ClipboardList size={14}/>
+                      </div>
                     ) : (
                       <div className="w-8 h-8 rounded-full bg-rose-100 text-[#781A1A] font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
                         <UserCheck size={14}/>

@@ -151,6 +151,208 @@ const getTeacherProfile = async (req, res, next) => {
   }
 };
 
+// Helper to fetch real recent activities for a class or teacher
+const getRealRecentActivities = async ({ classId, classIds, limit = 6 }) => {
+  try {
+    const AttendanceRecord = require('../models/AttendanceRecord');
+    const Grade = require('../models/Grade');
+    const OfflineAssignment = require('../models/OfflineAssignment');
+    const LessonPlan = require('../models/LessonPlan');
+    const BehaviourRecord = require('../models/BehaviourRecord');
+    const LearningResource = require('../models/LearningResource');
+    const mongoose = require('mongoose');
+
+    let targetClassIds = [];
+    if (classId) {
+      targetClassIds = [new mongoose.Types.ObjectId(classId.toString())];
+    } else if (Array.isArray(classIds) && classIds.length > 0) {
+      targetClassIds = classIds.map((id) => new mongoose.Types.ObjectId(id.toString()));
+    }
+
+    if (targetClassIds.length === 0) return [];
+
+    const activities = [];
+
+    // 1. Attendance Records (grouped by class and date)
+    try {
+      const attendanceBatches = await AttendanceRecord.aggregate([
+        { $match: { class: { $in: targetClassIds } } },
+        {
+          $group: {
+            _id: {
+              class: '$class',
+              dateStr: { $dateToString: { format: '%Y-%m-%d', date: '$date' } },
+            },
+            date: { $first: '$date' },
+            recordedAt: { $max: '$updatedAt' },
+            createdAt: { $max: '$createdAt' },
+            totalStudents: { $sum: 1 },
+            presentCount: {
+              $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] },
+            },
+          },
+        },
+        { $sort: { recordedAt: -1 } },
+        { $limit: limit },
+      ]);
+
+      attendanceBatches.forEach((att) => {
+        const timestamp = att.recordedAt || att.createdAt || att.date;
+        activities.push({
+          _id: `att_${att._id.class}_${att._id.dateStr}`,
+          type: 'attendance',
+          title: 'Daily Attendance Marked',
+          description: `${att.totalStudents} student${att.totalStudents === 1 ? '' : 's'} recorded (${att.presentCount} present).`,
+          timestamp: new Date(timestamp),
+        });
+      });
+    } catch (err) {}
+
+    // 2. Continuous Assessment / Grades
+    try {
+      const recentGrades = await Grade.find({ class: { $in: targetClassIds } })
+        .sort({ updatedAt: -1 })
+        .limit(20)
+        .populate('subject', 'name code')
+        .lean();
+
+      const gradeGroups = new Map();
+      recentGrades.forEach((g) => {
+        const subName = g.subject?.name || 'Subject';
+        const dateHour = g.updatedAt ? new Date(g.updatedAt).toISOString().slice(0, 13) : 'date';
+        const groupKey = `${g.class}_${subName}_${dateHour}`;
+        if (!gradeGroups.has(groupKey)) {
+          gradeGroups.set(groupKey, {
+            id: `grade_${g._id}`,
+            subjectName: subName,
+            timestamp: g.updatedAt || g.createdAt,
+            hasExam: (g.rawExamScore > 0 || g.examScore > 0),
+            count: 0,
+          });
+        }
+        const entry = gradeGroups.get(groupKey);
+        entry.count += 1;
+        if (g.rawExamScore > 0 || g.examScore > 0) entry.hasExam = true;
+      });
+
+      Array.from(gradeGroups.values()).slice(0, limit).forEach((gg) => {
+        activities.push({
+          _id: gg.id,
+          type: 'grade',
+          title: gg.hasExam ? 'Exam Scores Recorded' : 'Continuous Assessment Updated',
+          description: `Scores updated for ${gg.subjectName} (${gg.count} student${gg.count === 1 ? '' : 's'}).`,
+          timestamp: new Date(gg.timestamp),
+        });
+      });
+    } catch (err) {}
+
+    // 3. Offline Assignments
+    try {
+      const recentAssignments = await OfflineAssignment.find({ class: { $in: targetClassIds } })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .populate('subject', 'name code')
+        .lean();
+
+      recentAssignments.forEach((asg) => {
+        activities.push({
+          _id: `asg_${asg._id}`,
+          type: 'assignment',
+          title: 'Offline Assignment Logged',
+          description: `Assignment "${asg.title}" issued for ${asg.subject?.name || 'Subject'}.`,
+          timestamp: new Date(asg.createdAt),
+        });
+      });
+    } catch (err) {}
+
+    // 4. Lesson Plans
+    try {
+      const recentLessons = await LessonPlan.find({ class: { $in: targetClassIds } })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .populate('subject', 'name code')
+        .lean();
+
+      recentLessons.forEach((lp) => {
+        activities.push({
+          _id: `lp_${lp._id}`,
+          type: 'lesson_plan',
+          title: 'Lesson Plan Prepared',
+          description: `Week ${lp.weekNumber}: "${lp.topic}" (${lp.subject?.name || 'Subject'}).`,
+          timestamp: new Date(lp.createdAt),
+        });
+      });
+    } catch (err) {}
+
+    // 5. Behaviour Records
+    try {
+      const recentBehaviours = await BehaviourRecord.find({ class: { $in: targetClassIds } })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .populate('student', 'firstName lastName')
+        .lean();
+
+      recentBehaviours.forEach((b) => {
+        const catLabel = (b.category || 'note').replace(/_/g, ' ');
+        activities.push({
+          _id: `beh_${b._id}`,
+          type: 'behaviour',
+          title: `Behaviour Note: ${catLabel.charAt(0).toUpperCase() + catLabel.slice(1)}`,
+          description: `${b.student ? `${b.student.firstName} ${b.student.lastName}` : 'Student'}: ${b.title}`,
+          timestamp: new Date(b.createdAt),
+        });
+      });
+    } catch (err) {}
+
+    // 6. Learning Resources
+    try {
+      const recentResources = await LearningResource.find({ class: { $in: targetClassIds } })
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .populate('subject', 'name code')
+        .lean();
+
+      recentResources.forEach((lr) => {
+        activities.push({
+          _id: `lr_${lr._id}`,
+          type: 'resource',
+          title: 'Learning Resource Added',
+          description: `"${lr.title}" uploaded for ${lr.subject?.name || 'Subject'}.`,
+          timestamp: new Date(lr.createdAt),
+        });
+      });
+    } catch (err) {}
+
+    // Sort chronologically descending
+    activities.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+
+    const formatTimeAgo = (date) => {
+      const now = Date.now();
+      const diff = Math.max(0, now - date.getTime());
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return 'Just now';
+      if (mins < 60) return `${mins} min${mins === 1 ? '' : 's'} ago`;
+      const hours = Math.floor(mins / 60);
+      if (hours < 24) return `${hours} hr${hours === 1 ? '' : 's'} ago`;
+      const days = Math.floor(hours / 24);
+      if (days === 1) return 'Yesterday';
+      if (days < 7) return `${days} days ago`;
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    };
+
+    return activities.slice(0, limit).map((act) => ({
+      _id: act._id,
+      type: act.type,
+      title: act.title,
+      description: act.description,
+      timestamp: act.timestamp.toISOString(),
+      time: formatTimeAgo(act.timestamp),
+    }));
+  } catch (err) {
+    return [];
+  }
+};
+
 // Short-lived in-memory cache for teacher dashboard
 const teacherDashboardCache = new Map();
 const TEACHER_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes — meaningful cache window
@@ -404,7 +606,7 @@ const getTeacherDashboardSummary = async (req, res, next) => {
       },
       assignmentsSummary,
       pendingResultsSummary,
-      recentActivities: [],
+      recentActivities: await getRealRecentActivities({ classIds: teacherClassObjectIds, limit: 6 }),
       assignmentsList: realAssignments,
       pendingResultsList,
       announcements: announcements || [],
@@ -671,11 +873,7 @@ const getMyClassDetails = async (req, res, next) => {
           { day: 'Today', time: '10:30 AM', subject: subjects[1]?.name || 'English Language', topic: 'Narrative Essay Writing & Grammar' },
           { day: 'Tomorrow', time: '09:00 AM', subject: subjects[2]?.name || 'Integrated Science', topic: 'Photosynthesis & Plant Biology' },
         ],
-        recentActivities: [
-          { time: '10 mins ago', title: 'Daily Attendance Marked', description: `${totalStudents} students recorded for today.` },
-          { time: 'Yesterday', title: 'Continuous Assessment Score Updated', description: 'Class Score 1 entries recorded for Mathematics.' },
-          { time: '2 days ago', title: 'Offline Assignment Logged', description: 'Weekly Essay Assignment issued to all students.' },
-        ],
+        recentActivities: await getRealRecentActivities({ classId, limit: 6 }),
       },
     });
   } catch (error) {

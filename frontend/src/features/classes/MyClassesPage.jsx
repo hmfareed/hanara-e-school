@@ -68,6 +68,48 @@ const CircularGauge = ({ percentage, color = '#10b981', size = 52, strokeWidth =
   );
 };
 
+/* ── Activity Icon and Styling Helper ── */
+const getActivityIcon = (type) => {
+  switch (type) {
+    case 'attendance':
+      return {
+        icon: CheckCircle2,
+        bg: 'bg-emerald-100 text-emerald-600',
+      };
+    case 'grade':
+      return {
+        icon: BarChart3,
+        bg: 'bg-orange-100 text-orange-600',
+      };
+    case 'assignment':
+      return {
+        icon: FileText,
+        bg: 'bg-blue-100 text-blue-600',
+      };
+    case 'lesson_plan':
+      return {
+        icon: BookOpen,
+        bg: 'bg-purple-100 text-purple-600',
+      };
+    case 'behaviour':
+      return {
+        icon: AlertCircle,
+        bg: 'bg-amber-100 text-amber-600',
+      };
+    case 'resource':
+      return {
+        icon: FolderOpen,
+        bg: 'bg-teal-100 text-teal-600',
+      };
+    default:
+      return {
+        icon: Clock,
+        bg: 'bg-slate-100 text-slate-600',
+      };
+  }
+};
+
+
 const MyClassesPage = () => {
   const { classId } = useParams();
   const navigate = useNavigate();
@@ -622,52 +664,43 @@ const MyClassesPage = () => {
                 <div className="bg-white rounded-3xl border border-slate-200/80 p-6 shadow-2xs space-y-4">
                   <div className="flex items-center justify-between">
                     <h3 className="font-extrabold text-slate-900 text-base">Recent Class Activities</h3>
-                    <span className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer">View All</span>
+                    {recentActivities.length > 0 && (
+                      <span className="text-xs font-bold text-emerald-700 hover:underline cursor-pointer">View All</span>
+                    )}
                   </div>
 
-                  <div className="space-y-4">
-                    {/* Activity 1 */}
-                    <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <CheckCircle2 className="w-5 h-5" />
+                  {recentActivities.length === 0 ? (
+                    <div className="py-8 px-4 text-center flex flex-col items-center justify-center space-y-2 text-slate-400">
+                      <div className="w-10 h-10 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-300">
+                        <Clock className="w-5 h-5" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="font-bold text-slate-900 text-xs truncate">Daily Attendance Marked</h4>
-                          <span className="text-[10px] text-slate-400 font-medium flex-shrink-0">10 mins ago</span>
-                        </div>
-                        <p className="text-xs text-slate-500">20 students recorded for today.</p>
-                      </div>
+                      <p className="text-xs font-semibold text-slate-600">No recent activities yet</p>
+                      <p className="text-[11px] text-slate-400 max-w-[220px] leading-relaxed">
+                        Completed actions like attendance, scores, and assignments will appear here once performed.
+                      </p>
                     </div>
-
-                    {/* Activity 2 */}
-                    <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <BarChart3 className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="font-bold text-slate-900 text-xs truncate">Continuous Assessment Score Updated</h4>
-                          <span className="text-[10px] text-slate-400 font-medium flex-shrink-0">Yesterday</span>
-                        </div>
-                        <p className="text-xs text-slate-500">Class Score 1 entries recorded for Mathematics.</p>
-                      </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {recentActivities.map((act, idx) => {
+                        const style = getActivityIcon(act.type);
+                        const IconComponent = style.icon;
+                        return (
+                          <div key={act._id || idx} className="flex items-start gap-3">
+                            <div className={`w-9 h-9 rounded-full ${style.bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                              <IconComponent className="w-5 h-5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-2">
+                                <h4 className="font-bold text-slate-900 text-xs truncate">{act.title}</h4>
+                                <span className="text-[10px] text-slate-400 font-medium flex-shrink-0">{act.time}</span>
+                              </div>
+                              <p className="text-xs text-slate-500 line-clamp-2">{act.description}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-
-                    {/* Activity 3 */}
-                    <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <h4 className="font-bold text-slate-900 text-xs truncate">Offline Assignment Logged</h4>
-                          <span className="text-[10px] text-slate-400 font-medium flex-shrink-0">2 days ago</span>
-                        </div>
-                        <p className="text-xs text-slate-500">Assignment "Homework 3" issued to all students.</p>
-                      </div>
-                    </div>
-                  </div>
+                  )}
                 </div>
 
                 {/* Quick Actions */}
