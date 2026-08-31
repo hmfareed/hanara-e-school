@@ -301,15 +301,15 @@ const LoginPage = () => {
         <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-black/20 rounded-full blur-2xl transform -translate-x-1/3 translate-y-1/3" />
 
         <div className="flex items-center space-x-3 z-10">
-          <HanaraLogo size={68} className="drop-shadow-md" />
-          <span className="font-bold text-xl tracking-wider uppercase text-slate-100">HANARA SCHOOLS</span>
+          <HanaraLogo size={64} className="drop-shadow-lg" />
+          <span className="font-extrabold text-xl tracking-wider uppercase text-slate-100">HANARA SCHOOLS</span>
         </div>
 
         <div className="my-auto space-y-6 z-10 max-w-md">
           <h2 className="text-4xl font-extrabold leading-tight tracking-tight text-slate-100">
             {view === 'register'
               ? 'Join the HANARA Teaching Team.'
-              : "Empowering Minds, Shaping Ghana\u2019s Future."}
+              : "Empowering Minds, Shaping Ghana’s Future."}
           </h2>
           <p className="text-slate-300 text-base leading-relaxed">
             {view === 'register'
@@ -341,7 +341,7 @@ const LoginPage = () => {
 
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center space-x-3 mb-4">
-            <HanaraLogo size={58} className="drop-shadow-md" />
+            <HanaraLogo size={52} className="drop-shadow-md" />
             <span className="font-bold text-lg tracking-wider uppercase text-slate-800">HANARA SCHOOLS</span>
           </div>
 
@@ -349,7 +349,7 @@ const LoginPage = () => {
           {view === 'login' && (
             <>
               <div className="flex flex-col items-center text-center space-y-3">
-                <HanaraLogo size={180} className="mx-auto mb-2 block drop-shadow-md" />
+                <HanaraLogo size={130} className="mx-auto mb-1 block drop-shadow-md" />
                 <div>
                   <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">Sign In</h2>
                   <p className="mt-1 text-sm text-slate-500">Enter your credentials to access the portal</p>
