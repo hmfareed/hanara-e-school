@@ -326,9 +326,11 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, handleAvatarClick, fileInputRef,
             onClick={() => handleNavClick('/')}
             className="flex items-center space-x-3 cursor-pointer"
           >
-            <div className="h-9 w-9 bg-[#361114] border border-[#7D2A30]/40 rounded-xl flex items-center justify-center text-white shadow-xs">
-              <Shield size={20} className="fill-[#D9B4B8]/20 text-[#D9B4B8]" />
-            </div>
+            <img
+              src="/hanara-badge.png"
+              alt="HANARA Official Badge"
+              className="h-10 w-10 object-contain drop-shadow-md shrink-0"
+            />
             <div className="flex flex-col leading-tight">
               <span className="font-black text-sm tracking-wider uppercase text-white">HANARA</span>
               <span className="text-[10px] font-extrabold tracking-widest uppercase text-[#E8D0D2]/90">ADMIN MODE</span>
@@ -395,9 +397,11 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen, handleAvatarClick, fileInputRef,
           onClick={() => handleNavClick('/')}
           className="flex items-center space-x-3 cursor-pointer"
         >
-          <div className="h-9 w-9 bg-[#361114] border border-[#7D2A30]/40 rounded-xl flex items-center justify-center text-white shadow-xs">
-            <Shield size={20} className="fill-[#D9B4B8]/20 text-[#D9B4B8]" />
-          </div>
+          <img
+            src="/hanara-badge.png"
+            alt="HANARA Official Badge"
+            className="h-10 w-10 object-contain drop-shadow-md shrink-0"
+          />
           <div className="flex flex-col leading-tight">
             <span className="font-black text-sm tracking-wider uppercase text-white">HANARA</span>
             <span className="text-[10px] font-extrabold tracking-widest uppercase text-[#E8D0D2]/90">SCHOOLS</span>
