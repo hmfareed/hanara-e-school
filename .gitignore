@@ -31,3 +31,9 @@ coverage/
 dist/
 build/
 .cache/
+dist-electron/
+*.exe
+*.dmg
+*.AppImage
+*.deb
+
