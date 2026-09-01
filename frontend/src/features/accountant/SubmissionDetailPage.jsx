@@ -182,7 +182,17 @@ const SubmissionDetailPage = () => {
                   <React.Fragment key={idx}>
                     <tr className={`transition-colors ${isAbsent ? 'opacity-50' : 'hover:bg-slate-50/80'}`}>
                       <td className="px-6 py-3.5">
-                        <p className="font-bold text-slate-800">{item.name}</p>
+                        {item.studentId ? (
+                          <Link
+                            to={`/students/${item.studentId}`}
+                            className="font-bold text-slate-800 hover:text-emerald-700 hover:underline block"
+                            title="View Student Profile"
+                          >
+                            {item.name}
+                          </Link>
+                        ) : (
+                          <p className="font-bold text-slate-800">{item.name}</p>
+                        )}
                         <span className="text-slate-400 font-mono text-[10px]">{item.admissionNumber}</span>
                       </td>
                       <td className="px-4 py-3.5 text-center"><FeeStatusBadge status={item.feedingStatus} type="feeding" /></td>

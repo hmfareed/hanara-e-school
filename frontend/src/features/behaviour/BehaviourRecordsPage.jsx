@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -258,23 +259,53 @@ const BehaviourRecordsPage = () => {
               className="p-5 bg-white rounded-3xl border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-start justify-between gap-4"
             >
               <div className="flex items-start gap-4">
-                {rec.student?.photoUrl ? (
-                  <img
-                    src={rec.student.photoUrl}
-                    alt={rec.student.firstName}
-                    className="w-12 h-12 rounded-2xl object-cover"
-                  />
+                {rec.student?._id ? (
+                  <Link
+                    to={`/students/${rec.student._id}`}
+                    className="flex-shrink-0 group cursor-pointer"
+                    title="View Student Profile"
+                  >
+                    {rec.student?.photoUrl ? (
+                      <img
+                        src={rec.student.photoUrl}
+                        alt={rec.student.firstName}
+                        className="w-12 h-12 rounded-2xl object-cover group-hover:scale-105 group-hover:border-2 group-hover:border-emerald-400 transition-all"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-base group-hover:scale-105 transition-transform">
+                        {rec.student?.firstName ? rec.student.firstName.charAt(0) : 'S'}
+                      </div>
+                    )}
+                  </Link>
                 ) : (
-                  <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-base">
-                    {rec.student?.firstName ? rec.student.firstName.charAt(0) : 'S'}
-                  </div>
+                  rec.student?.photoUrl ? (
+                    <img
+                      src={rec.student.photoUrl}
+                      alt={rec.student.firstName}
+                      className="w-12 h-12 rounded-2xl object-cover"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-base">
+                      {rec.student?.firstName ? rec.student.firstName.charAt(0) : 'S'}
+                    </div>
+                  )
                 )}
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="font-bold text-slate-900 text-base">
-                      {rec.student?.firstName} {rec.student?.lastName}
-                    </h3>
+                    {rec.student?._id ? (
+                      <Link
+                        to={`/students/${rec.student._id}`}
+                        className="font-bold text-slate-900 text-base hover:text-emerald-800 hover:underline transition-colors"
+                        title="View Student Profile"
+                      >
+                        {rec.student?.firstName} {rec.student?.lastName}
+                      </Link>
+                    ) : (
+                      <h3 className="font-bold text-slate-900 text-base">
+                        {rec.student?.firstName} {rec.student?.lastName}
+                      </h3>
+                    )}
                     <span className="text-xs font-mono text-slate-500">
                       ({rec.student?.admissionNumber})
                     </span>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import Skeleton from '../../components/Skeleton';
@@ -384,15 +384,21 @@ const AttendanceRegisterPage = () => {
                   <tbody className="divide-y divide-slate-100 text-xs">
                     {register.map((st) => (
                       <tr key={st.studentId} className="hover:bg-slate-50/80 transition">
-                        <td className="p-3.5 flex items-center gap-3">
-                          {st.photoUrl ? (
-                            <img src={st.photoUrl} alt={st.name} className="w-9 h-9 rounded-xl object-cover" />
-                          ) : (
-                            <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm">
-                              {st.name.charAt(0)}
-                            </div>
-                          )}
-                          <span className="font-bold text-slate-900">{st.name}</span>
+                        <td className="p-3.5">
+                          <Link
+                            to={`/students/${st.studentId}`}
+                            className="flex items-center gap-3 group cursor-pointer"
+                            title="View Student Profile"
+                          >
+                            {st.photoUrl ? (
+                              <img src={st.photoUrl} alt={st.name} className="w-9 h-9 rounded-xl object-cover group-hover:scale-105 transition-transform" />
+                            ) : (
+                              <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-sm group-hover:scale-105 transition-transform">
+                                {st.name.charAt(0)}
+                              </div>
+                            )}
+                            <span className="font-bold text-slate-900 group-hover:text-indigo-600 group-hover:underline transition-colors">{st.name}</span>
+                          </Link>
                         </td>
                         <td className="p-3.5 font-mono text-slate-600">{st.admissionNumber}</td>
                         <td className="p-3.5 text-center">

@@ -10,6 +10,7 @@ import {
   Copy, Check, Users, UserCheck, AlertTriangle, Trash2, QrCode,
 } from 'lucide-react';
 import StaffQrModal from '../attendance/StaffQrModal';
+import StaffProfileModal from './StaffProfileModal';
 
 /* ─── small helper: copy to clipboard ─── */
 const useCopy = () => {
@@ -258,6 +259,7 @@ const StaffDirectoryPage = () => {
   const queryClient = useQueryClient();
   const [staffToFire, setStaffToFire] = useState(null);
   const [selectedStaffForQr, setSelectedStaffForQr] = useState(null);
+  const [selectedStaffForProfile, setSelectedStaffForProfile] = useState(null);
 
   const fireMutation = useMutation({
     mutationFn: (id) => api.delete(`/staff/${id}`),
@@ -424,8 +426,13 @@ const StaffDirectoryPage = () => {
                       return (
                         <tr key={member._id} className="hover:bg-slate-50/50">
                           <td className="py-4 px-6 font-medium text-slate-900 font-sans">
-                            <div className="flex items-center space-x-3">
-                              <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex-shrink-0 flex items-center justify-center text-slate-400 overflow-hidden">
+                            <button
+                              type="button"
+                              onClick={() => setSelectedStaffForProfile(member)}
+                              className="flex items-center space-x-3 group cursor-pointer text-left focus:outline-none"
+                              title="Click to view full profile"
+                            >
+                              <div className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex-shrink-0 flex items-center justify-center text-slate-400 overflow-hidden group-hover:scale-105 group-hover:border-emerald-400 transition-transform">
                                 {member.photoUrl ? (
                                   <img
                                     src={member.photoUrl}
@@ -441,10 +448,10 @@ const StaffDirectoryPage = () => {
                                   </span>
                                 )}
                               </div>
-                              <span>
+                              <span className="group-hover:text-emerald-800 group-hover:underline transition-colors font-semibold">
                                 {member.firstName} {member.otherNames ? `${member.otherNames} ` : ''} {member.lastName}
                               </span>
-                            </div>
+                            </button>
                           </td>
                           <td className="py-4 px-6 capitalize">
                             <span className={`inline-block px-2.5 py-0.5 rounded border text-xs font-medium ${getRoleBadge(member.role)}`}>
@@ -615,6 +622,14 @@ const StaffDirectoryPage = () => {
           staff={selectedStaffForQr}
           isOpen={!!selectedStaffForQr}
           onClose={() => setSelectedStaffForQr(null)}
+        />
+      )}
+      {/* Staff Profile Modal */}
+      {selectedStaffForProfile && (
+        <StaffProfileModal
+          staff={selectedStaffForProfile}
+          onClose={() => setSelectedStaffForProfile(null)}
+          onOpenQr={(s) => setSelectedStaffForQr(s)}
         />
       )}
     </div>

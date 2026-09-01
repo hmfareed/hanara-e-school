@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
 import Skeleton from '../../components/Skeleton';
 import {
@@ -790,18 +790,24 @@ const MyClassesPage = () => {
                   <tbody className="divide-y divide-slate-100 text-xs">
                     {filteredStudents.map((st) => (
                       <tr key={st._id} className="hover:bg-slate-50/80 transition">
-                        <td className="p-3.5 flex items-center gap-3">
-                          {st.photoUrl ? (
-                            <img src={st.photoUrl} alt={st.fullName} className="w-9 h-9 rounded-xl object-cover" />
-                          ) : (
-                            <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-sm">
-                              {st.firstName?.charAt(0)}
+                        <td className="p-3.5">
+                          <Link
+                            to={`/students/${st._id}`}
+                            className="flex items-center gap-3 group cursor-pointer"
+                            title="View Student Profile"
+                          >
+                            {st.photoUrl ? (
+                              <img src={st.photoUrl} alt={st.fullName} className="w-9 h-9 rounded-xl object-cover group-hover:scale-105 transition-transform" />
+                            ) : (
+                              <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-sm group-hover:scale-105 transition-transform">
+                                {st.firstName?.charAt(0)}
+                              </div>
+                            )}
+                            <div>
+                              <p className="font-bold text-slate-900 group-hover:text-emerald-800 group-hover:underline transition-colors">{st.fullName}</p>
+                              <p className="text-[11px] text-slate-400">Guardian: {st.guardianPhone || 'N/A'}</p>
                             </div>
-                          )}
-                          <div>
-                            <p className="font-bold text-slate-900">{st.fullName}</p>
-                            <p className="text-[11px] text-slate-400">Guardian: {st.guardianPhone || 'N/A'}</p>
-                          </div>
+                          </Link>
                         </td>
                         <td className="p-3.5 font-mono text-slate-600">{st.admissionNumber}</td>
                         <td className="p-3.5 capitalize">{st.gender}</td>
@@ -821,12 +827,12 @@ const MyClassesPage = () => {
                           </span>
                         </td>
                         <td className="p-3.5 text-right">
-                          <button
-                            onClick={() => setSelectedStudentId(st._id)}
-                            className="px-3 py-1.5 bg-emerald-50 hover:bg-[#044e3a] hover:text-white text-emerald-800 font-semibold rounded-xl transition text-[11px]"
+                          <Link
+                            to={`/students/${st._id}`}
+                            className="inline-block px-3 py-1.5 bg-emerald-50 hover:bg-[#044e3a] hover:text-white text-emerald-800 font-semibold rounded-xl transition text-[11px] cursor-pointer"
                           >
-                            View Details
-                          </button>
+                            View Profile
+                          </Link>
                         </td>
                       </tr>
                     ))}

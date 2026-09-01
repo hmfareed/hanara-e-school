@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getStaffGreeting } from '../../utils/greetingUtils';
@@ -607,36 +607,54 @@ const TeacherDashboard = () => {
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                {recentActivities.map((act, idx) => (
-                  <div key={act._id || idx} className="flex items-start gap-2.5">
-                    {act.photoUrl ? (
-                      <img src={act.photoUrl} alt={act.title} className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5"/>
-                    ) : act.type === 'attendance' ? (
-                      <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                        <CheckCircle2 size={14}/>
+                {recentActivities.map((act, idx) => {
+                  const studentId = act.studentId || act.student?._id;
+                  const itemContent = (
+                    <>
+                      {act.photoUrl ? (
+                        <img src={act.photoUrl} alt={act.title} className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5"/>
+                      ) : act.type === 'attendance' ? (
+                        <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                          <CheckCircle2 size={14}/>
+                        </div>
+                      ) : act.type === 'grade' ? (
+                        <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                          <Award size={14}/>
+                        </div>
+                      ) : act.type === 'assignment' ? (
+                        <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                          <ClipboardList size={14}/>
+                        </div>
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-rose-100 text-[#781A1A] font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                          <UserCheck size={14}/>
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex justify-between items-center">
+                          <p className="text-xs font-bold text-slate-900 group-hover:text-[#781A1A] transition-colors truncate">{act.title}</p>
+                          <span className="text-[10px] text-slate-400 shrink-0">{act.time}</span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">{act.description}</p>
                       </div>
-                    ) : act.type === 'grade' ? (
-                      <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                        <Award size={14}/>
-                      </div>
-                    ) : act.type === 'assignment' ? (
-                      <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                        <ClipboardList size={14}/>
-                      </div>
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-rose-100 text-[#781A1A] font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
-                        <UserCheck size={14}/>
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between items-center">
-                        <p className="text-xs font-bold text-slate-900 truncate">{act.title}</p>
-                        <span className="text-[10px] text-slate-400 shrink-0">{act.time}</span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 truncate mt-0.5">{act.description}</p>
+                    </>
+                  );
+
+                  return studentId ? (
+                    <Link
+                      key={act._id || idx}
+                      to={`/students/${studentId}`}
+                      className="flex items-start gap-2.5 group hover:bg-slate-50 p-1 rounded-xl transition-colors cursor-pointer"
+                      title="View Student Profile"
+                    >
+                      {itemContent}
+                    </Link>
+                  ) : (
+                    <div key={act._id || idx} className="flex items-start gap-2.5 p-1">
+                      {itemContent}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -776,19 +794,23 @@ const TeacherDashboard = () => {
                 <div className="flex flex-col gap-2">
                   {upcomingBirthdays.map((bday) => (
                     <div key={bday._id} className="flex items-center justify-between gap-2 p-1.5 rounded-2xl hover:bg-slate-50 transition-colors">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Link
+                        to={`/students/${bday._id}`}
+                        className="flex items-center gap-2 min-w-0 flex-1 group cursor-pointer"
+                        title="View Student Profile"
+                      >
                         {bday.photoUrl ? (
-                          <img src={bday.photoUrl} alt={bday.fullName} className="w-7 h-7 rounded-full object-cover shrink-0"/>
+                          <img src={bday.photoUrl} alt={bday.fullName} className="w-7 h-7 rounded-full object-cover shrink-0 group-hover:scale-105 transition-transform"/>
                         ) : (
-                          <div className="w-7 h-7 rounded-full bg-pink-100 text-pink-700 font-bold text-[10px] flex items-center justify-center shrink-0">
+                          <div className="w-7 h-7 rounded-full bg-pink-100 text-pink-700 font-bold text-[10px] flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform">
                             {bday.fullName.charAt(0)}
                           </div>
                         )}
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-900 truncate">{bday.fullName}</p>
+                          <p className="text-xs font-bold text-slate-900 group-hover:text-[#781A1A] group-hover:underline transition-colors truncate">{bday.fullName}</p>
                           <p className="text-[10px] text-slate-400 truncate">{bday.className}</p>
                         </div>
-                      </div>
+                      </Link>
                       <span className="text-[10px] font-black text-pink-700 bg-pink-50 border border-pink-200 px-2 py-0.5 rounded-lg shrink-0">
                         {bday.daysAway === 0 ? 'Today 🎉' : bday.dobDate}
                       </span>

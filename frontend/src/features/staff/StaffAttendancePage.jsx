@@ -4,6 +4,7 @@ import api from '../../services/api';
 import { useOffline } from '../../context/OfflineContext';
 import { subscribeToEvent, unsubscribeFromEvent } from '../../services/socket';
 import StaffQrModal from '../attendance/StaffQrModal';
+import StaffProfileModal from './StaffProfileModal';
 import {
   Fingerprint,
   Calendar,
@@ -96,6 +97,7 @@ const StaffAttendancePage = () => {
 
   // Selected staff for QR Modal
   const [selectedStaffForQr, setSelectedStaffForQr] = useState(null);
+  const [selectedStaffForProfile, setSelectedStaffForProfile] = useState(null);
 
   // Geofence Settings Form State
   const [geofenceForm, setGeofenceForm] = useState({
@@ -717,19 +719,35 @@ const StaffAttendancePage = () => {
                     const statusConf = STATUS_CONFIG[row.status] || STATUS_CONFIG.not_marked;
                     return (
                       <tr key={row.staffId} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-3.5 flex items-center space-x-3">
-                          <img
-                            src={
-                              row.photoUrl ||
-                              `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(row.name)}`
-                            }
-                            alt={row.name}
-                            className="w-9 h-9 rounded-xl object-cover border border-slate-200"
-                          />
-                          <div>
-                            <p className="font-bold text-slate-900">{row.name}</p>
-                            <p className="text-[11px] font-mono text-emerald-600">{row.staffCode}</p>
-                          </div>
+                        <td className="p-3.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStaffForProfile({
+                              _id: row.staffId,
+                              firstName: row.name,
+                              photoUrl: row.photoUrl,
+                              role: row.role,
+                              staffCode: row.staffCode,
+                              staffId: row.staffCode,
+                              branch: row.branch,
+                              department: row.department,
+                            })}
+                            className="flex items-center space-x-3 group cursor-pointer text-left focus:outline-none"
+                            title="Click to view full staff profile"
+                          >
+                            <img
+                              src={
+                                row.photoUrl ||
+                                `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(row.name)}`
+                              }
+                              alt={row.name}
+                              className="w-9 h-9 rounded-xl object-cover border border-slate-200 group-hover:scale-105 group-hover:border-emerald-400 transition-transform"
+                            />
+                            <div>
+                              <p className="font-bold text-slate-900 group-hover:text-emerald-800 group-hover:underline transition-colors">{row.name}</p>
+                              <p className="text-[11px] font-mono text-emerald-600">{row.staffCode}</p>
+                            </div>
+                          </button>
                         </td>
                         <td className="p-3.5">
                           <span
@@ -1744,6 +1762,14 @@ const StaffAttendancePage = () => {
           staff={selectedStaffForQr}
           isOpen={!!selectedStaffForQr}
           onClose={() => setSelectedStaffForQr(null)}
+        />
+      )}
+      {/* Staff Profile Modal */}
+      {selectedStaffForProfile && (
+        <StaffProfileModal
+          staff={selectedStaffForProfile}
+          onClose={() => setSelectedStaffForProfile(null)}
+          onOpenQr={(s) => setSelectedStaffForQr(s)}
         />
       )}
     </div>

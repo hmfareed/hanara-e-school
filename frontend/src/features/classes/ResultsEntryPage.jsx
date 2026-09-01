@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -783,7 +784,13 @@ const ResultsEntryPage = () => {
                               {row.admissionNumber}
                             </td>
                             <td className="py-3 px-4 border-r border-slate-200 font-medium text-slate-900 font-sans">
-                              {row.name}
+                              <Link
+                                to={`/students/${row.studentId}`}
+                                className="hover:text-emerald-800 hover:underline cursor-pointer block font-semibold"
+                                title="View Student Profile"
+                              >
+                                {row.name}
+                              </Link>
                             </td>
                             
                             {/* Class Exercises */}
@@ -1163,7 +1170,17 @@ const ResultsEntryPage = () => {
                       {remarksRoster.map((item) => (
                         <tr key={item.studentId} className={item.isDirty ? 'bg-amber-50/40' : ''}>
                           <td className="py-3 px-4 font-mono font-bold text-slate-700">{item.admissionNumber}</td>
-                          <td className="py-3 px-4 font-bold text-slate-900">{item.name}</td>
+                          <td className="py-3 px-4 font-bold text-slate-900">
+                            <Link
+                              to={`/students/${item.studentId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="hover:text-emerald-800 hover:underline cursor-pointer block font-semibold"
+                              title="View Student Profile (opens in new tab)"
+                            >
+                              {item.name}
+                            </Link>
+                          </td>
                           <td className="py-2 px-4">
                             <input
                               type="text"

@@ -425,8 +425,12 @@ const DashboardPage = () => {
               {upcomingBirthdays.length > 0 ? (
                 upcomingBirthdays.map((item) => (
                   <div key={item._id} className="flex items-center justify-between p-2.5 rounded-xl border border-slate-100 bg-slate-50/50">
-                    <div className="flex items-center space-x-2.5">
-                      <div className="h-8 w-8 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold text-xs shrink-0 overflow-hidden">
+                    <Link
+                      to={`/students/${item._id}`}
+                      className="flex items-center space-x-2.5 group cursor-pointer"
+                      title="View Student Profile"
+                    >
+                      <div className="h-8 w-8 bg-emerald-50 border border-emerald-100 rounded-full flex items-center justify-center text-emerald-700 font-bold text-xs shrink-0 overflow-hidden group-hover:scale-105 transition-transform">
                         {item.photoUrl ? (
                           <img src={item.photoUrl} alt="Avatar" className="h-full w-full object-cover" />
                         ) : (
@@ -434,10 +438,10 @@ const DashboardPage = () => {
                         )}
                       </div>
                       <div>
-                        <p className="text-xs font-bold text-slate-900">{item.firstName} {item.lastName}</p>
+                        <p className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 group-hover:underline transition-colors">{item.firstName} {item.lastName}</p>
                         <span className="text-[10px] text-slate-400 font-semibold">{item.currentClass?.name || 'Unassigned'}</span>
                       </div>
-                    </div>
+                    </Link>
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
                       {item.daysToBirthday === 0 ? 'Today 🎉' : item.daysToBirthday === 1 ? 'Tomorrow 🎂' : `${item.daysToBirthday} days left`}
                     </span>
@@ -485,7 +489,15 @@ const DashboardPage = () => {
                   recentAdmissions.map((student) => (
                     <tr key={student._id} className="hover:bg-slate-50/60">
                       <td className="py-3 font-mono font-bold text-slate-900">{student.admissionNumber}</td>
-                      <td className="py-3 font-semibold text-slate-900">{student.firstName} {student.lastName}</td>
+                      <td className="py-3 font-semibold text-slate-900">
+                        <Link
+                          to={`/students/${student._id}`}
+                          className="hover:text-emerald-700 hover:underline cursor-pointer"
+                          title="View Student Profile"
+                        >
+                          {student.firstName} {student.lastName}
+                        </Link>
+                      </td>
                       <td className="py-3">
                         <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium border border-slate-200/60">
                           {student.currentClass?.name || 'Unassigned'}

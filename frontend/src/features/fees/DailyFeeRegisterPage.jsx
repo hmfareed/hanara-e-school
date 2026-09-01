@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -555,7 +556,13 @@ const TeacherDailyFeeRegister = () => {
 
                       {/* Student Name */}
                       <td className="py-2.5 px-3 min-w-[140px]">
-                        <div className="font-extrabold text-slate-900 text-xs">{item.name}</div>
+                        <Link
+                          to={`/students/${item.studentId}`}
+                          className="font-extrabold text-slate-900 text-xs hover:text-emerald-700 hover:underline cursor-pointer block"
+                          title="View Student Profile"
+                        >
+                          {item.name}
+                        </Link>
                         {item.usesBus ? (
                           <div className="inline-flex items-center text-[9px] uppercase tracking-wide bg-blue-50 text-blue-700 font-bold border border-blue-100 rounded px-1.5 py-0.5 mt-0.5">
                             🚌 {item.stop || 'Uses Bus'}

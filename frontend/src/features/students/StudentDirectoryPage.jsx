@@ -496,8 +496,12 @@ const StudentDirectoryPage = () => {
                         {student.admissionNumber}
                       </td>
                       <td className="py-4 px-6 font-medium text-slate-900">
-                        <div className="flex items-center space-x-3">
-                          <div className="h-9 w-9 rounded-full bg-emerald-50 border border-emerald-200 flex-shrink-0 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden">
+                        <Link
+                          to={`/students/${student._id}`}
+                          className="flex items-center space-x-3 group cursor-pointer"
+                          title="Click to view full profile"
+                        >
+                          <div className="h-9 w-9 rounded-full bg-emerald-50 border border-emerald-200 flex-shrink-0 flex items-center justify-center text-emerald-800 font-bold text-sm overflow-hidden group-hover:scale-105 group-hover:border-emerald-400 transition-transform">
                             {student.photoUrl ? (
                               <img
                                 src={student.photoUrl}
@@ -512,14 +516,14 @@ const StudentDirectoryPage = () => {
                             )}
                           </div>
                           <div>
-                            <span className="font-semibold text-slate-900 block">
+                            <span className="font-semibold text-slate-900 block group-hover:text-emerald-800 group-hover:underline transition-colors">
                               {student.firstName} {student.otherNames ? `${student.otherNames} ` : ''}{student.lastName}
                             </span>
                             <span className="text-[11px] text-slate-400 font-mono">
                               ID: {student._id ? String(student._id).slice(-6) : student.admissionNumber}
                             </span>
                           </div>
-                        </div>
+                        </Link>
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex flex-col">
@@ -620,8 +624,12 @@ const StudentDirectoryPage = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center space-x-3.5">
-                      <div className="h-12 w-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex-shrink-0 flex items-center justify-center text-emerald-800 font-bold text-base overflow-hidden shadow-2xs">
+                    <Link
+                      to={`/students/${student._id}`}
+                      className="flex items-center space-x-3.5 group/header cursor-pointer"
+                      title="Click to view full profile"
+                    >
+                      <div className="h-12 w-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex-shrink-0 flex items-center justify-center text-emerald-800 font-bold text-base overflow-hidden shadow-2xs group-hover/header:scale-105 group-hover/header:border-emerald-400 transition-transform">
                         {student.photoUrl ? (
                           <img
                             src={student.photoUrl}
@@ -636,14 +644,14 @@ const StudentDirectoryPage = () => {
                         )}
                       </div>
                       <div>
-                        <h3 className="font-bold text-slate-900 text-base leading-tight group-hover:text-emerald-800 transition-colors">
+                        <h3 className="font-bold text-slate-900 text-base leading-tight group-hover:text-emerald-800 group-hover/header:text-emerald-800 group-hover/header:underline transition-colors">
                           {student.firstName} {student.otherNames ? `${student.otherNames} ` : ''}{student.lastName}
                         </h3>
                         <p className="text-xs text-slate-500 mt-1">
                           {student.currentClass?.name || 'Unassigned Class'}
                         </p>
                       </div>
-                    </div>
+                    </Link>
 
                     <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2 text-center text-xs">
                       <div className="bg-slate-50 rounded-xl p-2">

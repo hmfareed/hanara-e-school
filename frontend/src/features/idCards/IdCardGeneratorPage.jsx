@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
@@ -232,17 +233,27 @@ const IdCardGeneratorPage = () => {
                     {isPortrait ? (
                       <div className="relative z-10 flex flex-col items-center text-center my-auto space-y-2.5">
                         {/* Avatar */}
-                        <div className="w-24 h-24 rounded-2xl bg-white/10 border-2 border-amber-300/60 overflow-hidden shadow-md shrink-0 flex items-center justify-center">
+                        <Link
+                          to={entityType === 'student' ? `/students/${card.id || card._id}` : `/staff/edit/${card.id || card._id}`}
+                          className="w-24 h-24 rounded-2xl bg-white/10 border-2 border-amber-300/60 overflow-hidden shadow-md shrink-0 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
+                          title="Click to view full profile"
+                        >
                           {card.photoUrl ? (
                             <img src={card.photoUrl} alt={card.fullName} className="w-full h-full object-cover" />
                           ) : (
                             <span className="text-3xl font-black text-white/40">{card.fullName.charAt(0)}</span>
                           )}
-                        </div>
+                        </Link>
 
                         {/* Name & Title */}
                         <div>
-                          <p className="text-base font-black text-white tracking-wide leading-tight">{card.fullName}</p>
+                          <Link
+                            to={entityType === 'student' ? `/students/${card.id || card._id}` : `/staff/edit/${card.id || card._id}`}
+                            className="text-base font-black text-white tracking-wide leading-tight hover:text-amber-300 transition-colors block cursor-pointer"
+                            title="Click to view full profile"
+                          >
+                            {card.fullName}
+                          </Link>
                           <p className="text-[11px] font-bold text-amber-200 mt-0.5">{card.subTitle}</p>
                         </div>
 
@@ -268,15 +279,25 @@ const IdCardGeneratorPage = () => {
                     ) : (
                       /* Landscape layout */
                       <div className="relative z-10 flex items-center gap-4 my-auto">
-                        <div className="w-24 h-24 rounded-2xl bg-white/10 border-2 border-amber-300/60 overflow-hidden shadow-md shrink-0 flex items-center justify-center">
+                        <Link
+                          to={entityType === 'student' ? `/students/${card.id || card._id}` : `/staff/edit/${card.id || card._id}`}
+                          className="w-24 h-24 rounded-2xl bg-white/10 border-2 border-amber-300/60 overflow-hidden shadow-md shrink-0 flex items-center justify-center hover:scale-105 transition-transform cursor-pointer"
+                          title="Click to view full profile"
+                        >
                           {card.photoUrl ? (
                             <img src={card.photoUrl} alt={card.fullName} className="w-full h-full object-cover" />
                           ) : (
                             <span className="text-3xl font-black text-white/40">{card.fullName.charAt(0)}</span>
                           )}
-                        </div>
+                        </Link>
                         <div className="flex-1 space-y-1.5 text-left">
-                          <p className="text-base font-black text-white leading-tight">{card.fullName}</p>
+                          <Link
+                            to={entityType === 'student' ? `/students/${card.id || card._id}` : `/staff/edit/${card.id || card._id}`}
+                            className="text-base font-black text-white leading-tight hover:text-amber-300 transition-colors block cursor-pointer"
+                            title="Click to view full profile"
+                          >
+                            {card.fullName}
+                          </Link>
                           <p className="text-xs font-bold text-amber-200">{card.subTitle}</p>
                           <div className="bg-black/25 rounded-xl p-2 text-[10px] space-y-1 border border-white/10">
                             <p><span className="text-white/50 font-bold">ID #:</span> <span className="font-mono text-white font-bold">{card.admissionNumber || card.staffId}</span></p>
